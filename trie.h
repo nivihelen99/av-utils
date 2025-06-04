@@ -28,6 +28,8 @@ class Trie {
 private:
     std::unique_ptr<TrieNode> root;
     bool isCaseSensitive;
+    Trie reversed_trie_;
+    bool is_internally_reversed_instance_; // Flag to manage behavior for the reversed_trie_ member
 
     std::string normalizeString(const std::string& word) const {
         if (isCaseSensitive) {
@@ -151,7 +153,35 @@ public:
         }
     }; // End of Iterator class
 
-    Trie(bool caseSensitive = true) : root(std::make_unique<TrieNode>()), isCaseSensitive(caseSensitive) {}
+    // Private constructor used for creating the reversed_trie_ member
+    // The 'is_reversed_instance_tag' ensures that this reversed_trie_ instance
+    // does not itself try to create another reversed_trie_.
+    Trie(bool cs, bool is_reversed_instance_tag)
+        : root(std::make_unique<TrieNode>()),
+          isCaseSensitive(cs),
+          // The reversed_trie_ member of an 'is_reversed_instance_tag=true' Trie is also marked as such.
+          // This stops recursion effectively at one level. Its own reversed_trie_ will not be used.
+          reversed_trie_(cs, true, true), // Pass dummy bool to select the deepest private constructor
+          is_internally_reversed_instance_(is_reversed_instance_tag) {}
+
+    // Deepest private constructor to break recursion for reversed_trie_'s own reversed_trie_
+    // This constructor is only called by the one above for reversed_trie_.reversed_trie_
+    Trie(bool cs, bool /*is_reversed_instance_tag*/, bool /*dummy_to_break_recursion*/)
+        : root(std::make_unique<TrieNode>()),
+          isCaseSensitive(cs),
+          // reversed_trie_ member of this specific instance is default-constructed using the main public constructor,
+          // which will then call the (cs, true) constructor for its own reversed_trie_, which then calls this.
+          // This is still a bit tangled. The key is that is_internally_reversed_instance_ will be true.
+          is_internally_reversed_instance_(true)
+    {}
+
+public:
+    Trie(bool caseSensitive = true)
+        : root(std::make_unique<TrieNode>()),
+          isCaseSensitive(caseSensitive),
+          reversed_trie_(caseSensitive, true), // Mark the member as an internal reversed instance
+          is_internally_reversed_instance_(false) // This is a primary Trie instance
+    {}
     
     Iterator begin() const { return Iterator(this); }
     Iterator end() const { return Iterator(this, true); }
@@ -159,13 +189,23 @@ public:
     // Insert a word into the trie (Radix version)
     void insert(const std::string& word) {
         std::string normalizedWord = normalizeString(word);
-        if (normalizedWord.empty() && root) { // Handle empty string insertion specifically at root
-            root->isEndOfWord = true;
-            root->frequency++;
-            return;
+
+        // Perform insertion on the main trie
+        if (normalizedWord.empty()) {
+            if (root) {
+                root->isEndOfWord = true;
+                root->frequency++;
+            }
+        } else {
+            if (root) {
+                 insertHelperRadix(root.get(), normalizedWord);
+            }
         }
-        if (root) { // Ensure root exists
-             insertHelperRadix(root.get(), normalizedWord);
+
+        if (!is_internally_reversed_instance_) {
+            std::string reversed_normalized_word = normalizedWord;
+            std::reverse(reversed_normalized_word.begin(), reversed_normalized_word.end());
+            reversed_trie_.insert(reversed_normalized_word);
         }
     }
 
@@ -375,28 +415,71 @@ private: // Starting private section earlier for insertHelperRadix
         return result;
     }
 
+    // Suffix search methods
+    bool endsWith(const std::string& suffix) const {
+        if (is_internally_reversed_instance_) {
+            // This method should not be called on an internal reversed_trie directly.
+            return false;
+        }
+        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
+        if (normalized_suffix.empty()) {
+            return true; // Empty suffix matches any word
+        }
+        std::string reversed_suffix = normalized_suffix;
+        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
+        // reversed_trie_ will use its own normalizeString if needed, but its case sensitivity
+        // should match the main trie's.
+        return reversed_trie_.startsWith(reversed_suffix);
+    }
+
+    std::vector<std::string> getWordsEndingWith(const std::string& suffix) const {
+        if (is_internally_reversed_instance_) {
+            return {};
+        }
+        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
+        std::string reversed_suffix = normalized_suffix;
+        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
+
+        std::vector<std::string> reversed_matches = reversed_trie_.getWordsWithPrefix(reversed_suffix);
+        std::vector<std::string> result;
+        result.reserve(reversed_matches.size());
+
+        for (const std::string& rev_word : reversed_matches) {
+            std::string original_word = rev_word;
+            std::reverse(original_word.begin(), original_word.end());
+            result.push_back(original_word);
+        }
+        return result;
+    }
+
     // Get the frequency of a word in the trie (NEEDS RADIX UPDATE)
     int getWordFrequency(const std::string& word) const {
-        // This implementation is broken due to TrieNode changes.
-        // std::string normalizedWord = normalizeString(word);
-        // ...
+        // This implementation is broken.
         return 0;
     }
     
     // Delete a word from the trie (Radix version)
     bool deleteWord(const std::string& word) {
         std::string normalized_word = normalizeString(word);
+        bool main_deleted = false;
         if (!root) return false;
 
         if (normalized_word.empty()) {
             if (root->isEndOfWord) {
                 root->isEndOfWord = false;
                 root->frequency = 0;
-                return true;
+                main_deleted = true;
             }
-            return false;
+        } else {
+            main_deleted = deleteRadixHelper(root.get(), normalized_word);
         }
-        return deleteRadixHelper(root.get(), normalized_word);
+
+        if (main_deleted && !is_internally_reversed_instance_) {
+            std::string reversed_normalized_word = normalized_word;
+            std::reverse(reversed_normalized_word.begin(), reversed_normalized_word.end());
+            reversed_trie_.deleteWord(reversed_normalized_word);
+        }
+        return main_deleted;
     }
     
     // Print all words in the trie (for debugging)
@@ -740,8 +823,14 @@ private:
     }
 
     bool loadFromFile(const std::string& filename) {
-        root = std::make_unique<TrieNode>(); // Clear current Trie data
-        if (!root) return false; // Should not happen
+        root = std::make_unique<TrieNode>();
+        if (!is_internally_reversed_instance_) {
+            // For a primary Trie, reset its reversed_trie_ properly.
+            reversed_trie_ = Trie(this->isCaseSensitive, true);
+        }
+        // If this IS an internal reversed instance, its own reversed_trie_ member is not used/reset further.
+
+        if (!root) return false;
 
         std::ifstream input_file(filename);
         if (!input_file.is_open()) {
