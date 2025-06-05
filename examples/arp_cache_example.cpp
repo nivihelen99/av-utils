@@ -77,8 +77,8 @@ int main() {
     std::cout << "--- Proxy ARP ---" << std::endl;
     uint32_t proxy_prefix = 0x0A000000; // 10.0.0.0
     uint32_t proxy_mask = 0xFF000000;   // /8
-    arp_cache.add_proxy_subnet(proxy_prefix, proxy_mask);
-    std::cout << "Added proxy ARP for subnet 10.0.0.0/8." << std::endl;
+    arp_cache.add_proxy_subnet(proxy_prefix, proxy_mask, 0 /* interface_id */);
+    std::cout << "Added proxy ARP for subnet 10.0.0.0/8 on interface 0." << std::endl;
 
     uint32_t ip_in_proxy = 0x0A010203; // 10.1.2.3
     std::cout << "Looking up IP 10.1.2.3 (in proxy subnet, not in cache):" << std::endl;

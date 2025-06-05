@@ -80,6 +80,7 @@ protected: // cache_ made protected for test access via MockARPCache
     struct ProxySubnet {
         uint32_t prefix;
         uint32_t mask;
+        uint32_t interface_id; // New field for interface awareness
     };
     std::vector<ProxySubnet> proxy_subnets_; /**< List of subnets for which Proxy ARP is enabled. */
     std::chrono::seconds reachable_time_sec_;
@@ -101,6 +102,10 @@ protected: // cache_ made protected for test access via MockARPCache
     // Gratuitous ARP rate limiting
     std::unordered_map<uint32_t, std::chrono::steady_clock::time_point> gratuitous_arp_last_seen_;
     std::chrono::milliseconds gratuitous_arp_min_interval_ms_;
+
+    // Per-interface Proxy ARP control
+    std::unordered_map<uint32_t, bool> interface_proxy_arp_enabled_;
+    std::unordered_map<uint32_t, mac_addr_t> interface_macs_;
 
 protected: // promoteToMRU made protected for test access via MockARPCache
     void promoteToMRU(uint32_t ip) {
@@ -208,6 +213,18 @@ protected:
         return true;
     }
 
+    /**
+     * @brief (Placeholder) Checks if the given IP address is considered routable
+     *        by the device's routing table.
+     * @param ip_address The IP address to check.
+     * @return True if the IP is routable or if no check is performed (default).
+     *         False if the IP is explicitly considered unroutable.
+     */
+    virtual bool is_ip_routable(uint32_t ip_address) {
+        (void)ip_address; // Suppress unused parameter warning in default implementation
+        return true;      // Default: assume routable or no validation performed
+    }
+
 public:
     // Publicly accessible constants
     static constexpr int MAX_PROBES = 3; /**< Max number of ARP probes before considering a primary MAC failed. */
@@ -259,9 +276,11 @@ public:
      * @brief Adds a subnet configuration for Proxy ARP.
      * @param prefix The network prefix of the subnet.
      * @param mask The subnet mask.
+     * @param interface_id The identifier of the interface associated with this proxy ARP subnet.
      */
-    void add_proxy_subnet(uint32_t prefix, uint32_t mask) {
-        proxy_subnets_.push_back({prefix, mask});
+    void add_proxy_subnet(uint32_t prefix, uint32_t mask, uint32_t interface_id) {
+        // Optional: Check for duplicate configurations if necessary before adding
+        proxy_subnets_.push_back({prefix, mask, interface_id});
     }
 
     /**
@@ -448,6 +467,86 @@ public:
     }
 
     // --- Main ARP Cache Operations ---
+
+    /**
+     * @brief Sets the MAC address for a specific interface.
+     * This MAC will be used for Proxy ARP replies on this interface.
+     * @param interface_id The identifier of the interface.
+     * @param mac The MAC address for this interface.
+     */
+    void set_interface_mac(uint32_t interface_id, const mac_addr_t& mac) {
+        interface_macs_[interface_id] = mac;
+    }
+
+    /**
+     * @brief Enables Proxy ARP functionality on a specific interface.
+     * @param interface_id The identifier of the interface to enable Proxy ARP on.
+     */
+    void enable_proxy_arp_on_interface(uint32_t interface_id) {
+        interface_proxy_arp_enabled_[interface_id] = true;
+    }
+
+    /**
+     * @brief Disables Proxy ARP functionality on a specific interface.
+     * @param interface_id The identifier of the interface to disable Proxy ARP on.
+     */
+    void disable_proxy_arp_on_interface(uint32_t interface_id) {
+        interface_proxy_arp_enabled_[interface_id] = false;
+    }
+
+    /**
+     * @brief Checks if Proxy ARP is currently enabled on a specific interface.
+     * @param interface_id The identifier of the interface.
+     * @return True if Proxy ARP is enabled, false otherwise (including if never explicitly set).
+     */
+    bool is_proxy_arp_enabled_on_interface(uint32_t interface_id) const {
+        auto it = interface_proxy_arp_enabled_.find(interface_id);
+        if (it != interface_proxy_arp_enabled_.end()) {
+            return it->second; // Return the explicitly set state
+        }
+        return false; // Default to disabled if not found in map
+    }
+
+    /**
+     * @brief Attempts to resolve an IP address using Proxy ARP configurations.
+     * @param target_ip The IP address to resolve.
+     * @param request_interface_id The identifier of the interface on which the ARP request was received.
+     * @param mac_out Output parameter for the MAC address if proxy ARP is successful.
+     * @return True if a proxy ARP response should be sent, false otherwise.
+     */
+    bool resolve_proxy_arp(uint32_t target_ip, uint32_t request_interface_id, mac_addr_t& mac_out) {
+        // 1. Check if proxy ARP is enabled on the requesting interface
+        if (!this->is_proxy_arp_enabled_on_interface(request_interface_id)) {
+            // Optional: Log if needed, but often desirable to be silent if it's just disabled.
+            // fprintf(stderr, "INFO: Proxy ARP lookup for IP %u on interface %u skipped: Proxy ARP disabled on interface.\n", target_ip, request_interface_id);
+            return false; // Proxy ARP is disabled on this interface
+        }
+
+        // 2. Iterate through proxy_subnets_
+        for (const auto& config : proxy_subnets_) {
+            if (config.interface_id == request_interface_id) {
+                if ((target_ip & config.mask) == config.prefix) { // Check if IP matches the subnet
+                    // --- Routing Table Integration Hook ---
+                    if (!this->is_ip_routable(target_ip)) {
+                        // Optional: Log this event
+                        fprintf(stderr, "INFO: Proxy ARP for IP %u on interface %u denied: IP not routable by system policy.\n", target_ip, request_interface_id);
+                        return false; // Do not proxy if not routable
+                    }
+                    // --- End Routing Table Integration Hook ---
+
+                    // Determine MAC for proxy reply
+                    auto it_mac = interface_macs_.find(request_interface_id);
+                    if (it_mac != interface_macs_.end()) {
+                        mac_out = it_mac->second; // Use specific interface MAC
+                    } else {
+                        mac_out = device_mac_; // Fallback to default device MAC
+                    }
+                    return true; // Proxy ARP match and routable
+                }
+            }
+        }
+        return false; // No suitable proxy ARP configuration found or not routable
+    }
     
     /**
      * @brief Adds or updates an ARP entry.
