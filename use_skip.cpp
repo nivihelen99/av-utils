@@ -88,6 +88,76 @@ int main() {
 
     stringSkipList.display();
     stringSkipList.printValues();
+
+    std::cout << "\n\n=== Bulk Operations Test (int) ===" << std::endl;
+    SkipList<int> bulkIntList;
+    std::vector<int> int_bulk_values = {50, 10, 30, 20, 60, 40, 30}; // Includes duplicates, unsorted
+    std::cout << "--- Bulk Insert (int) ---" << std::endl;
+    std::cout << "Inserting: ";
+    for(int v : int_bulk_values) std::cout << v << " ";
+    std::cout << std::endl;
+    bulkIntList.insert_bulk(int_bulk_values);
+    bulkIntList.display();
+    bulkIntList.printValues();
+    std::cout << "Size: " << bulkIntList.size() << std::endl;
+
+    std::cout << "--- Bulk Insert (int) with empty vector ---" << std::endl;
+    bulkIntList.insert_bulk({}); // Empty vector
+    bulkIntList.display(); // Should be unchanged
+    bulkIntList.printValues();
+
+
+    std::vector<int> int_remove_values = {30, 70, 10, 30, 5}; // Remove existing, non-existing, duplicate
+    std::cout << "--- Bulk Remove (int) ---" << std::endl;
+    std::cout << "Removing: ";
+    for(int v : int_remove_values) std::cout << v << " ";
+    std::cout << std::endl;
+    size_t removed_count_int = bulkIntList.remove_bulk(int_remove_values);
+    std::cout << "Successfully removed " << removed_count_int << " items." << std::endl;
+    bulkIntList.display();
+    bulkIntList.printValues();
+    std::cout << "Size: " << bulkIntList.size() << std::endl;
+
+    std::cout << "--- Bulk Remove (int) with empty vector ---" << std::endl;
+    removed_count_int = bulkIntList.remove_bulk({}); // Empty vector
+    std::cout << "Successfully removed " << removed_count_int << " items." << std::endl;
+    bulkIntList.display(); // Should be unchanged
+    bulkIntList.printValues();
+
+
+    std::cout << "\n\n=== Bulk Operations Test (std::string) ===" << std::endl;
+    SkipList<std::string> bulkStringList;
+    std::vector<std::string> string_bulk_values = {"orange", "apple", "pear", "banana", "apple"};
+    std::cout << "--- Bulk Insert (string) ---" << std::endl;
+    std::cout << "Inserting: ";
+    for(const auto& s : string_bulk_values) std::cout << "\"" << s << "\" ";
+    std::cout << std::endl;
+    bulkStringList.insert_bulk(string_bulk_values);
+    bulkStringList.display();
+    bulkStringList.printValues();
+    std::cout << "Size: " << bulkStringList.size() << std::endl;
+
+    std::cout << "--- Bulk Insert (string) with empty vector ---" << std::endl;
+    bulkStringList.insert_bulk({}); // Empty vector
+    bulkStringList.display(); // Should be unchanged
+    bulkStringList.printValues();
+
+    std::vector<std::string> string_remove_values = {"apple", "grape", "pear", "fig", "apple"};
+    std::cout << "--- Bulk Remove (string) ---" << std::endl;
+    std::cout << "Removing: ";
+    for(const auto& s : string_remove_values) std::cout << "\"" << s << "\" ";
+    std::cout << std::endl;
+    size_t removed_count_string = bulkStringList.remove_bulk(string_remove_values);
+    std::cout << "Successfully removed " << removed_count_string << " items." << std::endl;
+    bulkStringList.display();
+    bulkStringList.printValues();
+    std::cout << "Size: " << bulkStringList.size() << std::endl;
     
+    std::cout << "--- Bulk Remove (string) with empty vector ---" << std::endl;
+    removed_count_string = bulkStringList.remove_bulk({}); // Empty vector
+    std::cout << "Successfully removed " << removed_count_string << " items." << std::endl;
+    bulkStringList.display(); // Should be unchanged
+    bulkStringList.printValues();
+
     return 0;
 }
