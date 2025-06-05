@@ -4,6 +4,10 @@
 #include <string>
 #include <chrono>
 #include <iomanip> // For std::setw or other formatting if needed
+#include <thread>  // For std::this_thread::sleep_for
+#include <sstream> // For std::stringstream (used in backup/restore example)
+#include <algorithm> // For std::find_if (if needed, though get_rule_stats is better)
+
 
 // Helper function to create a packet (vector<uint8_t>)
 std::vector<uint8_t> make_example_packet(uint32_t src_ip, uint32_t dst_ip,
@@ -158,5 +162,247 @@ int main() {
     }
 
     std::cout << "\nOptimizedTCAM example usage complete." << std::endl;
+
+    // =====================================================================================
+    // --- Demonstrate Conflict Detection ---
+    // =====================================================================================
+    std::cout << "\n\n--- Conflict Detection Example ---" << std::endl;
+    {
+        OptimizedTCAM conflict_tcam;
+        OptimizedTCAM::WildcardFields cf1 = fields1; // Base on fields1 (10.0.0.1, TCP 1024->80)
+
+        OptimizedTCAM::WildcardFields cf2 = fields1; // Identical to cf1
+        cf2.src_ip_mask = 0xFFFFFF00; // Rule 2: 10.0.0.0/24 (overlaps cf1)
+                                      // Different action will make it a conflict
+
+        conflict_tcam.add_rule_with_ranges(cf1, 100, 1001); // Rule ID 0 (example)
+        conflict_tcam.add_rule_with_ranges(cf2, 90, 1002);  // Rule ID 1 (example)
+
+        // Add a non-conflicting rule
+        OptimizedTCAM::WildcardFields cf3 = fields1;
+        cf3.src_ip = 0x0A0000FF; // 10.0.0.255 (distinct)
+        conflict_tcam.add_rule_with_ranges(cf3, 100, 1003); // Rule ID 2 (example)
+
+
+        std::cout << "Rules added for conflict detection:" << std::endl;
+        for(const auto& stat : conflict_tcam.get_all_rule_stats()){
+            std::cout << "  Rule ID: " << stat.rule_id << ", Prio: " << stat.priority << ", Action: " << stat.action
+                      << ", SrcIP: " << (stat.rule_id == 0 || stat.rule_id == 2 ? "10.0.0.1 or .255" : "10.0.0.0/24") /* Simplified representation */
+                      << std::endl;
+        }
+
+
+        std::vector<OptimizedTCAM::Conflict> conflicts = conflict_tcam.detect_conflicts();
+        if (conflicts.empty()) {
+            std::cout << "No conflicts detected." << std::endl;
+        } else {
+            std::cout << "Detected conflicts (" << conflicts.size() << "):" << std::endl;
+            for (const auto& conflict : conflicts) {
+                // To get original rule IDs, we need to fetch them based on current indices after sorting
+                auto all_rules_for_conflict_check = conflict_tcam.get_all_rule_stats(); // Re-fetch to get current sorted order
+                uint64_t r1_id = all_rules_for_conflict_check[conflict.rule1_idx].rule_id; // Changed .id to .rule_id
+                int r1_action = all_rules_for_conflict_check[conflict.rule1_idx].action;
+                uint64_t r2_id = all_rules_for_conflict_check[conflict.rule2_idx].rule_id; // Changed .id to .rule_id
+                int r2_action = all_rules_for_conflict_check[conflict.rule2_idx].action;
+
+                std::cout << "  Conflict between rule index " << conflict.rule1_idx << " (ID " << r1_id << ", Action " << r1_action
+                          << ") and rule index " << conflict.rule2_idx << " (ID " << r2_id << ", Action " << r2_action << ")"
+                          << ": " << conflict.description << std::endl;
+            }
+        }
+    }
+
+    // =====================================================================================
+    // --- Demonstrate Shadow Rule Detection and Elimination ---
+    // =====================================================================================
+    std::cout << "\n\n--- Shadow Rule Detection/Elimination Example ---" << std::endl;
+    {
+        OptimizedTCAM shadow_tcam;
+        OptimizedTCAM::WildcardFields shadowing_fields = fields1;
+        shadowing_fields.src_ip_mask = 0xFFFFFF00;
+        shadow_tcam.add_rule_with_ranges(shadowing_fields, 100, 2001);
+
+        OptimizedTCAM::WildcardFields shadowed_fields = fields1;
+
+        shadow_tcam.add_rule_with_ranges(shadowed_fields, 90, 2002);
+
+        std::cout << "Initial rules for shadowing demo (Rule ID 1 should be shadowed by Rule ID 0):" << std::endl;
+        for(const auto& stat : shadow_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Prio: " << stat.priority << ", Active: " << stat.is_active << std::endl;
+        }
+
+        std::vector<uint64_t> dry_run_shadowed_ids = shadow_tcam.eliminate_shadowed_rules(true);
+        std::cout << "Shadowed rules (dry run): ";
+        for (size_t i=0; i < dry_run_shadowed_ids.size(); ++i) { std::cout << dry_run_shadowed_ids[i] << (i < dry_run_shadowed_ids.size()-1 ? ", " : "");}
+        std::cout << std::endl;
+        std::cout << "Rule stats after dry run (should be unchanged):" << std::endl;
+        for(const auto& stat : shadow_tcam.get_all_rule_stats()) {
+             // Assuming rule with action 2002 was assigned ID 1 if added second
+             if(stat.action == 2002) std::cout << "  Shadowed Rule (Action 2002, ID " << stat.rule_id <<") still active: " << stat.is_active << std::endl;
+        }
+
+
+        std::vector<uint64_t> eliminated_shadowed_ids = shadow_tcam.eliminate_shadowed_rules(false);
+        std::cout << "Eliminated shadowed rule IDs: ";
+        for (size_t i=0; i < eliminated_shadowed_ids.size(); ++i) { std::cout << eliminated_shadowed_ids[i] << (i < eliminated_shadowed_ids.size()-1 ? ", " : "");}
+        std::cout << std::endl;
+
+        std::cout << "Rule stats after elimination:" << std::endl;
+        for(const auto& stat : shadow_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Active: " << stat.is_active << std::endl;
+        }
+        // Packet that would have matched the shadowed rule
+        auto packet_for_shadowed = make_example_packet(shadowed_fields.src_ip, shadowed_fields.dst_ip, shadowed_fields.src_port_min, shadowed_fields.dst_port_min, shadowed_fields.protocol, shadowed_fields.eth_type);
+        std::cout << "Lookup for packet matching shadowed rule's criteria: Action " << shadow_tcam.lookup_single(packet_for_shadowed) << " (Expected Action 2001 from shadowing rule)" << std::endl;
+    }
+
+    // =====================================================================================
+    // --- Demonstrate Redundant Rule Detection and Compaction ---
+    // =====================================================================================
+    std::cout << "\n\n--- Redundant Rule Detection/Compaction Example ---" << std::endl;
+    {
+        OptimizedTCAM redundant_tcam;
+        OptimizedTCAM::WildcardFields superset_fields = fields1;
+        superset_fields.src_ip_mask = 0xFFFFFF00; // Superset rule: 10.0.0.0/24, Prio 100, Action 3001
+        redundant_tcam.add_rule_with_ranges(superset_fields, 100, 3001); // Rule ID 0
+
+        OptimizedTCAM::WildcardFields redundant_fields = fields1; // Redundant rule: 10.0.0.1/32 (subset of above)
+                                                                // Prio 90, Action 3001 (SAME ACTION)
+        redundant_tcam.add_rule_with_ranges(redundant_fields, 90, 3001);  // Rule ID 1
+
+        std::cout << "Initial rules for redundancy demo (Rule ID 1 should be redundant to Rule ID 0):" << std::endl;
+        for(const auto& stat : redundant_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Prio: " << stat.priority << ", Active: " << stat.is_active << std::endl;
+        }
+
+        redundant_tcam.compact_redundant_rules(true); // Detect and remove (rebuild)
+        std::cout << "Rule stats after compaction (Rule ID 1 should be removed):" << std::endl;
+        for(const auto& stat : redundant_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Active: " << stat.is_active << std::endl;
+        }
+         auto packet_for_redundant = make_example_packet(redundant_fields.src_ip, redundant_fields.dst_ip, redundant_fields.src_port_min, redundant_fields.dst_port_min, redundant_fields.protocol, redundant_fields.eth_type);
+        std::cout << "Lookup for packet matching redundant rule's criteria: Action " << redundant_tcam.lookup_single(packet_for_redundant) << " (Expected Action 3001 from superset rule)" << std::endl;
+    }
+
+    // =====================================================================================
+    // --- Demonstrate Enhanced Rule Aging ---
+    // =====================================================================================
+    std::cout << "\n\n--- Enhanced Rule Aging Example ---" << std::endl;
+    {
+        OptimizedTCAM aging_tcam;
+        // Use fields1 as a base for creating aging rules
+        OptimizedTCAM::WildcardFields aging_f1 = fields1;
+        aging_f1.src_ip = 0x0A0A0001; // Action 4001
+
+        OptimizedTCAM::WildcardFields aging_f2 = fields1;
+        aging_f2.src_ip = 0x0A0A0002; // Action 4002
+
+        aging_tcam.add_rule_with_ranges(aging_f1, 100, 4001);
+        std::cout << "Added Rule ID 0 (Action 4001) for CREATION_TIME aging." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+
+        aging_tcam.add_rule_with_ranges(aging_f2, 100, 4002); // ID 1
+        std::cout << "Added Rule ID 1 (Action 4002) for LAST_HIT_TIME aging." << std::endl;
+
+        // Hit rule 1 (Action 4002)
+        auto packet_for_aging_f2 = make_example_packet(aging_f2.src_ip, aging_f2.dst_ip, aging_f2.src_port_min, aging_f2.dst_port_min, aging_f2.protocol, aging_f2.eth_type);
+        aging_tcam.lookup_single(packet_for_aging_f2);
+        std::cout << "Performed lookup for Rule ID 1 (Action 4002)." << std::endl;
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(15)); // Rule 0 is now ~30ms old, Rule 1 is ~15ms old & hit ~15ms ago
+
+        std::cout << "\nInitial state for aging:" << std::endl;
+        for(const auto& stat : aging_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Active: " << stat.is_active
+                      << ", Created: " << time_point_to_string(stat.creation_time)
+                      << ", Last Hit: " << time_point_to_string(stat.last_hit_timestamp) << std::endl;
+        }
+
+        std::cout << "\nAging CREATION_TIME > 20ms (Rule ID 0 / Action 4001 should age):" << std::endl;
+        std::vector<uint64_t> aged_creation = aging_tcam.age_rules(std::chrono::milliseconds(20), OptimizedTCAM::AgeCriteria::CREATION_TIME);
+        for(uint64_t id : aged_creation) { std::cout << "  Aged out by creation: ID " << id << std::endl;}
+        for(const auto& stat : aging_tcam.get_all_rule_stats()) {
+            if(stat.action == 4001) std::cout << "  Rule ID 0 (Action 4001) Active: " << stat.is_active << std::endl;
+        }
+
+        std::cout << "\nAging LAST_HIT_TIME > 10ms (Rule ID 1 / Action 4002 should age as it was hit ~15ms ago):" << std::endl;
+        std::vector<uint64_t> aged_hit = aging_tcam.age_rules(std::chrono::milliseconds(10), OptimizedTCAM::AgeCriteria::LAST_HIT_TIME);
+         for(uint64_t id : aged_hit) { std::cout << "  Aged out by last hit: ID " << id << std::endl;}
+        for(const auto& stat : aging_tcam.get_all_rule_stats()) {
+            if(stat.action == 4002) std::cout << "  Rule ID 1 (Action 4002) Active: " << stat.is_active << std::endl;
+        }
+
+        // Demonstrate never-hit rule not aging by LAST_HIT_TIME
+        OptimizedTCAM::WildcardFields aging_f3 = fields1;
+        aging_f3.src_ip = 0x0A0A0003;
+        aging_tcam.add_rule_with_ranges(aging_f3, 100, 4003); // Rule ID will be 2
+        std::cout << "\nAdded Rule ID 2 (Action 4003) (never hit)." << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(15));
+        std::vector<uint64_t> aged_never_hit = aging_tcam.age_rules(std::chrono::milliseconds(10), OptimizedTCAM::AgeCriteria::LAST_HIT_TIME);
+        std::cout << "Aging LAST_HIT_TIME > 10ms (Rule ID 2 / Action 4003 should NOT age as it was never hit):" << std::endl;
+
+        uint64_t id_action_4003 = 0; // Find ID for action 4003
+        auto all_stats_aging = aging_tcam.get_all_rule_stats();
+        for(const auto&s : all_stats_aging) if(s.action == 4003) id_action_4003 = s.rule_id;
+
+        bool found_r_4003_in_aged = false;
+        for(uint64_t id : aged_never_hit) { if(id == id_action_4003) found_r_4003_in_aged = true; }
+        std::cout << "  Rule for Action 4003 (ID " << id_action_4003 << ") aged out: " << (found_r_4003_in_aged ? "Yes" : "No") << std::endl;
+        auto stats_r_4003 = aging_tcam.get_rule_stats(id_action_4003);
+        if(stats_r_4003) std::cout << "  Rule for Action 4003 (ID " << id_action_4003 << ") Active: " << stats_r_4003->is_active << std::endl;
+    }
+
+    // =====================================================================================
+    // --- Demonstrate Backup and Restore (Line-Based Text Format) ---
+    // =====================================================================================
+    std::cout << "\n\n--- Backup and Restore Example ---" << std::endl;
+    {
+        OptimizedTCAM backup_tcam;
+        OptimizedTCAM::WildcardFields rule_cfg1 = fields1;
+        int rule_cfg1_action = 5001; int rule_cfg1_priority = 110;
+        backup_tcam.add_rule_with_ranges(rule_cfg1, rule_cfg1_priority, rule_cfg1_action);
+
+        OptimizedTCAM::WildcardFields rule_cfg2_ports = fields1;
+        rule_cfg2_ports.src_ip = 0x0A0B0C0D;
+        rule_cfg2_ports.src_port_min = 7000; rule_cfg2_ports.src_port_max = 7010;
+        rule_cfg2_ports.dst_port_min = 0; rule_cfg2_ports.dst_port_max = 0xFFFF;
+        int rule_cfg2_action = 5002; int rule_cfg2_priority = 120;
+        backup_tcam.add_rule_with_ranges(rule_cfg2_ports, rule_cfg2_priority, rule_cfg2_action);
+
+        std::cout << "Original TCAM state for backup:" << std::endl;
+        for(const auto& stat : backup_tcam.get_all_rule_stats()) {
+            std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Prio: " << stat.priority << ", Active: " << stat.is_active << std::endl;
+        }
+
+        std::stringstream backup_stream;
+        backup_tcam.backup_rules(backup_stream);
+        std::cout << "\nBacked up rules (text format):\n" << backup_stream.str() << std::endl;
+
+        OptimizedTCAM restored_tcam;
+        // backup_stream is now at EOF, need to reset for reading
+        backup_stream.clear(); // Clear EOF flags
+        backup_stream.seekg(0);    // Rewind to beginning
+
+        bool restore_success = restored_tcam.restore_rules(backup_stream);
+        std::cout << "Restore operation successful: " << (restore_success ? "Yes" : "No") << std::endl;
+
+        std::cout << "\nRestored TCAM state:" << std::endl;
+        if (restore_success) {
+            for(const auto& stat : restored_tcam.get_all_rule_stats()) {
+                std::cout << "  ID: " << stat.rule_id << ", Action: " << stat.action << ", Prio: " << stat.priority << ", Active: " << stat.is_active << std::endl;
+            }
+            // Verify with lookups
+            auto p_cfg1 = make_example_packet(rule_cfg1.src_ip, rule_cfg1.dst_ip, rule_cfg1.src_port_min, rule_cfg1.dst_port_min, rule_cfg1.protocol, rule_cfg1.eth_type);
+            std::cout << "Lookup for rule 1 in restored TCAM: Action " << restored_tcam.lookup_single(p_cfg1) << " (Expected " << rule_cfg1_action << ")" << std::endl;
+
+            auto p_cfg2 = make_example_packet(rule_cfg2_ports.src_ip, rule_cfg2_ports.dst_ip, 7005, 12345, rule_cfg2_ports.protocol, rule_cfg2_ports.eth_type);
+            std::cout << "Lookup for rule 2 (port range) in restored TCAM: Action " << restored_tcam.lookup_single(p_cfg2) << " (Expected " << rule_cfg2_action << ")" << std::endl;
+
+        } else {
+            std::cout << "TCAM is empty due to restore failure." << std::endl;
+        }
+    }
+
+    std::cout << "\n\n--- All Examples Complete ---" << std::endl;
     return 0;
 }
