@@ -680,14 +680,14 @@ public: // This public keyword is just to mark where the next section starts in 
             if (debug_trace_log) {
                 if (field_bitmaps.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Field bitmaps empty.");
                 if (packet.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Packet empty.");
-                if (rules.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Rules empty."); // Added this check
+                if (rules.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Rules empty.");
                 debug_trace_log->push_back("lookup_bitmap_idx: Pre-check failed, returning -1.");
             }
             return -1;
         }
         
-        std::bitset<BitmapTCAM::MAX_RULES> matches_bs; // Initialize to all ones
-        matches_bs.set();
+        std::bitset<BitmapTCAM::MAX_RULES> matches_bs;
+        matches_bs.set(); // Initialize to all ones
         
         for (size_t field_idx = 0; field_idx < field_bitmaps.size(); ++field_idx) {
             if (field_idx < packet.size()) {
@@ -724,6 +724,11 @@ public: // This public keyword is just to mark where the next section starts in 
                      if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " is inactive, skipping.");
                     continue;
                 }
+
+                // Instead of repeating port logic, call matches_rule for the port checks and final validation
+                // This requires matches_rule to be suitable, or a subset of its logic to be used here.
+                // For now, the detailed port check logic is duplicated here as per the original plan.
+                // A better refactor would be to have a `check_ports_match(packet, rule, log)` helper.
 
                 bool port_ranges_match = true;
                 // Source Port Check
@@ -765,9 +770,12 @@ public: // This public keyword is just to mark where the next section starts in 
                     }
                      if (debug_trace_log) debug_trace_log->push_back(dst_port_log + " -> " + (port_ranges_match ? "Match" : "Mismatch"));
                 }
-
+                // The original `matches_rule` also checks all other fields.
+                // The bitmap lookup pre-filters based on those fields. So if we reach here,
+                // non-port fields are assumed to match based on bitmap logic.
+                // Thus, only port_ranges_match determines the final outcome here.
                 if (port_ranges_match) {
-                    if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " (index " + std::to_string(i) + ") fully matched. Returning index.");
+                    if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " (index " + std::to_string(i) + ") fully matched (ports OK). Returning index.");
                     return static_cast<int>(i);
                 } else {
                     if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " (index " + std::to_string(i) + ") failed port match.");
@@ -925,6 +933,8 @@ private:
         return true;
     }
     
+public: // Ensure lookup_single and dependent methods are public
+    // The public API for single packet lookup
     int lookup_single(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
         auto tcam_lookup_start_time = std::chrono::high_resolution_clock::now();
         int action_to_return = -1;
@@ -947,6 +957,8 @@ private:
 
         int matched_rule_idx = -1;
 
+        // Determine lookup strategy (this logic is from the original code)
+        // Now passing debug_trace_log to the chosen _idx function
         if (stats.avg_linear_time > 0 && stats.avg_bitmap_time > 0 && !field_bitmaps.empty()) {
             if (stats.avg_bitmap_time < stats.avg_linear_time && (stats.avg_tree_time == 0 || stats.avg_bitmap_time < stats.avg_tree_time) ) {
                 stats.bitmap_lookups++;
@@ -1005,11 +1017,18 @@ private:
     #ifdef __AVX2__
     void lookup_simd_avx2(const std::vector<uint8_t>* packets_ptr, int* results_ptr) {
         for (int i = 0; i < 8; ++i) {
-            results_ptr[i] = lookup_single(packets_ptr[i]);
+            // Assuming lookup_single is now public or accessible.
+            // If it remains private, this call would be invalid from a different class context,
+            // but it's fine if lookup_simd_avx2 is a member of OptimizedTCAM.
+            // The main point is that lookup_single itself handles the debug_trace_log if needed.
+            // For batch lookups, detailed tracing per packet might be too verbose unless specifically requested.
+            // Thus, passing nullptr for debug_trace_log here is reasonable for typical batch operation.
+            results_ptr[i] = lookup_single(packets_ptr[i], nullptr);
         }
     }
     #endif
-    
+
+private: // Start of private section
     // Returns rule index or -1 if no match
     int traverse_decision_tree(const DecisionNode* current_node, const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
         if (!current_node) {
@@ -1063,7 +1082,9 @@ private:
         return -1;
     }
 
-private:
+// Note: The SEARCH block above includes the start of the private section.
+// The REPLACE block will place lookup_single and lookup_simd_avx2 *before* the `private:` keyword.
+private: // This is where the rest of the private methods will remain or start.
     int popcount_manual(uint8_t n) const {
         int count = 0;
         while (n > 0) {
