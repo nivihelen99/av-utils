@@ -15,10 +15,38 @@
 #include <utility>     // For std::pair
 #include <cmath>       // For std::log2, std::round
 #include <numeric>     // For std::iota, already present but good to note for specificity parts
+#include <optional>    // For std::optional
 // <chrono> is already included higher up, but ensure it's there for this change.
 // #include <chrono> // Not strictly needed here if already present globally
 
 class OptimizedTCAM {
+public: // For RuleStats and RuleUtilizationMetrics
+    struct RuleStats {
+        uint64_t rule_id;
+        int priority;
+        int action;
+        uint64_t hit_count;
+        std::chrono::steady_clock::time_point last_hit_timestamp;
+        bool is_active;
+        std::chrono::steady_clock::time_point creation_time;
+    };
+
+    struct RuleUtilizationMetrics {
+        size_t total_rules = 0;
+        size_t active_rules = 0;
+        size_t inactive_rules = 0;
+        size_t rules_hit_at_least_once = 0;
+        double percentage_active_rules_hit = 0.0;
+        std::vector<uint64_t> unused_active_rule_ids;
+    };
+
+    struct AggregatedLatencyMetrics {
+        uint64_t total_lookups_measured = 0;
+        std::chrono::nanoseconds min_latency_ns{0};
+        std::chrono::nanoseconds max_latency_ns{0};
+        std::chrono::nanoseconds avg_latency_ns{0};
+    };
+
 public: // Changed private to public for WildcardFields
     struct WildcardFields {
         uint32_t src_ip, src_ip_mask;
@@ -316,6 +344,8 @@ private:
         uint64_t id;
         bool is_active;
         std::chrono::steady_clock::time_point creation_time;
+        mutable uint64_t hit_count = 0;
+        mutable std::chrono::steady_clock::time_point last_hit_timestamp;
     };
     
     struct RangeEntry {
@@ -632,79 +662,133 @@ public: // This public keyword is just to mark where the next section starts in 
         }
         #endif
     }
-    
-    int lookup_decision_tree(const std::vector<uint8_t>& packet) const {
-        if (!decision_tree) return -1;
-        return traverse_decision_tree(decision_tree.get(), packet);
+
+    // Returns rule index or -1 if no match
+    int lookup_decision_tree_idx(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
+        if (debug_trace_log) debug_trace_log->push_back("lookup_decision_tree_idx: Starting tree traversal.");
+        if (!decision_tree) {
+            if (debug_trace_log) debug_trace_log->push_back("lookup_decision_tree_idx: Decision tree is null. Returning -1.");
+            return -1;
+        }
+        return traverse_decision_tree(decision_tree.get(), packet, debug_trace_log);
     }
     
-    int lookup_bitmap(const std::vector<uint8_t>& packet) const {
-        if (field_bitmaps.empty() || packet.empty() || rules.empty()) return -1;
+    // Returns rule index or -1 if no match
+    int lookup_bitmap_idx(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
+        if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Starting bitmap lookup.");
+        if (field_bitmaps.empty() || packet.empty() || rules.empty()) { // Ensure rules is not empty
+            if (debug_trace_log) {
+                if (field_bitmaps.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Field bitmaps empty.");
+                if (packet.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Packet empty.");
+                if (rules.empty()) debug_trace_log->push_back("lookup_bitmap_idx: Rules empty."); // Added this check
+                debug_trace_log->push_back("lookup_bitmap_idx: Pre-check failed, returning -1.");
+            }
+            return -1;
+        }
         
-        std::bitset<BitmapTCAM::MAX_RULES> matches_bs;
+        std::bitset<BitmapTCAM::MAX_RULES> matches_bs; // Initialize to all ones
         matches_bs.set();
         
         for (size_t field_idx = 0; field_idx < field_bitmaps.size(); ++field_idx) {
             if (field_idx < packet.size()) {
                 auto field_matches = field_bitmaps[field_idx].lookup(packet[field_idx]);
+                if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Field " + std::to_string(field_idx) + " PktByte=" + std::to_string(packet[field_idx]) + " -> Initial field_matches_count=" + std::to_string(field_matches.count()));
                 matches_bs &= field_matches;
-            } else {
+            } else { // Packet is shorter than the number of fields in field_bitmaps
                 std::bitset<BitmapTCAM::MAX_RULES> rules_wildcarded_for_this_field;
+                // This logic assumes rules might be shorter than num_fields_for_bitmap,
+                // or that field_idx check is for fields beyond packet length.
+                // A rule matches if its mask for this field_idx is 0x00 (wildcard).
                 for(size_t rule_idx = 0; rule_idx < rules.size() && rule_idx < BitmapTCAM::MAX_RULES; ++rule_idx) {
+                    // This check is crucial: only consider rules active in the bitmap for this field
                     if (rules[rule_idx].mask.size() > field_idx && rules[rule_idx].mask[field_idx] == 0x00) {
                         rules_wildcarded_for_this_field.set(rule_idx);
                     }
                 }
+                if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Field " + std::to_string(field_idx) + " (packet short) -> Wildcarded_rules_count=" + std::to_string(rules_wildcarded_for_this_field.count()));
                 matches_bs &= rules_wildcarded_for_this_field;
             }
-             if (!matches_bs.any()) break;
+            if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: After field " + std::to_string(field_idx) + ", combined matches_bs_count=" + std::to_string(matches_bs.count()));
+            if (!matches_bs.any()) {
+                if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: No matches after field " + std::to_string(field_idx) + ". Breaking.");
+                break;
+            }
         }
 
-        for (size_t i = 0; i < rules.size(); ++i) {
-            if (i < BitmapTCAM::MAX_RULES && matches_bs[i]) {
+        if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Iterating over " + std::to_string(matches_bs.count()) + " potential matches from bitmap.");
+        for (size_t i = 0; i < rules.size(); ++i) { // Iterate up to actual rules.size()
+            if (i < BitmapTCAM::MAX_RULES && matches_bs[i]) { // Check if bit is set AND within MAX_RULES
+                if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Checking rule index " + std::to_string(i) + " (ID: " + std::to_string(rules[i].id) + ") from bitmap result.");
                 const auto& r = rules[i];
-                bool port_ranges_match = true;
-                if (r.src_port_range_id != std::numeric_limits<uint32_t>::max()) {
-                    if (packet.size() < 10) { port_ranges_match = false; }
-                    else {
-                        uint16_t packet_src_port = (static_cast<uint16_t>(packet[8]) << 8) | packet[9];
-                        if (r.src_port_range_id >= port_ranges.size()) { port_ranges_match = false; }
-                        else {
-                            const auto& range_entry = port_ranges[r.src_port_range_id];
-                            if (packet_src_port < range_entry.min_port || packet_src_port > range_entry.max_port) {
-                                port_ranges_match = false;
-                            }
-                        }
-                    }
+                if (!r.is_active) {
+                     if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " is inactive, skipping.");
+                    continue;
                 }
-                if (port_ranges_match && r.dst_port_range_id != std::numeric_limits<uint32_t>::max()) {
-                    if (packet.size() < 12) { port_ranges_match = false; }
-                    else {
-                        uint16_t packet_dst_port = (static_cast<uint16_t>(packet[10]) << 8) | packet[11];
-                        if (r.dst_port_range_id >= port_ranges.size()) { port_ranges_match = false; }
-                        else {
-                            const auto& range_entry = port_ranges[r.dst_port_range_id];
-                            if (packet_dst_port < range_entry.min_port || packet_dst_port > range_entry.max_port) {
-                                port_ranges_match = false;
-                            }
+
+                bool port_ranges_match = true;
+                // Source Port Check
+                if (r.src_port_range_id != std::numeric_limits<uint32_t>::max()) {
+                    std::string src_port_log = "SrcPort Check (RuleID " + std::to_string(r.id) + "): ";
+                    if (packet.size() < 10) {
+                        port_ranges_match = false;
+                        if (debug_trace_log) src_port_log += "Packet too short.";
+                    } else if (r.src_port_range_id >= port_ranges.size()) {
+                        port_ranges_match = false;
+                        if (debug_trace_log) src_port_log += "Invalid range_id " + std::to_string(r.src_port_range_id) + ". Max is " + std::to_string(port_ranges.size()-1);
+                    } else {
+                        uint16_t packet_src_port = (static_cast<uint16_t>(packet[8]) << 8) | packet[9];
+                        const auto& range_entry = port_ranges[r.src_port_range_id];
+                        if (packet_src_port < range_entry.min_port || packet_src_port > range_entry.max_port) {
+                            port_ranges_match = false;
                         }
+                        if (debug_trace_log) src_port_log += "PktPort=" + std::to_string(packet_src_port) + " Range=" + std::to_string(range_entry.min_port) + "-" + std::to_string(range_entry.max_port);
                     }
+                    if (debug_trace_log) debug_trace_log->push_back(src_port_log + " -> " + (port_ranges_match ? "Match" : "Mismatch"));
+                }
+
+                // Destination Port Check
+                if (port_ranges_match && r.dst_port_range_id != std::numeric_limits<uint32_t>::max()) {
+                    std::string dst_port_log = "DstPort Check (RuleID " + std::to_string(r.id) + "): ";
+                    if (packet.size() < 12) {
+                        port_ranges_match = false;
+                        if (debug_trace_log) dst_port_log += "Packet too short.";
+                    } else if (r.dst_port_range_id >= port_ranges.size()) {
+                        port_ranges_match = false;
+                        if (debug_trace_log) dst_port_log += "Invalid range_id " + std::to_string(r.dst_port_range_id) + ". Max is " + std::to_string(port_ranges.size()-1);
+                    } else {
+                        uint16_t packet_dst_port = (static_cast<uint16_t>(packet[10]) << 8) | packet[11];
+                        const auto& range_entry = port_ranges[r.dst_port_range_id];
+                        if (packet_dst_port < range_entry.min_port || packet_dst_port > range_entry.max_port) {
+                            port_ranges_match = false;
+                        }
+                        if (debug_trace_log) dst_port_log += "PktPort=" + std::to_string(packet_dst_port) + " Range=" + std::to_string(range_entry.min_port) + "-" + std::to_string(range_entry.max_port);
+                    }
+                     if (debug_trace_log) debug_trace_log->push_back(dst_port_log + " -> " + (port_ranges_match ? "Match" : "Mismatch"));
                 }
 
                 if (port_ranges_match) {
-                    return r.action;
+                    if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " (index " + std::to_string(i) + ") fully matched. Returning index.");
+                    return static_cast<int>(i);
+                } else {
+                    if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: Rule " + std::to_string(r.id) + " (index " + std::to_string(i) + ") failed port match.");
                 }
             }
         }
+        if (debug_trace_log) debug_trace_log->push_back("lookup_bitmap_idx: No rule from bitmap fully matched. Returning -1.");
         return -1;
     }
     
-    int lookup_linear(const std::vector<uint8_t>& packet) const {
-        for (const auto& r : rules) {
-            if (matches_rule(packet, r)) {
-                return r.action;
+    // Returns rule index or -1 if no match
+    int lookup_linear_idx(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
+        if (debug_trace_log) debug_trace_log->push_back("lookup_linear_idx: Starting linear search.");
+        for (size_t i = 0; i < rules.size(); ++i) {
+            if (debug_trace_log) debug_trace_log->push_back("lookup_linear_idx: Iterating rule index " + std::to_string(i) + " (ID: " + std::to_string(rules[i].id) + ")");
+            if (matches_rule(packet, rules[i], debug_trace_log)) {
+                if (debug_trace_log) debug_trace_log->push_back("lookup_linear_idx: Matched rule index " + std::to_string(i) + ". Returning index.");
+                return static_cast<int>(i); // Return rule index
             }
         }
+        if (debug_trace_log) debug_trace_log->push_back("lookup_linear_idx: No match found after iterating all rules. Returning -1.");
         return -1;
     }
     
@@ -716,20 +800,25 @@ public: // This public keyword is just to mark where the next section starts in 
         double avg_linear_time = 0.0;
         double avg_tree_time = 0.0;
         double avg_bitmap_time = 0.0;
+        // Latency tracking fields
+        mutable std::chrono::nanoseconds current_min_latency_ns{std::chrono::nanoseconds::max()};
+        mutable std::chrono::nanoseconds current_max_latency_ns{std::chrono::nanoseconds::zero()};
+        mutable std::chrono::nanoseconds accumulated_latency_ns{std::chrono::nanoseconds::zero()};
+        mutable uint64_t num_lookups_for_latency = 0;
     };
     mutable LookupStats stats;
     
     void optimize_for_traffic_pattern(const std::vector<std::vector<uint8_t>>& sample_traffic) {
         auto t_start = std::chrono::high_resolution_clock::now();
-        for (const auto& packet : sample_traffic) lookup_linear(packet);
+        for (const auto& packet : sample_traffic) lookup_linear_idx(packet); // Call _idx version
         auto t_linear_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t_start);
         
         t_start = std::chrono::high_resolution_clock::now();
-        for (const auto& packet : sample_traffic) lookup_decision_tree(packet);
+        for (const auto& packet : sample_traffic) lookup_decision_tree_idx(packet); // Call _idx version
         auto t_tree_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t_start);
         
         t_start = std::chrono::high_resolution_clock::now();
-        for (const auto& packet : sample_traffic) lookup_bitmap(packet);
+        for (const auto& packet : sample_traffic) lookup_bitmap_idx(packet); // Call _idx version
         auto t_bitmap_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - t_start);
         
         if (!sample_traffic.empty()) {
@@ -763,50 +852,154 @@ private:
         mask_arr[offset + 2] = 0xFF; mask_arr[offset + 3] = 0xFF;
     }
     
-    bool matches_rule(const std::vector<uint8_t>& packet, const Rule& r) const {
-        if (!r.is_active) return false;
+    bool matches_rule(const std::vector<uint8_t>& packet, const Rule& r, std::vector<std::string>* debug_trace_log = nullptr) const {
+        if (!r.is_active) {
+            if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): Rule not active.");
+            return false;
+        }
+
         for (size_t i = 0; i < r.value.size(); ++i) {
-            if (i >= packet.size()) {
-                if (r.mask[i] != 0x00) return false;
-                continue;
+            bool field_match_condition = true;
+            std::string field_log_details;
+            if (i >= packet.size()) { // Packet is shorter than rule field being checked
+                if (r.mask[i] != 0x00) { // If mask requires bits here, it's a mismatch
+                    field_match_condition = false;
+                }
+                if (debug_trace_log) field_log_details = "Packet too short for this field (idx " + std::to_string(i) + "). RuleMask=" + std::to_string(r.mask[i]);
+            } else {
+                field_match_condition = ((packet[i] ^ r.value[i]) & r.mask[i]) == 0;
+                if (debug_trace_log) field_log_details = "Field " + std::to_string(i) + ": PktByte=" + std::to_string(packet[i]) + " RuleVal=" + std::to_string(r.value[i]) + " RuleMask=" + std::to_string(r.mask[i]);
             }
-            if (((packet[i] ^ r.value[i]) & r.mask[i]) != 0) return false;
+
+            if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): " + field_log_details + " -> " + (field_match_condition ? "Match" : "Mismatch"));
+            if (!field_match_condition) {
+                 if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): Final -> No Match (due to field " + std::to_string(i) + ")");
+                return false;
+            }
         }
+
         if (r.src_port_range_id != std::numeric_limits<uint32_t>::max()) {
-            if (packet.size() < 10) return false;
-            if (r.src_port_range_id >= port_ranges.size()) return false;
-            uint16_t packet_src_port = (static_cast<uint16_t>(packet[8]) << 8) | packet[9];
-            const auto& range_entry = port_ranges[r.src_port_range_id];
-            if (packet_src_port < range_entry.min_port || packet_src_port > range_entry.max_port) return false;
+            bool port_match = true;
+            std::string port_log_details = "SrcPort Check: ";
+            if (packet.size() < 10) { // Packet too short for src port
+                port_match = false;
+                if (debug_trace_log) port_log_details += "Packet too short for src port.";
+            } else if (r.src_port_range_id >= port_ranges.size()) { // Invalid range ID
+                port_match = false;
+                if (debug_trace_log) port_log_details += "Invalid src_port_range_id " + std::to_string(r.src_port_range_id);
+            } else {
+                uint16_t packet_src_port = (static_cast<uint16_t>(packet[8]) << 8) | packet[9];
+                const auto& range_entry = port_ranges[r.src_port_range_id];
+                port_match = (packet_src_port >= range_entry.min_port && packet_src_port <= range_entry.max_port);
+                if (debug_trace_log) port_log_details += "PktPort=" + std::to_string(packet_src_port) + " Range=" + std::to_string(range_entry.min_port) + "-" + std::to_string(range_entry.max_port);
+            }
+            if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): " + port_log_details + " -> " + (port_match ? "Match" : "Mismatch"));
+            if (!port_match) {
+                if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): Final -> No Match (due to src port)");
+                return false;
+            }
         }
+
         if (r.dst_port_range_id != std::numeric_limits<uint32_t>::max()) {
-            if (packet.size() < 12) return false;
-            if (r.dst_port_range_id >= port_ranges.size()) return false;
-            uint16_t packet_dst_port = (static_cast<uint16_t>(packet[10]) << 8) | packet[11];
-            const auto& range_entry = port_ranges[r.dst_port_range_id];
-            if (packet_dst_port < range_entry.min_port || packet_dst_port > range_entry.max_port) return false;
+            bool port_match = true;
+            std::string port_log_details = "DstPort Check: ";
+             if (packet.size() < 12) { // Packet too short for dst port
+                port_match = false;
+                if (debug_trace_log) port_log_details += "Packet too short for dst port.";
+            } else if (r.dst_port_range_id >= port_ranges.size()) { // Invalid range ID
+                port_match = false;
+                if (debug_trace_log) port_log_details += "Invalid dst_port_range_id " + std::to_string(r.dst_port_range_id);
+            } else {
+                uint16_t packet_dst_port = (static_cast<uint16_t>(packet[10]) << 8) | packet[11];
+                const auto& range_entry = port_ranges[r.dst_port_range_id];
+                port_match = (packet_dst_port >= range_entry.min_port && packet_dst_port <= range_entry.max_port);
+                if (debug_trace_log) port_log_details += "PktPort=" + std::to_string(packet_dst_port) + " Range=" + std::to_string(range_entry.min_port) + "-" + std::to_string(range_entry.max_port);
+            }
+            if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): " + port_log_details + " -> " + (port_match ? "Match" : "Mismatch"));
+            if (!port_match) {
+                if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): Final -> No Match (due to dst port)");
+                return false;
+            }
         }
+        if (debug_trace_log) debug_trace_log->push_back("matches_rule (RuleID " + std::to_string(r.id) + "): Final -> Matched");
         return true;
     }
     
-    int lookup_single(const std::vector<uint8_t>& packet) const {
-        if (rules.empty()) return -1;
+    int lookup_single(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
+        auto tcam_lookup_start_time = std::chrono::high_resolution_clock::now();
+        int action_to_return = -1;
+        std::string chosen_strategy_log;
+
+        if (debug_trace_log) debug_trace_log->push_back("lookup_single: Starting lookup.");
+
+        if (rules.empty()) {
+            if (debug_trace_log) debug_trace_log->push_back("lookup_single: Rules empty, returning -1.");
+            // Latency update block
+            auto tcam_lookup_end_time = std::chrono::high_resolution_clock::now();
+            auto tcam_lookup_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(tcam_lookup_end_time - tcam_lookup_start_time);
+            if (debug_trace_log) debug_trace_log->push_back("lookup_single: Calculated duration " + std::to_string(tcam_lookup_duration_ns.count()) + "ns for empty rules case.");
+            stats.num_lookups_for_latency++;
+            stats.accumulated_latency_ns += tcam_lookup_duration_ns;
+            if (tcam_lookup_duration_ns < stats.current_min_latency_ns) stats.current_min_latency_ns = tcam_lookup_duration_ns;
+            if (tcam_lookup_duration_ns > stats.current_max_latency_ns) stats.current_max_latency_ns = tcam_lookup_duration_ns;
+            return -1;
+        }
+
+        int matched_rule_idx = -1;
+
         if (stats.avg_linear_time > 0 && stats.avg_bitmap_time > 0 && !field_bitmaps.empty()) {
             if (stats.avg_bitmap_time < stats.avg_linear_time && (stats.avg_tree_time == 0 || stats.avg_bitmap_time < stats.avg_tree_time) ) {
-                stats.bitmap_lookups++; return lookup_bitmap(packet);
+                stats.bitmap_lookups++;
+                chosen_strategy_log = "Bitmap";
+                matched_rule_idx = lookup_bitmap_idx(packet, debug_trace_log);
+            } else if (stats.avg_tree_time > 0 && decision_tree && (stats.avg_tree_time < stats.avg_linear_time) ){
+                stats.decision_tree_lookups++;
+                chosen_strategy_log = "Tree";
+                matched_rule_idx = lookup_decision_tree_idx(packet, debug_trace_log);
+            } else {
+                stats.linear_lookups++;
+                chosen_strategy_log = "Linear (fallback from preferred)";
+                matched_rule_idx = lookup_linear_idx(packet, debug_trace_log);
             }
-            if (stats.avg_tree_time > 0 && decision_tree && (stats.avg_tree_time < stats.avg_linear_time) ){
-                stats.decision_tree_lookups++; return lookup_decision_tree(packet);
-            }
-        }
-        if (rules.size() < 16 || (!decision_tree && field_bitmaps.empty())) {
-             stats.linear_lookups++; return lookup_linear(packet);
+        } else if (rules.size() < 16 || (!decision_tree && field_bitmaps.empty())) {
+             stats.linear_lookups++;
+             chosen_strategy_log = "Linear (small rule set or no optimized structures)";
+             matched_rule_idx = lookup_linear_idx(packet, debug_trace_log);
         } else if (!field_bitmaps.empty()) {
-             stats.bitmap_lookups++; return lookup_bitmap(packet);
+             stats.bitmap_lookups++;
+             chosen_strategy_log = "Bitmap (default)";
+             matched_rule_idx = lookup_bitmap_idx(packet, debug_trace_log);
         } else if (decision_tree) {
-             stats.decision_tree_lookups++; return lookup_decision_tree(packet);
+             stats.decision_tree_lookups++;
+             chosen_strategy_log = "Tree (default, no bitmap)";
+             matched_rule_idx = lookup_decision_tree_idx(packet, debug_trace_log);
+        } else {
+            stats.linear_lookups++;
+            chosen_strategy_log = "Linear (final fallback)";
+            matched_rule_idx = lookup_linear_idx(packet, debug_trace_log);
         }
-        stats.linear_lookups++; return lookup_linear(packet);
+        if (debug_trace_log) debug_trace_log->push_back("lookup_single: Chosen strategy: " + chosen_strategy_log);
+
+        if (matched_rule_idx != -1 && static_cast<size_t>(matched_rule_idx) < rules.size()) {
+            rules[matched_rule_idx].hit_count++;
+            rules[matched_rule_idx].last_hit_timestamp = std::chrono::steady_clock::now();
+            action_to_return = rules[matched_rule_idx].action;
+            if (debug_trace_log) debug_trace_log->push_back("lookup_single: Matched rule index: " + std::to_string(matched_rule_idx) + ", Action: " + std::to_string(rules[matched_rule_idx].action));
+        } else {
+            action_to_return = -1;
+            if (debug_trace_log) debug_trace_log->push_back("lookup_single: No match or invalid index from chosen strategy.");
+        }
+
+        // Latency update block
+        auto tcam_lookup_end_time = std::chrono::high_resolution_clock::now();
+        auto tcam_lookup_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(tcam_lookup_end_time - tcam_lookup_start_time);
+        if (debug_trace_log) debug_trace_log->push_back("lookup_single: Calculated duration " + std::to_string(tcam_lookup_duration_ns.count()) + "ns.");
+        stats.num_lookups_for_latency++;
+        stats.accumulated_latency_ns += tcam_lookup_duration_ns;
+        if (tcam_lookup_duration_ns < stats.current_min_latency_ns) stats.current_min_latency_ns = tcam_lookup_duration_ns;
+        if (tcam_lookup_duration_ns > stats.current_max_latency_ns) stats.current_max_latency_ns = tcam_lookup_duration_ns;
+
+        return action_to_return;
     }
     
     #ifdef __AVX2__
@@ -817,28 +1010,52 @@ private:
     }
     #endif
     
-    int traverse_decision_tree(const DecisionNode* current_node, const std::vector<uint8_t>& packet) const {
-        if (!current_node) return -1;
-        for (int rule_idx_val : current_node->rule_indices) {
-            if (static_cast<size_t>(rule_idx_val) < rules.size() && matches_rule(packet, rules[rule_idx_val])) {
-                return rules[rule_idx_val].action;
-            }
+    // Returns rule index or -1 if no match
+    int traverse_decision_tree(const DecisionNode* current_node, const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const {
+        if (!current_node) {
+            if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Current node is null. Returning -1.");
+            return -1;
         }
-        if (current_node->field_offset == -1 || (!current_node->left && !current_node->right)) {
-             return -1;
+        if (debug_trace_log) {
+             debug_trace_log->push_back("traverse_decision_tree: Node FieldOffset=" + std::to_string(current_node->field_offset) +
+                                       " TestValue=" + std::to_string(current_node->test_value) + " Mask=" + std::to_string(current_node->mask) +
+                                       " NumRulesAtNode=" + std::to_string(current_node->rule_indices.size()));
         }
 
-        if (current_node->field_offset >=0 && static_cast<size_t>(current_node->field_offset) < packet.size()) {
+        // Check rules directly attached to this node (wildcarded for this field or at max depth)
+        for (int rule_idx_val : current_node->rule_indices) {
+            if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Checking rule index " + std::to_string(rule_idx_val) + " (ID: " + (static_cast<size_t>(rule_idx_val) < rules.size() ? std::to_string(rules[rule_idx_val].id) : "OOB") + ") at current node.");
+            if (static_cast<size_t>(rule_idx_val) < rules.size() && matches_rule(packet, rules[rule_idx_val], debug_trace_log)) {
+                if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Matched rule index " + std::to_string(rule_idx_val) + " at current node. Returning index.");
+                return rule_idx_val; // Return rule index
+            }
+        }
+
+        // If it's a leaf node (field_offset == -1) or no children to explore further.
+        if (current_node->field_offset == -1 || (!current_node->left && !current_node->right)) {
+            if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Leaf node or no children to explore further. No match from direct rules. Returning -1.");
+            return -1;
+        }
+
+        // Check if packet is long enough for the field test
+        if (current_node->field_offset >= 0 && static_cast<size_t>(current_node->field_offset) < packet.size()) {
             uint8_t packet_field_byte = packet[current_node->field_offset];
             bool condition_met = ((packet_field_byte & current_node->mask) == (current_node->test_value & current_node->mask));
+
+            if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Testing PktByte[" + std::to_string(current_node->field_offset) + "]=" + std::to_string(packet_field_byte) + " against NodeTestVal=" + std::to_string(current_node->test_value) + " with Mask=" + std::to_string(current_node->mask));
+
             if (condition_met) {
+                if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Condition met. Going Left.");
                 if (current_node->left) {
-                    int result = traverse_decision_tree(current_node->left.get(), packet);
+                    int result = traverse_decision_tree(current_node->left.get(), packet, debug_trace_log);
                     if (result != -1) return result;
+                } else {
+                    if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Left child is null, no path.");
                 }
             } else {
+                if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Condition NOT met. Going Right.");
                 if (current_node->right) {
-                    int result = traverse_decision_tree(current_node->right.get(), packet);
+                    int result = traverse_decision_tree(current_node->right.get(), packet, debug_trace_log);
                     if (result != -1) return result;
                 }
             }
@@ -1131,5 +1348,83 @@ private:
 
         // 3. Call the new method that rebuilds from already sorted & active rules
         rebuild_optimized_structures_from_sorted_rules();
+    }
+
+public: // Statistics methods
+    std::optional<RuleStats> get_rule_stats(uint64_t rule_id) const {
+        for (const auto& r : rules) {
+            if (r.id == rule_id) {
+                RuleStats stats;
+                stats.rule_id = r.id;
+                stats.priority = r.priority;
+                stats.action = r.action;
+                stats.hit_count = r.hit_count;
+                stats.last_hit_timestamp = r.last_hit_timestamp;
+                stats.is_active = r.is_active;
+                stats.creation_time = r.creation_time;
+                return stats;
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::vector<RuleStats> get_all_rule_stats() const {
+        std::vector<RuleStats> all_stats;
+        all_stats.reserve(rules.size());
+        for (const auto& r : rules) {
+            RuleStats stats;
+            stats.rule_id = r.id;
+            stats.priority = r.priority;
+            stats.action = r.action;
+            stats.hit_count = r.hit_count;
+            stats.last_hit_timestamp = r.last_hit_timestamp;
+            stats.is_active = r.is_active;
+            stats.creation_time = r.creation_time;
+            all_stats.push_back(stats);
+        }
+        return all_stats;
+    }
+
+    RuleUtilizationMetrics get_rule_utilization() const {
+        RuleUtilizationMetrics metrics;
+        metrics.total_rules = rules.size();
+
+        for (const auto& r : rules) {
+            if (r.is_active) {
+                metrics.active_rules++;
+                if (r.hit_count > 0) {
+                    metrics.rules_hit_at_least_once++;
+                } else {
+                    metrics.unused_active_rule_ids.push_back(r.id);
+                }
+            } else {
+                metrics.inactive_rules++;
+            }
+        }
+
+        if (metrics.active_rules > 0) {
+            metrics.percentage_active_rules_hit = (static_cast<double>(metrics.rules_hit_at_least_once) / metrics.active_rules) * 100.0;
+        } else {
+            metrics.percentage_active_rules_hit = 0.0;
+        }
+
+        return metrics;
+    }
+
+    AggregatedLatencyMetrics get_lookup_latency_metrics() const {
+        AggregatedLatencyMetrics metrics;
+        metrics.total_lookups_measured = stats.num_lookups_for_latency;
+        if (stats.num_lookups_for_latency > 0) {
+            metrics.min_latency_ns = stats.current_min_latency_ns;
+            metrics.max_latency_ns = stats.current_max_latency_ns;
+            metrics.avg_latency_ns = stats.accumulated_latency_ns / stats.num_lookups_for_latency;
+        } else {
+            // Already initialized to zeros by default constructor of AggregatedLatencyMetrics
+            // Or explicitly:
+            // metrics.min_latency_ns = std::chrono::nanoseconds::zero();
+            // metrics.max_latency_ns = std::chrono::nanoseconds::zero();
+            // metrics.avg_latency_ns = std::chrono::nanoseconds::zero();
+        }
+        return metrics;
     }
 };
