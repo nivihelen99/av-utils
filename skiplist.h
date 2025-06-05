@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <algorithm> // For std::sort
 #include <atomic> // Added for std::atomic
 #include <mutex>  // Added for std::mutex
 #include <random>
@@ -41,37 +42,37 @@ constexpr decltype(auto) get_comparable_value(const U& val) {
 // No need to forward declare the specializations themselves before the primary template.
 // We only need to forward declare if one specialization refers to another in its definition.
 
-// Definition for thread_local_finger (forward declare SkipList to define its static member)
+// Forward declaration for SkipListNode, used by SkipList's static member thread_local_finger
+template<typename T> class SkipListNode;
+
+// Forward declaration for SkipList, necessary for defining its static member.
 template<typename T> class SkipList;
+
+// Definition of SkipListNode must come before its use in SkipList<T>::thread_local_finger
 template<typename T>
-thread_local SkipListNode<T>* SkipList<T>::thread_local_finger = nullptr;
+class SkipListNode {
+public:
+    T value;
+    std::atomic<SkipListNode<T>*>* forward; // Array of atomic pointers
+    int node_level; // Actual level of this node
+
+    SkipListNode(T val, int level) : value(val), node_level(level) {
+        forward = new std::atomic<SkipListNode<T>*>[level + 1];
+        for (int i = 0; i <= level; ++i) {
+            forward[i].store(nullptr, std::memory_order_relaxed);
+        }
+    }
+
+    ~SkipListNode() {
+        delete[] forward;
+    }
+};
 
 // No need for forward declarations of specializations if they are removed.
 // template<> class SkipListNode<int>;
 // template<> class SkipList<int>;
 // template<> class SkipListNode<std::string>;
 // template<> class SkipList<std::string>;
-
-template<typename T>
-class SkipListNode {
-public:
-    T value;
-    // std::vector<SkipListNode*> forward; // Replaced
-    std::atomic<SkipListNode<T>*>* forward; // Changed to array of atomic pointers
-    int node_level; // Store the actual level of this node for easier deletion of forward array
-
-    SkipListNode(T val, int level) : value(val), node_level(level) {
-        // forward now an array of atomic pointers. Size is level + 1.
-        forward = new std::atomic<SkipListNode<T>*>[level + 1];
-        for (int i = 0; i <= level; ++i) {
-            forward[i].store(nullptr, std::memory_order_relaxed); // Initialize to nullptr
-        }
-    }
-
-    ~SkipListNode() {
-        delete[] forward; // Clean up the dynamically allocated array of atomics
-    }
-};
 
 template<typename T>
 class SkipList {
@@ -1225,6 +1226,11 @@ public:
         return removed_count;
     }
 };
+
+// Definition for thread_local_finger.
+// This must come after the full definition of SkipList<T>.
+template<typename T>
+thread_local SkipListNode<T>* SkipList<T>::thread_local_finger = nullptr;
 
 // End of generic SkipList
 
