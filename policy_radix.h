@@ -9,6 +9,10 @@
 #include <sstream>
 #include <algorithm>
 #include <arpa/inet.h>
+#include <functional> // For std::hash
+#include <optional>   // For std::optional
+#include <iomanip>    // For std::setw
+#include <stdexcept>  // For std::runtime_error
 
 // Route attributes for policy-based routing
 struct RouteAttributes {
@@ -20,9 +24,10 @@ struct RouteAttributes {
     uint8_t protocol;       // Routing protocol (OSPF, BGP, etc.)
     uint8_t adminDistance;  // Administrative distance
     bool isActive;
+    uint8_t dscp;           // DSCP value to be applied by this route
     
     RouteAttributes() : nextHop(0), asPath(0), med(0), localPref(100), 
-                       tag(0), protocol(0), adminDistance(1), isActive(true) {}
+                       tag(0), protocol(0), adminDistance(1), isActive(true), dscp(0) {} // Default DSCP 0
 };
 
 // Policy matching criteria
@@ -71,301 +76,383 @@ public:
 class PolicyRoutingTree {
 private:
     std::unique_ptr<PolicyRadixNode> root;
-    std::unordered_map<uint32_t, std::string> routeTable;  // For debugging
-    
+    // std::unordered_map<uint32_t, std::string> routeTable;  // Removed, not used per new design focus
+
+    // Enhanced hash function for PacketInfo
+    size_t generateFlowHash(const PacketInfo& packet) const {
+        size_t seed = 0;
+        auto hash_combine = [&](size_t& current_seed, auto val) {
+            current_seed ^= std::hash<decltype(val)>{}(val) + 0x9e3779b9 + (current_seed << 6) + (current_seed >> 2);
+        };
+        hash_combine(seed, packet.srcIP);
+        hash_combine(seed, packet.dstIP);
+        hash_combine(seed, packet.srcPort);
+        hash_combine(seed, packet.dstPort);
+        hash_combine(seed, packet.protocol);
+        // hash_combine(seed, packet.tos); // Optional: include ToS in hash
+        // hash_combine(seed, packet.flowLabel); // Optional: include FlowLabel in hash
+        return seed;
+    }
+
 public:
     PolicyRoutingTree() : root(std::make_unique<PolicyRadixNode>()) {}
     
     // Convert IP string to uint32_t
-    uint32_t ipStringToInt(const std::string& ip) {
+    uint32_t ipStringToInt(const std::string& ip) const { // Added const
         struct in_addr addr;
-        inet_aton(ip.c_str(), &addr);
+        if (inet_aton(ip.c_str(), &addr) == 0) {
+            throw std::runtime_error("Invalid IP address string: " + ip);
+        }
         return ntohl(addr.s_addr);
     }
     
     // Convert uint32_t to IP string
-    std::string ipIntToString(uint32_t ip) {
+    std::string ipIntToString(uint32_t ip) const { // Added const
         struct in_addr addr;
         addr.s_addr = htonl(ip);
-        return std::string(inet_ntoa(addr));
+        const char* ip_str = inet_ntoa(addr);
+        if (ip_str == nullptr) {
+            throw std::runtime_error("Failed to convert IP integer to string.");
+        }
+        return std::string(ip_str);
     }
     
     // Add a policy-based route
-    void addRoute(const std::string& prefix, uint8_t prefixLen, 
-                  const PolicyRule& policy, const RouteAttributes& attrs) {
-        uint32_t prefixInt = ipStringToInt(prefix);
+    void addRoute(const std::string& prefixStr, uint8_t prefixLen,
+                  PolicyRule policy, const RouteAttributes& attrs) { // Policy passed by value
+        uint32_t prefixInt = ipStringToInt(prefixStr);
         
-        // Create mask for prefix length
         uint32_t mask = (prefixLen == 0) ? 0 : (0xFFFFFFFF << (32 - prefixLen));
-        prefixInt &= mask;
+        prefixInt &= mask; // Ensure prefix is clean
         
+        // insertRoute will handle associating policy.dstPrefix if not set
         insertRoute(root.get(), prefixInt, prefixLen, 0, policy, attrs);
         
-        std::cout << "Added policy route: " << prefix << "/" << (int)prefixLen 
-                  << " -> " << ipIntToString(attrs.nextHop) 
-                  << " (priority: " << policy.priority << ")" << std::endl;
+        // std::cout << "Added policy route: " << prefix << "/" << (int)prefixLen
+        //           << " -> " << ipIntToString(attrs.nextHop)
+        //           << " (priority: " << policy.priority << ")" << std::endl; // Removed cout
     }
     
-    // Lookup with policy-based routing
-    std::vector<std::pair<PolicyRule, RouteAttributes>> 
-    lookup(const PacketInfo& packet) {
-        std::vector<std::pair<PolicyRule, RouteAttributes>> candidates;
-        
-        // First, do longest prefix match on destination
-        findMatchingRoutes(root.get(), packet.dstIP, 0, 32, candidates);
-        
-        // Then apply policy filtering
-        std::vector<std::pair<PolicyRule, RouteAttributes>> validRoutes;
-        
-        for (const auto& [policy, attrs] : candidates) {
-            if (matchesPolicy(packet, policy)) {
-                validRoutes.push_back({policy, attrs});
+    // Lookup with policy-based routing (refined for LPM and policy application)
+    std::vector<std::pair<PolicyRule, RouteAttributes>>
+    lookup(const PacketInfo& packet) const { // Made const
+        PolicyRadixNode* currentNode = root.get();
+        PolicyRadixNode* bestMatchNode = nullptr;
+
+        // Check root for 0.0.0.0/0 default route if it's valid
+        if (root->isValid && root->prefixLen == 0) {
+            bestMatchNode = root.get();
+        }
+
+        for (uint8_t depth = 0; depth < 32 && currentNode != nullptr; ++depth) {
+            bool bit = (packet.dstIP >> (31 - depth)) & 1;
+            PolicyRadixNode* nextNode = bit ? currentNode->right.get() : currentNode->left.get();
+
+            if (nextNode == nullptr) break; // Path ends
+            currentNode = nextNode;
+
+            if (currentNode->isValid) {
+                // Check if this node's prefix matches the packet's destination IP
+                uint32_t mask = (currentNode->prefixLen == 0) ? 0 : (0xFFFFFFFF << (32 - currentNode->prefixLen));
+                if ((packet.dstIP & mask) == (currentNode->prefix & mask)) {
+                    // If this node's prefix is more specific, it becomes the new bestMatchNode
+                    if (bestMatchNode == nullptr || currentNode->prefixLen > bestMatchNode->prefixLen) {
+                        bestMatchNode = currentNode;
+                    }
+                }
             }
         }
         
-        // Sort by priority (lower number = higher priority)
-        std::sort(validRoutes.begin(), validRoutes.end(),
-                 [](const auto& a, const auto& b) {
-                     return a.first.priority < b.first.priority;
-                 });
-        
-        return validRoutes;
-    }
-    
-    // Find best route for a packet
-    RouteAttributes* findBestRoute(const PacketInfo& packet) {
-        auto routes = lookup(packet);
-        
-        if (routes.empty()) {
-            return nullptr;
+        std::vector<std::pair<PolicyRule, RouteAttributes>> lpmRouteCandidates;
+        if (bestMatchNode) {
+            for (const auto& route_pair : bestMatchNode->routes) {
+                lpmRouteCandidates.push_back(route_pair);
+            }
         }
-        
-        // Additional tie-breaking logic (administrative distance, metrics, etc.)
-        auto bestRoute = std::min_element(routes.begin(), routes.end(),
+
+        std::vector<std::pair<PolicyRule, RouteAttributes>> validRoutes;
+        if (!lpmRouteCandidates.empty()) {
+            for (const auto& route_pair : lpmRouteCandidates) {
+                if (matchesPolicy(packet, route_pair.first)) {
+                    validRoutes.push_back(route_pair);
+                }
+            }
+        }
+
+        std::sort(validRoutes.begin(), validRoutes.end(),
             [](const auto& a, const auto& b) {
+                if (a.first.priority != b.first.priority) {
+                    return a.first.priority < b.first.priority;
+                }
                 const auto& attrsA = a.second;
                 const auto& attrsB = b.second;
-                
-                // First by administrative distance
                 if (attrsA.adminDistance != attrsB.adminDistance) {
                     return attrsA.adminDistance < attrsB.adminDistance;
                 }
-                
-                // Then by local preference (higher is better)
                 if (attrsA.localPref != attrsB.localPref) {
                     return attrsA.localPref > attrsB.localPref;
                 }
-                
-                // Then by MED (lower is better)
                 return attrsA.med < attrsB.med;
             });
-        
-        return &(bestRoute->second);
+        return validRoutes;
     }
     
-    // Display routing table with policies
-    void displayRoutes() {
+    RouteAttributes* findBestRoute(const PacketInfo& packet) { // Not const due to static thread_local
+        auto routes = lookup(packet); // lookup is const
+        if (routes.empty()) {
+            return nullptr;
+        }
+        // The lookup method already sorts routes correctly. The first one is the best.
+        static thread_local RouteAttributes bestRouteCopy;
+        bestRouteCopy = routes[0].second;
+        return &bestRouteCopy;
+    }
+
+    void displayRoutes() const { // Made const
         std::cout << "\n=== Policy-Based Routing Table ===" << std::endl;
-        std::cout << std::left << std::setw(18) << "Prefix" 
+        std::cout << std::left
+                  << std::setw(18) << "Route Prefix"
                   << std::setw(15) << "Next Hop" 
-                  << std::setw(8) << "Priority"
-                  << std::setw(8) << "Admin"
-                  << std::setw(8) << "LocalPref"
-                  << std::setw(8) << "MED" << std::endl;
-        std::cout << std::string(75, '-') << std::endl;
-        
-        displayRoutesHelper(root.get(), 0, 0);
+                  << std::setw(12) << "PolicyPrio"
+                  << std::setw(10) << "AdminDist"
+                  << std::setw(10) << "LocalPref"
+                  << std::setw(8) << "MED"
+                  << std::setw(9) << "SetDSCP" // Added SetDSCP column
+                  << " Policy Details" << std::endl;
+        std::cout << std::string(110, '-') << std::endl; // Adjusted width
+        displayRoutesHelper(root.get(), 0, 0, ""); // Initial call with empty path string
     }
     
-    // Simulate route lookup for debugging
-    void simulatePacket(const std::string& srcIP, const std::string& dstIP, 
-                       uint16_t srcPort, uint16_t dstPort, uint8_t protocol) {
+    void simulatePacket(const std::string& srcIPStr, const std::string& dstIPStr,
+                       uint16_t srcPort, uint16_t dstPort, uint8_t protocol,
+                       uint8_t tos = 0, uint32_t flowLabel = 0) { // Added tos and flowLabel
         PacketInfo packet;
-        packet.srcIP = ipStringToInt(srcIP);
-        packet.dstIP = ipStringToInt(dstIP);
+        try {
+            packet.srcIP = ipStringToInt(srcIPStr);
+            packet.dstIP = ipStringToInt(dstIPStr);
+        } catch (const std::runtime_error& e) {
+            std::cerr << "Error creating packet: " << e.what() << std::endl;
+            return;
+        }
         packet.srcPort = srcPort;
         packet.dstPort = dstPort;
         packet.protocol = protocol;
+        packet.tos = tos;
+        packet.flowLabel = flowLabel;
         
-        std::cout << "\n=== Packet Lookup ===" << std::endl;
-        std::cout << "Packet: " << srcIP << ":" << srcPort << " -> " 
-                  << dstIP << ":" << dstPort << " (proto: " << (int)protocol << ")" << std::endl;
+        std::cout << "\n=== Packet Lookup Simulation ===" << std::endl;
+        std::cout << "Packet: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
+                  << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
+                  << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
+                  << ", FlowLabel=" << flowLabel << std::endl;
         
-        auto routes = lookup(packet);
+        auto selectedRouteOpt = selectEcmpPathUsingFlowHash(packet); // Using new ECMP selection
         
-        if (routes.empty()) {
-            std::cout << "No matching routes found" << std::endl;
+        if (!selectedRouteOpt) {
+            std::cout << "  No matching route found." << std::endl;
             return;
         }
-        
-        std::cout << "Matching routes (in priority order):" << std::endl;
-        for (const auto& [policy, attrs] : routes) {
-            std::cout << "  Priority " << policy.priority 
-                      << " -> " << ipIntToString(attrs.nextHop)
-                      << " (admin: " << (int)attrs.adminDistance << ")" << std::endl;
-        }
-        
-        RouteAttributes* best = findBestRoute(packet);
-        if (best) {
-            std::cout << "Selected: " << ipIntToString(best->nextHop) << std::endl;
-        }
+
+        const auto& selectedRoute = *selectedRouteOpt;
+        std::cout << "  Selected Next Hop: " << ipIntToString(selectedRoute.nextHop)
+                  << " (Admin: " << (int)selectedRoute.adminDistance
+                  << ", LP: " << selectedRoute.localPref
+                  << ", MED: " << selectedRoute.med
+                  << ", Tag: " << selectedRoute.tag
+                  << ")" << std::endl;
+        std::cout << "  Applying DSCP: 0x" << std::hex << (int)selectedRoute.dscp << std::dec
+                  << " (Value: " << (int)selectedRoute.dscp << ")" << std::endl; // Display applied DSCP
+
+         auto ecmpCandidates = getEqualCostPaths(packet);
+         if (ecmpCandidates.size() > 1) {
+             std::cout << "  ECMP candidates considered for this flow (" << ecmpCandidates.size() << "):" << std::endl;
+             size_t flowHashIndex = generateFlowHash(packet) % ecmpCandidates.size();
+             for(size_t i = 0; i < ecmpCandidates.size(); ++i) {
+                 const auto& path = ecmpCandidates[i];
+                 std::cout << "    -> " << ipIntToString(path.nextHop)
+                           << " (Admin: " << (int)path.adminDistance
+                           << ", LP: " << path.localPref << ", MED: " << path.med
+                           << ", DSCP: 0x" << std::hex << (int)path.dscp << std::dec << ")"; // Added DSCP to ECMP list
+                if (i == flowHashIndex) {
+                    std::cout << " [*SELECTED* by flow hash]";
+                }
+                std::cout << std::endl;
+             }
+         }
     }
     
-    // Add traffic engineering constraints
-    void addTrafficEngineering(const std::string& prefix, uint8_t prefixLen,
-                              uint32_t primaryNextHop, uint32_t backupNextHop,
-                              uint32_t bandwidth, uint32_t delay) {
-        PolicyRule policy;
-        policy.dstPrefix = ipStringToInt(prefix);
-        policy.dstPrefixLen = prefixLen;
-        policy.priority = 50;  // Medium priority
-        
-        RouteAttributes primary;
-        primary.nextHop = primaryNextHop;
-        primary.localPref = 200;  // High preference
-        primary.tag = bandwidth;  // Abuse tag field for bandwidth
-        
-        RouteAttributes backup;
-        backup.nextHop = backupNextHop;
-        backup.localPref = 100;   // Lower preference
-        backup.tag = bandwidth / 2;  // Half bandwidth for backup
-        
-        addRoute(prefix, prefixLen, policy, primary);
-        
-        // Add backup route with lower priority
-        policy.priority = 100;
-        addRoute(prefix, prefixLen, policy, backup);
-        
-        std::cout << "Added TE route: " << prefix << "/" << (int)prefixLen
-                  << " primary=" << ipIntToString(primaryNextHop)
-                  << " backup=" << ipIntToString(backupNextHop) << std::endl;
+    void addTrafficEngineering(const std::string& prefixStr, uint8_t prefixLen,
+                              uint32_t primaryNextHopIp, uint32_t backupNextHopIp,
+                              uint32_t bandwidth, uint32_t /*delay unused*/) { // delay marked unused
+        PolicyRule commonPolicy;
+
+        RouteAttributes primaryAttrs;
+        primaryAttrs.nextHop = primaryNextHopIp;
+        primaryAttrs.localPref = 200;
+        primaryAttrs.tag = bandwidth;
+        primaryAttrs.dscp = 0x12; // AF21 (DSCP 18) for primary TE path
+        PolicyRule primaryPolicy = commonPolicy;
+        primaryPolicy.priority = 50;
+        addRoute(prefixStr, prefixLen, primaryPolicy, primaryAttrs);
+
+        RouteAttributes backupAttrs;
+        backupAttrs.nextHop = backupNextHopIp;
+        backupAttrs.localPref = 100;
+        backupAttrs.tag = bandwidth / 2;
+        backupAttrs.dscp = 0x00; // Best effort for backup
+        PolicyRule backupPolicy = commonPolicy;
+        backupPolicy.priority = 100;
+        addRoute(prefixStr, prefixLen, backupPolicy, backupAttrs);
     }
     
-    // Multi-path routing support
-    std::vector<RouteAttributes> getEqualCostPaths(const PacketInfo& packet) {
-        auto routes = lookup(packet);
+    std::vector<RouteAttributes> getEqualCostPaths(const PacketInfo& packet) const { // Made const
+        auto sortedValidRoutes = lookup(packet); // lookup is already sorted
         std::vector<RouteAttributes> ecmp;
-        
-        if (routes.empty()) return ecmp;
-        
-        // Find all routes with same cost metrics
-        uint32_t bestMed = routes[0].second.med;
-        uint32_t bestLocalPref = routes[0].second.localPref;
-        uint8_t bestAdminDist = routes[0].second.adminDistance;
-        
-        for (const auto& [policy, attrs] : routes) {
-            if (attrs.adminDistance == bestAdminDist &&
-                attrs.localPref == bestLocalPref &&
-                attrs.med == bestMed) {
-                ecmp.push_back(attrs);
+
+        if (sortedValidRoutes.empty()) return ecmp;
+
+        const auto& bestRoutePairCriteria = sortedValidRoutes[0];
+
+        for (const auto& currentRoutePair : sortedValidRoutes) {
+            if (currentRoutePair.first.priority == bestRoutePairCriteria.first.priority &&
+                currentRoutePair.second.adminDistance == bestRoutePairCriteria.second.adminDistance &&
+                currentRoutePair.second.localPref == bestRoutePairCriteria.second.localPref &&
+                currentRoutePair.second.med == bestRoutePairCriteria.second.med &&
+                currentRoutePair.second.isActive) {
+                ecmp.push_back(currentRoutePair.second);
+            } else {
+                break;
             }
         }
-        
         return ecmp;
     }
 
+    // New method as per subtask
+    std::optional<RouteAttributes> selectEcmpPathUsingFlowHash(const PacketInfo& packet) const { // Made const
+        std::vector<RouteAttributes> ecmpCandidates = getEqualCostPaths(packet);
+
+        if (ecmpCandidates.empty()) return std::nullopt;
+        if (ecmpCandidates.size() == 1) return ecmpCandidates[0];
+
+        size_t hashVal = generateFlowHash(packet);
+        int selectedIndex = hashVal % ecmpCandidates.size();
+        return ecmpCandidates[selectedIndex];
+    }
+
 private:
-    void insertRoute(PolicyRadixNode* node, uint32_t prefix, uint8_t prefixLen, 
-                    uint8_t currentBit, const PolicyRule& policy, 
+    // insertRoute: PolicyRule passed by value to allow modification for dstPrefix/dstPrefixLen
+    void insertRoute(PolicyRadixNode* node, uint32_t targetPrefix, uint8_t targetPrefixLen,
+                    uint8_t currentBitDepth, PolicyRule policy, // Passed by value
                     const RouteAttributes& attrs) {
-        if (currentBit == prefixLen) {
-            node->prefix = prefix;
-            node->prefixLen = prefixLen;
+        if (currentBitDepth == targetPrefixLen) {
+            node->prefix = targetPrefix;
+            node->prefixLen = targetPrefixLen;
             node->isValid = true;
+            // If policy's destination prefix is not explicitly set, use the route's prefix.
+            if (policy.dstPrefix == 0 && policy.dstPrefixLen == 0 && targetPrefixLen > 0) {
+                policy.dstPrefix = targetPrefix;
+                policy.dstPrefixLen = targetPrefixLen;
+            }
             node->routes.push_back({policy, attrs});
             return;
         }
         
-        bool bit = (prefix >> (31 - currentBit)) & 1;
+        bool bit = (targetPrefix >> (31 - currentBitDepth)) & 1;
         
-        if (bit == 0) {
+        if (bit == 0) { // Go left
             if (!node->left) {
                 node->left = std::make_unique<PolicyRadixNode>();
             }
-            insertRoute(node->left.get(), prefix, prefixLen, currentBit + 1, policy, attrs);
-        } else {
+            insertRoute(node->left.get(), targetPrefix, targetPrefixLen, currentBitDepth + 1, policy, attrs);
+        } else { // Go right
             if (!node->right) {
                 node->right = std::make_unique<PolicyRadixNode>();
             }
-            insertRoute(node->right.get(), prefix, prefixLen, currentBit + 1, policy, attrs);
+            insertRoute(node->right.get(), targetPrefix, targetPrefixLen, currentBitDepth + 1, policy, attrs);
         }
     }
     
-    void findMatchingRoutes(PolicyRadixNode* node, uint32_t ip, uint8_t currentBit, 
-                           uint8_t maxBits, 
-                           std::vector<std::pair<PolicyRule, RouteAttributes>>& candidates) {
-        if (!node || currentBit > maxBits) return;
-        
-        if (node->isValid) {
-            // Check if this prefix matches the IP
-            uint32_t mask = (node->prefixLen == 0) ? 0 : (0xFFFFFFFF << (32 - node->prefixLen));
-            if ((ip & mask) == (node->prefix & mask)) {
-                candidates.insert(candidates.end(), node->routes.begin(), node->routes.end());
-            }
-        }
-        
-        if (currentBit < maxBits) {
-            bool bit = (ip >> (31 - currentBit)) & 1;
-            
-            if (bit == 0 && node->left) {
-                findMatchingRoutes(node->left.get(), ip, currentBit + 1, maxBits, candidates);
-            } else if (bit == 1 && node->right) {
-                findMatchingRoutes(node->right.get(), ip, currentBit + 1, maxBits, candidates);
-            }
-        }
-    }
+    // Removed findMatchingRoutes as its logic is incorporated into the new lookup method.
     
-    bool matchesPolicy(const PacketInfo& packet, const PolicyRule& policy) {
-        // Source IP matching
+    bool matchesPolicy(const PacketInfo& packet, const PolicyRule& policy) const { // Made const
+        // Source Prefix Check
         if (policy.srcPrefixLen > 0) {
-            uint32_t srcMask = 0xFFFFFFFF << (32 - policy.srcPrefixLen);
-            if ((packet.srcIP & srcMask) != (policy.srcPrefix & srcMask)) {
+            uint32_t srcPolicyMask = (policy.srcPrefixLen == 32) ? 0xFFFFFFFF : ((1U << policy.srcPrefixLen) -1) << (32 - policy.srcPrefixLen) ;
+            if (policy.srcPrefixLen == 0) srcPolicyMask = 0;
+            if ((packet.srcIP & srcPolicyMask) != (policy.srcPrefix & srcPolicyMask)) {
+                return false;
+            }
+        }
+
+        // Destination Prefix Check (specific to policy, not route prefix)
+        if (policy.dstPrefixLen > 0) {
+            uint32_t dstPolicyMask = (policy.dstPrefixLen == 32) ? 0xFFFFFFFF : ((1U << policy.dstPrefixLen)-1) << (32-policy.dstPrefixLen);
+            if(policy.dstPrefixLen == 0) dstPolicyMask = 0;
+             if ((packet.dstIP & dstPolicyMask) != (policy.dstPrefix & dstPolicyMask)) {
                 return false;
             }
         }
         
-        // Port matching
-        if (policy.srcPort != 0 && packet.srcPort != policy.srcPort) {
-            return false;
-        }
-        if (policy.dstPort != 0 && packet.dstPort != policy.dstPort) {
-            return false;
-        }
-        
-        // Protocol matching
-        if (policy.protocol != 0 && packet.protocol != policy.protocol) {
-            return false;
-        }
-        
-        // TOS matching
-        if (policy.tos != 0 && packet.tos != policy.tos) {
-            return false;
-        }
+        if (policy.srcPort != 0 && packet.srcPort != policy.srcPort) return false;
+        if (policy.dstPort != 0 && packet.dstPort != policy.dstPort) return false;
+        if (policy.protocol != 0 && packet.protocol != policy.protocol) return false;
+        if (policy.tos != 0 && packet.tos != policy.tos) return false;
+        // if (policy.flowLabel != 0 && packet.flowLabel != policy.flowLabel) return false; // Optional
         
         return true;
     }
     
-    void displayRoutesHelper(PolicyRadixNode* node, uint32_t prefix, uint8_t depth) {
+    void displayRoutesHelper(PolicyRadixNode* node, uint32_t /*currentPrefixVal*/, uint8_t /*depth*/, const std::string& pathStr) const { // Made const, params updated
         if (!node) return;
         
         if (node->isValid) {
             std::string prefixStr = ipIntToString(node->prefix) + "/" + std::to_string(node->prefixLen);
-            
             for (const auto& [policy, attrs] : node->routes) {
-                std::cout << std::left << std::setw(18) << prefixStr
+                std::cout << std::left
+                          << std::setw(18) << prefixStr
                           << std::setw(15) << ipIntToString(attrs.nextHop)
-                          << std::setw(8) << policy.priority
-                          << std::setw(8) << (int)attrs.adminDistance
-                          << std::setw(8) << attrs.localPref
-                          << std::setw(8) << attrs.med << std::endl;
+                          << std::setw(12) << policy.priority
+                          << std::setw(10) << (int)attrs.adminDistance
+                          << std::setw(10) << attrs.localPref
+                          << std::setw(8) << attrs.med
+                          << std::setw(9) << ("0x" + [](uint8_t val){ std::stringstream ss; ss << std::hex << (int)val; return ss.str(); }(attrs.dscp)); // Display SetDSCP
+
+                std::string policyDetailsStr = " [";
+                bool firstDetail = true;
+                auto append_detail = [&](const std::string& detail) {
+                    if (!firstDetail) policyDetailsStr += ", ";
+                    policyDetailsStr += detail;
+                    firstDetail = false;
+                };
+
+                if (policy.srcPrefixLen > 0) {
+                    append_detail("SrcPfx: " + ipIntToString(policy.srcPrefix) + "/" + std::to_string(policy.srcPrefixLen));
+                }
+                // Display policy's dstPrefix only if it's different from the route's prefix
+                if (policy.dstPrefixLen > 0 && (policy.dstPrefix != node->prefix || policy.dstPrefixLen != node->prefixLen)) {
+                    append_detail("DstPfx: " + ipIntToString(policy.dstPrefix) + "/" + std::to_string(policy.dstPrefixLen));
+                }
+                if (policy.srcPort > 0) append_detail("SrcPort: " + std::to_string(policy.srcPort));
+                if (policy.dstPort > 0) append_detail("DstPort: " + std::to_string(policy.dstPort));
+                if (policy.protocol > 0) append_detail("Proto: " + std::to_string(policy.protocol));
+                if (policy.tos > 0) {
+                     std::stringstream ss;
+                     ss << "ToS: 0x" << std::hex << (int)policy.tos;
+                     append_detail(ss.str());
+                }
+                policyDetailsStr += "]";
+                if (policyDetailsStr.length() > 2) { // Contains more than "[]"
+                     std::cout << policyDetailsStr;
+                }
+                std::cout << std::endl;
             }
         }
         
         if (node->left) {
-            displayRoutesHelper(node->left.get(), prefix, depth + 1);
+            displayRoutesHelper(node->left.get(), 0, 0, pathStr + "0"); // Params simplified
         }
         if (node->right) {
-            displayRoutesHelper(node->right.get(), prefix | (1 << (31 - depth)), depth + 1);
+            displayRoutesHelper(node->right.get(), 0, 0, pathStr + "1"); // Params simplified
         }
     }
 };
