@@ -1,5 +1,41 @@
 #include "tcam.h"
 
+// Usage example with performance comparison
+void tcam_optimization_example() {
+    OptimizedTCAM tcam;
+    
+    // Add some rules with ranges
+    OptimizedTCAM::WildcardFields rule1;
+    rule1.src_ip = 0x0A000000; rule1.src_ip_mask = 0xFF000000; // 10.0.0.0/8
+    rule1.dst_ip = 0xC0A80000; rule1.dst_ip_mask = 0xFFFF0000; // 192.168.0.0/16
+    rule1.src_port_min = 1024; rule1.src_port_max = 65535;     // High ports
+    rule1.dst_port_min = 80; rule1.dst_port_max = 80;         // HTTP
+    rule1.protocol = 6; rule1.protocol_mask = 0xFF;           // TCP
+    
+    tcam.add_rule_with_ranges(rule1, 100, 1);
+    
+    // Test different lookup methods
+    std::vector<uint8_t> test_packet = {
+        0x0A, 0x00, 0x00, 0x01,  // src IP: 10.0.0.1
+        0xC0, 0xA8, 0x01, 0x01,  // dst IP: 192.168.1.1
+        0x04, 0x00,              // src port: 1024
+        0x00, 0x50,              // dst port: 80
+        0x06,                    // protocol: TCP
+        0x08, 0x00               // eth_type: IPv4
+    };
+    
+    int result_linear = tcam.lookup_linear(test_packet);
+    int result_tree = tcam.lookup_decision_tree(test_packet);
+    int result_bitmap = tcam.lookup_bitmap(test_packet);
+    
+    // Batch processing
+    std::vector<std::vector<uint8_t>> batch_packets(100, test_packet);
+    std::vector<int> batch_results;
+    tcam.lookup_batch(batch_packets, batch_results);
+    
+    // Optimize for traffic pattern
+    tcam.optimize_for_traffic_pattern(batch_packets);
+}
 // Usage example
 int main() {
     // TCAM for firewall rules
@@ -26,4 +62,6 @@ int main() {
     // Multicast
     MulticastManager mcast;
     mcast.join_group(0xE0000001, 1); // 224.0.0.1 on port 1
+
+    tcam_optimization_example();
 }
