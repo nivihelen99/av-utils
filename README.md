@@ -4,6 +4,18 @@
 This repository provides header-only C++ implementations of two advanced data structures: a highly concurrent Skip List and a feature-rich Radix Trie.
 Designed for educational purposes, performance exploration, and practical application in scenarios requiring efficient data management and complex search capabilities.
 
+## Directory Structure
+
+The project is organized as follows:
+
+- \`CMakeLists.txt\`: The main CMake file to configure and build the project.
+- \`include/\`: Contains the header files for the data structures (\`skiplist.h\`, \`trie.h\`, \`policy_radix.h\`). Since these are header-only libraries, you primarily interact with these files.
+- \`examples/\`: Contains example source files (\`example.cpp\`, \`use_policy.cpp\`, \`use_skip.cpp\`) demonstrating how to use the data structures.
+- \`tests/\`: Contains test source files and related data.
+  - \`tests/CMakeLists.txt\`: CMake file specifically for building and running tests using Google Test.
+  - \`tests/trie_test.txt\`: Example test data for the Trie.
+- \`.gitignore\`: Specifies intentionally untracked files that Git should ignore.
+
 ## Features Overview
 - **Templated Design**: The Skip List (`SkipList<T>`) is fully templated, allowing storage of various data types, including key-value pairs.
 - **Concurrency (Skip List)**: The Skip List is designed with lock-free principles using `std::atomic` and Compare-And-Swap operations. (Important concurrency considerations and current limitations are detailed in its section).
@@ -14,27 +26,62 @@ Designed for educational purposes, performance exploration, and practical applic
 - **Memory Management (Skip List)**: Includes a custom memory pool for efficient node allocation and reuse in the Skip List.
 - **File I/O (Trie)**: The Trie implementation supports saving to and loading from files.
 
-## How to Compile & Run Examples
-The data structures are header-only. You just need to include `skiplist.h` or `trie.h` in your C++ project.
-Example usage files are provided (`use_skip.cpp`, `example.cpp` which might use Trie, or a dedicated `use_trie.cpp` if created).
+## How to Compile & Run
 
-To compile an example (e.g., `use_skip.cpp`) with g++:
-```bash
-g++ -std=c++17 -o skip_example use_skip.cpp -pthread
-```
-(The `-pthread` flag is recommended for `skip_example` due to the Skip List's use of `std::atomic` and other concurrency-related features. It ensures proper linking of threading support if required by the system's C++ standard library implementation, though often not strictly needed for `std::atomic` itself on modern compilers.)
+This project uses CMake to manage the build process. The data structures themselves are header-only and located in the \`include/\` directory. Examples and tests are provided to demonstrate usage and verify functionality.
 
-The `example.cpp` file contains comprehensive examples and tests for the Trie. To compile it:
-```bash
-g++ -std=c++17 -o trie_example example.cpp
-```
+### Prerequisites
+- A C++17 compliant compiler (e.g., GCC, Clang, MSVC)
+- CMake (version 3.10 or higher recommended)
 
-To run the compiled examples:
-```bash
-./skip_example
+### Building the Project (Examples and Tests)
+
+1.  **Clone the repository:**
+    \`\`\`bash
+    git clone <repository_url>
+    cd <repository_directory>
+    \`\`\`
+
+2.  **Configure with CMake:**
+    It's recommended to build in a separate directory (e.g., \`build/\`):
+    \`\`\`bash
+    mkdir build
+    cd build
+    cmake ..
+    \`\`\`
+    This will configure the project and generate build files for your environment (e.g., Makefiles on Linux/macOS, Visual Studio solution on Windows).
+
+3.  **Compile:**
+    \`\`\`bash
+    cmake --build .
+    \`\`\`
+    Or, if using Makefiles (after \`cmake ..\`):
+    \`\`\`bash
+    make
+    \`\`\`
+    This will compile the example executables (e.g., \`trie_example\`, \`policy_example\`, \`skip_example\`) and the test runner (\`run_tests\`). The executables will typically be found in the \`build/\` directory.
+
+### Running Examples
+
+After successful compilation, you can run the examples from the build directory:
+\`\`\`bash
 ./trie_example
-```
-Ensure your compiler supports C++17 for features like `if constexpr` and `std::atomic` used in the implementations.
+./policy_example
+./skip_example
+\`\`\`
+*(Note: On Windows, they would be \`.exe\` files, e.g., \`./trie_example.exe\`)*
+
+### Running Tests
+
+The tests are compiled into an executable named \`run_tests\`. You can run it from the build directory:
+\`\`\`bash
+./run_tests
+\`\`\`
+Or, using CTest (which is configured by CMake):
+\`\`\`bash
+ctest
+\`\`\`
+CTest will provide a summary of test results.
 
 ## Skip List (`skiplist.h`)
 
