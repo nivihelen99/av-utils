@@ -305,26 +305,7 @@ public:
     }
 
 private:
-    size_t count_decision_tree_nodes_recursive(const DecisionNode* node) const {
-        if (!node) {
-            return 0;
-        }
-        return 1 + count_decision_tree_nodes_recursive(node->left.get()) +
-                   count_decision_tree_nodes_recursive(node->right.get());
-    }
-
-    static void normalize_rule_fields(Rule& rule) {
-        // Ensures that if mask[i] is 0x00 (wildcard), value[i] is also 0x00.
-        size_t common_size = std::min(rule.value.size(), rule.mask.size());
-        for (size_t i = 0; i < common_size; ++i) {
-            if (rule.mask[i] == 0x00) {
-                rule.value[i] = 0x00;
-            }
-        }
-        // If value or mask is longer than common_size, those bytes are not touched here.
-        // This assumes that rule construction ensures value and mask have meaningful (and typically equal) lengths.
-    }
-
+    // --- Struct Definitions ---
     struct Rule {
         std::vector<uint8_t> value;
         std::vector<uint8_t> mask;
@@ -390,14 +371,37 @@ private:
         }
     };
     
+    // --- Member Variable Declarations ---
     std::vector<Rule> rules;
     std::vector<RangeEntry> port_ranges;
     std::unique_ptr<DecisionNode> decision_tree;
     std::vector<BitmapTCAM> field_bitmaps;
     uint64_t next_rule_id = 0;
-    
-    // WildcardFields moved to public section
 
+    // --- Helper Methods that depend on struct definitions and member variables ---
+    static void normalize_rule_fields(Rule& rule) {
+        // Ensures that if mask[i] is 0x00 (wildcard), value[i] is also 0x00.
+        size_t common_size = std::min(rule.value.size(), rule.mask.size());
+        for (size_t i = 0; i < common_size; ++i) {
+            if (rule.mask[i] == 0x00) {
+                rule.value[i] = 0x00;
+            }
+        }
+        // If value or mask is longer than common_size, those bytes are not touched here.
+        // This assumes that rule construction ensures value and mask have meaningful (and typically equal) lengths.
+    }
+
+    size_t count_decision_tree_nodes_recursive(const DecisionNode* node) const {
+        if (!node) {
+            return 0;
+        }
+        // Accesses node->left and node->right, requiring DecisionNode to be fully defined.
+        return 1 + count_decision_tree_nodes_recursive(node->left.get()) +
+                   count_decision_tree_nodes_recursive(node->right.get());
+    }
+
+    // --- Other Private Methods ---
+    // (The comment "WildcardFields moved to public section" below was likely a general note from earlier refactoring, not specific to this line)
     std::unique_ptr<DecisionNode> build_tree_recursive(const std::vector<int>& rule_indices_for_node, int current_depth,
                                                        const int leaf_threshold, const int max_depth) {
         if (rule_indices_for_node.empty()) {
@@ -531,7 +535,16 @@ private:
         return node;
     }
 
-public:
+    // --- Public methods start here in the original file ---
+    // The SEARCH block should end before this, and the REPLACE block will re-insert the private methods
+    // like add_port_range, pack_ip, etc., after the reordered helper methods.
+    // For the purpose of this diff, I will assume the SEARCH block ends before the next public method,
+    // and the REPLACE block will correctly place ALL private methods after the moved ones.
+    // The provided SEARCH block in the prompt ends before `build_tree_recursive`, which is fine.
+    // The REPLACE block will then put the struct definitions, then members, then the two moved methods,
+    // then `build_tree_recursive` and the rest of the private methods.
+
+public: // This public keyword is just to mark where the next section starts in the original file
     void add_rule_with_ranges(const WildcardFields& fields, int priority, int action) {
         Rule rule_obj;
         rule_obj.priority = priority;
