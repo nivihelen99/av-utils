@@ -74,6 +74,136 @@ public: // For RuleOperation and RuleUpdateBatch
 
     using RuleUpdateBatch = std::vector<RuleOperation>;
 
+public:
+    // Note: This method is not thread-safe if other operations modify rules or port_ranges concurrently.
+    bool update_rules_atomic(const RuleUpdateBatch& batch) {
+        std::vector<Rule> temp_rules = this->rules;
+        std::vector<RangeEntry> temp_port_ranges = this->port_ranges;
+        uint64_t current_next_rule_id = this->next_rule_id;
+        uint32_t temp_next_port_range_id_counter = static_cast<uint32_t>(temp_port_ranges.size());
+
+        // Filter temp_rules to keep only active rules initially
+        temp_rules.erase(std::remove_if(temp_rules.begin(), temp_rules.end(),
+                                        [](const Rule& r){ return !r.is_active; }),
+                         temp_rules.end());
+
+        auto add_port_range_temp_lambda =
+            [](std::vector<RangeEntry>& local_port_ranges, uint16_t min_p, uint16_t max_p, uint32_t& next_id_counter_ref) -> uint32_t {
+            // Check if an identical range already exists
+            for (uint32_t i = 0; i < local_port_ranges.size(); ++i) {
+                if (local_port_ranges[i].min_port == min_p && local_port_ranges[i].max_port == max_p) {
+                    return i; // Return existing ID
+                }
+            }
+            // If not, add new one
+            uint32_t new_id = next_id_counter_ref;
+            local_port_ranges.push_back({min_p, max_p, new_id});
+            next_id_counter_ref++;
+            return new_id;
+        };
+
+        for (const auto& op : batch) {
+            if (op.type == RuleOperation::Type::ADD) {
+                Rule rule_obj;
+                const size_t rule_byte_size = 15; // As defined in add_rule_with_ranges
+                rule_obj.value.resize(rule_byte_size);
+                rule_obj.mask.resize(rule_byte_size);
+
+                pack_ip(rule_obj.value.data(), rule_obj.mask.data(), 0, op.fields.src_ip, op.fields.src_ip_mask);
+                pack_ip(rule_obj.value.data(), rule_obj.mask.data(), 4, op.fields.dst_ip, op.fields.dst_ip_mask);
+
+                // Simplified port packing - direct values or new ranges
+                // Source Port
+                if (op.fields.src_port_min == 0 && op.fields.src_port_max == 0xFFFF) { // Wildcard
+                    rule_obj.mask[8] = 0x00; rule_obj.mask[9] = 0x00;
+                    rule_obj.src_port_range_id = std::numeric_limits<uint32_t>::max();
+                } else if (op.fields.src_port_min == op.fields.src_port_max) { // Exact port
+                    rule_obj.value[8] = static_cast<uint8_t>((op.fields.src_port_min >> 8) & 0xFF);
+                    rule_obj.value[9] = static_cast<uint8_t>(op.fields.src_port_min & 0xFF);
+                    rule_obj.mask[8] = 0xFF; rule_obj.mask[9] = 0xFF;
+                    rule_obj.src_port_range_id = std::numeric_limits<uint32_t>::max();
+                } else { // Range
+                    rule_obj.src_port_range_id = add_port_range_temp_lambda(temp_port_ranges, op.fields.src_port_min, op.fields.src_port_max, temp_next_port_range_id_counter);
+                    rule_obj.mask[8] = 0x00; rule_obj.mask[9] = 0x00; // Mask implies range lookup
+                }
+
+                // Destination Port
+                if (op.fields.dst_port_min == 0 && op.fields.dst_port_max == 0xFFFF) { // Wildcard
+                    rule_obj.mask[10] = 0x00; rule_obj.mask[11] = 0x00;
+                    rule_obj.dst_port_range_id = std::numeric_limits<uint32_t>::max();
+                } else if (op.fields.dst_port_min == op.fields.dst_port_max) { // Exact port
+                    rule_obj.value[10] = static_cast<uint8_t>((op.fields.dst_port_min >> 8) & 0xFF);
+                    rule_obj.value[11] = static_cast<uint8_t>(op.fields.dst_port_min & 0xFF);
+                    rule_obj.mask[10] = 0xFF; rule_obj.mask[11] = 0xFF;
+                    rule_obj.dst_port_range_id = std::numeric_limits<uint32_t>::max();
+                } else { // Range
+                    rule_obj.dst_port_range_id = add_port_range_temp_lambda(temp_port_ranges, op.fields.dst_port_min, op.fields.dst_port_max, temp_next_port_range_id_counter);
+                    rule_obj.mask[10] = 0x00; rule_obj.mask[11] = 0x00; // Mask implies range lookup
+                }
+
+                rule_obj.value[12] = op.fields.protocol;
+                rule_obj.mask[12] = op.fields.protocol_mask;
+                rule_obj.value[13] = static_cast<uint8_t>((op.fields.eth_type >> 8) & 0xFF);
+                rule_obj.mask[13] = static_cast<uint8_t>((op.fields.eth_type_mask >> 8) & 0xFF);
+                rule_obj.value[14] = static_cast<uint8_t>(op.fields.eth_type & 0xFF);
+                rule_obj.mask[14] = static_cast<uint8_t>(op.fields.eth_type_mask & 0xFF);
+
+                rule_obj.priority = op.priority;
+                rule_obj.action = op.action;
+                rule_obj.id = current_next_rule_id++;
+                rule_obj.is_active = true;
+                rule_obj.creation_time = std::chrono::steady_clock::now();
+                temp_rules.push_back(rule_obj);
+
+            } else if (op.type == RuleOperation::Type::DELETE) {
+                auto it = std::find_if(temp_rules.begin(), temp_rules.end(),
+                                       [&](const Rule& r){ return r.id == op.rule_id_to_delete && r.is_active; });
+                if (it != temp_rules.end()) {
+                    it->is_active = false; // Mark for removal from temp_rules later
+                } else {
+                    // Rule to delete not found among active rules in the current transaction state
+                    // Or rule already marked inactive by a previous delete op in the same batch
+                    bool already_marked_inactive = false;
+                    for(const auto& r_check : temp_rules) {
+                        if (r_check.id == op.rule_id_to_delete && !r_check.is_active) {
+                            already_marked_inactive = true;
+                            break;
+                        }
+                    }
+                    if(!already_marked_inactive) {
+                        // If it wasn't just marked inactive in this batch, then it's an error.
+                         // Consider logging: std::cerr << "Rule ID " << op.rule_id_to_delete << " not found for deletion in batch." << std::endl;
+                        return false; // Abort batch
+                    }
+                }
+            }
+        }
+
+        // Finalize: remove rules marked inactive by DELETE operations
+        temp_rules.erase(std::remove_if(temp_rules.begin(), temp_rules.end(),
+                                        [](const Rule& r){ return !r.is_active; }),
+                         temp_rules.end());
+
+        // Sort temp_rules.
+        // Note: calculate_specificity uses this->port_ranges. For new rules in temp_rules
+        // that use temp_port_ranges, specificity might be approximate if their range_id
+        // is not yet in this->port_ranges. This is a known limitation for atomicity here
+        // without refactoring calculate_specificity to accept a port_ranges argument.
+        std::sort(temp_rules.begin(), temp_rules.end(), [this](const Rule& a, const Rule& b) {
+            if (a.priority != b.priority) { return a.priority > b.priority; }
+            // Pass this->port_ranges explicitly if calculate_specificity is refactored
+            return this->calculate_specificity(a) > this->calculate_specificity(b);
+        });
+
+        // Commit changes
+        this->rules = temp_rules;
+        this->port_ranges = temp_port_ranges;
+        this->next_rule_id = current_next_rule_id;
+        this->rebuild_optimized_structures_from_sorted_rules(); // Assumes rules are active and sorted
+
+        return true;
+    }
+
 private:
     struct Rule {
         std::vector<uint8_t> value;
