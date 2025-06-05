@@ -3,6 +3,7 @@ project(DataStructuresExamples)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 # Add include directory for header files (globally for all targets in this directory and subdirectories)
 include_directories(include)
@@ -14,6 +15,7 @@ enable_testing()
 add_executable(trie_example examples/example.cpp)
 add_executable(policy_example examples/use_policy.cpp)
 add_executable(skip_example examples/use_skip.cpp)
+add_executable(tcam_example examples/use_tcam.cpp)
 
 # Add the tests subdirectory
 # This will process the tests/CMakeLists.txt
