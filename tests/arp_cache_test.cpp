@@ -569,16 +569,21 @@ TEST_F(ARPCacheTestFixture, SetGratuitousArpMinInterval_ChangesRateLimiting) {
 
 TEST_F(ARPCacheTestFixture, SetDeviceMac_UpdatesProxyArpMac) {
     mac_addr_t new_dev_mac = make_mac(0xDD);
-    cache_->set_device_mac(new_dev_mac);
+    cache_->set_device_mac(new_dev_mac); // This sets the default device MAC
 
     uint32_t proxy_ip_prefix = 0xC0A80A00;
     uint32_t proxy_subnet_mask = 0xFFFFFF00;
-    cache_->add_proxy_subnet(proxy_ip_prefix, proxy_subnet_mask);
+    uint32_t test_interface_id = 1; // Define an interface ID for this test
+
+    cache_->add_proxy_subnet(proxy_ip_prefix, proxy_subnet_mask, test_interface_id);
+    cache_->enable_proxy_arp_on_interface(test_interface_id); // Enable proxy on this interface
+
     uint32_t ip_in_proxy_subnet = 0xC0A80A05;
     mac_addr_t mac_out;
 
-    ASSERT_TRUE(cache_->lookup(ip_in_proxy_subnet, mac_out));
-    ASSERT_EQ(mac_out, new_dev_mac) << "Proxy ARP should use the new device MAC set via setter.";
+    ASSERT_TRUE(cache_->resolve_proxy_arp(ip_in_proxy_subnet, test_interface_id, mac_out));
+    // If no interface_mac is set for test_interface_id, mac_out should be new_dev_mac (the global one).
+    ASSERT_EQ(mac_out, new_dev_mac) << "Proxy ARP should use the updated device MAC via set_device_mac as fallback.";
 }
 
 TEST_F(ARPCacheTestFixture, SetMaxCacheSize_EvictsEntries) {
