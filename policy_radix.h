@@ -14,10 +14,99 @@
 #include <iomanip>    // For std::setw
 #include <stdexcept>  // For std::runtime_error
 
+class PolicyRoutingTree; // Forward declaration
+
+class VrfRoutingTableManager {
+private:
+    std::unordered_map<uint32_t, std::unique_ptr<PolicyRoutingTree>> vrfTables;
+
+    PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = true) {
+        auto it = vrfTables.find(vrfId);
+        if (it != vrfTables.end()) {
+            return it->second.get();
+        }
+
+        if (createIfNotFound) {
+            auto newTable = std::make_unique<PolicyRoutingTree>();
+            PolicyRoutingTree* newTablePtr = newTable.get();
+            vrfTables[vrfId] = std::move(newTable);
+            return newTablePtr;
+        }
+        return nullptr;
+    }
+
+    // Const version for const methods
+    const PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = false) const {
+        auto it = vrfTables.find(vrfId);
+        if (it != vrfTables.end()) {
+            return it->second.get();
+        }
+        // Cannot create if not found in a const method if creation modifies the map
+        return nullptr;
+    }
+
+public:
+    VrfRoutingTableManager() = default;
+
+    void addRoute(uint32_t vrfId, const std::string& prefixStr, uint8_t prefixLen,
+                  PolicyRule policy, const RouteAttributes& attrs) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, true);
+        if (table) {
+            table->addRoute(prefixStr, prefixLen, policy, attrs);
+        }
+    }
+
+    std::optional<RouteAttributes> selectEcmpPathUsingFlowHash(uint32_t vrfId, const PacketInfo& packet) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, false);
+        if (table) {
+            return table->selectEcmpPathUsingFlowHash(packet);
+        }
+        return std::nullopt;
+    }
+
+    void displayRoutes(uint32_t vrfId) const {
+        const PolicyRoutingTree* table = getVrfTable(vrfId, false);
+        if (table) {
+            std::cout << "\n--- Routing Table for VRF ID: " << vrfId << " ---" << std::endl;
+            table->displayRoutes();
+        } else {
+            std::cout << "\n--- VRF ID: " << vrfId << " not found or has no routes ---" << std::endl;
+        }
+    }
+
+    void displayAllRoutes() const {
+        if (vrfTables.empty()) {
+            std::cout << "\n--- No VRFs configured ---" << std::endl;
+            return;
+        }
+        for (const auto& pair : vrfTables) {
+            std::cout << "\n--- Routing Table for VRF ID: " << pair.first << " ---" << std::endl;
+            pair.second->displayRoutes();
+        }
+    }
+
+    void simulatePacket(uint32_t vrfId, const std::string& srcIPStr, const std::string& dstIPStr,
+                       uint16_t srcPort, uint16_t dstPort, uint8_t protocol,
+                       uint8_t tos = 0, uint32_t flowLabel = 0) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, false); // Don't create VRF on simulation if it doesn't exist
+        if (table) {
+            std::cout << "\n=== Simulating Packet in VRF ID: " << vrfId << " ===" << std::endl;
+            table->simulatePacket(srcIPStr, dstIPStr, srcPort, dstPort, protocol, tos, flowLabel);
+        } else {
+            std::cout << "\n=== VRF ID: " << vrfId << " not found for packet simulation. Packet dropped. ===" << std::endl;
+            // Optionally, print packet details here too
+            std::cout << "Packet Details: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
+                      << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
+                      << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
+                      << ", FlowLabel=" << flowLabel << std::endl;
+        }
+    }
+};
+
 // Route attributes for policy-based routing
 struct RouteAttributes {
     uint32_t nextHop;
-    uint16_t asPath;
+    std::vector<uint32_t> asPath; // Changed from uint16_t to std::vector<uint32_t>
     uint32_t med;           // Multi-Exit Discriminator
     uint32_t localPref;     // Local preference
     uint16_t tag;           // Route tag
@@ -25,9 +114,12 @@ struct RouteAttributes {
     uint8_t adminDistance;  // Administrative distance
     bool isActive;
     uint8_t dscp;           // DSCP value to be applied by this route
+    uint64_t rateLimitBps;  // Rate limit in bits per second
+    uint64_t burstSizeBytes; // Burst size in bytes
     
-    RouteAttributes() : nextHop(0), asPath(0), med(0), localPref(100), 
-                       tag(0), protocol(0), adminDistance(1), isActive(true), dscp(0) {} // Default DSCP 0
+    RouteAttributes() : nextHop(0), asPath(), med(0), localPref(100),
+                       tag(0), protocol(0), adminDistance(1), isActive(true), dscp(0),
+                       rateLimitBps(0), burstSizeBytes(0) {}
 };
 
 // Policy matching criteria
@@ -90,7 +182,7 @@ private:
         hash_combine(seed, packet.dstPort);
         hash_combine(seed, packet.protocol);
         // hash_combine(seed, packet.tos); // Optional: include ToS in hash
-        // hash_combine(seed, packet.flowLabel); // Optional: include FlowLabel in hash
+        hash_combine(seed, packet.flowLabel); // Optional: include FlowLabel in hash
         return seed;
     }
 
@@ -98,7 +190,7 @@ public:
     PolicyRoutingTree() : root(std::make_unique<PolicyRadixNode>()) {}
     
     // Convert IP string to uint32_t
-    uint32_t ipStringToInt(const std::string& ip) const { // Added const
+    static uint32_t ipStringToInt(const std::string& ip) { // Made static
         struct in_addr addr;
         if (inet_aton(ip.c_str(), &addr) == 0) {
             throw std::runtime_error("Invalid IP address string: " + ip);
@@ -107,7 +199,7 @@ public:
     }
     
     // Convert uint32_t to IP string
-    std::string ipIntToString(uint32_t ip) const { // Added const
+    static std::string ipIntToString(uint32_t ip) { // Made static
         struct in_addr addr;
         addr.s_addr = htonl(ip);
         const char* ip_str = inet_ntoa(addr);
@@ -217,9 +309,12 @@ public:
                   << std::setw(10) << "AdminDist"
                   << std::setw(10) << "LocalPref"
                   << std::setw(8) << "MED"
-                  << std::setw(9) << "SetDSCP" // Added SetDSCP column
+                  << std::setw(15) << "AS Path"
+                  << std::setw(12) << "RateLimit"   // Added RateLimit column
+                  << std::setw(12) << "BurstSize"   // Added BurstSize column
+                  << std::setw(9) << "SetDSCP"
                   << " Policy Details" << std::endl;
-        std::cout << std::string(110, '-') << std::endl; // Adjusted width
+        std::cout << std::string(160, '-') << std::endl; // Adjusted width +24 for new columns + some spacing
         displayRoutesHelper(root.get(), 0, 0, ""); // Initial call with empty path string
     }
     
@@ -261,7 +356,9 @@ public:
                   << ", Tag: " << selectedRoute.tag
                   << ")" << std::endl;
         std::cout << "  Applying DSCP: 0x" << std::hex << (int)selectedRoute.dscp << std::dec
-                  << " (Value: " << (int)selectedRoute.dscp << ")" << std::endl; // Display applied DSCP
+                  << " (Value: " << (int)selectedRoute.dscp << ")" << std::endl;
+        // Display Rate Limiting Information
+        std::cout << "  Rate Limit: " << selectedRoute.rateLimitBps << " bps, Burst: " << selectedRoute.burstSizeBytes << " bytes" << std::endl;
 
          auto ecmpCandidates = getEqualCostPaths(packet);
          if (ecmpCandidates.size() > 1) {
@@ -397,7 +494,7 @@ private:
         if (policy.dstPort != 0 && packet.dstPort != policy.dstPort) return false;
         if (policy.protocol != 0 && packet.protocol != policy.protocol) return false;
         if (policy.tos != 0 && packet.tos != policy.tos) return false;
-        // if (policy.flowLabel != 0 && packet.flowLabel != policy.flowLabel) return false; // Optional
+        if (policy.flowLabel != 0 && packet.flowLabel != policy.flowLabel) return false; // Optional
         
         return true;
     }
@@ -414,8 +511,24 @@ private:
                           << std::setw(12) << policy.priority
                           << std::setw(10) << (int)attrs.adminDistance
                           << std::setw(10) << attrs.localPref
-                          << std::setw(8) << attrs.med
-                          << std::setw(9) << ("0x" + [](uint8_t val){ std::stringstream ss; ss << std::hex << (int)val; return ss.str(); }(attrs.dscp)); // Display SetDSCP
+                           << std::setw(8) << attrs.med;
+
+                // AS Path printing
+                std::string asPathStr;
+                if (attrs.asPath.empty()) {
+                    asPathStr = "-";
+                } else {
+                    for (size_t i = 0; i < attrs.asPath.size(); ++i) {
+                        asPathStr += std::to_string(attrs.asPath[i]) + (i < attrs.asPath.size() - 1 ? " " : "");
+                    }
+                }
+                std::cout << std::setw(15) << asPathStr;
+
+                // RateLimit and BurstSize printing
+                std::cout << std::setw(12) << (attrs.rateLimitBps == 0 ? "-" : std::to_string(attrs.rateLimitBps));
+                std::cout << std::setw(12) << (attrs.burstSizeBytes == 0 ? "-" : std::to_string(attrs.burstSizeBytes));
+
+                std::cout << std::setw(9) << ("0x" + [](uint8_t val){ std::stringstream ss; ss << std::hex << (int)val; return ss.str(); }(attrs.dscp));
 
                 std::string policyDetailsStr = " [";
                 bool firstDetail = true;
@@ -439,6 +552,9 @@ private:
                      std::stringstream ss;
                      ss << "ToS: 0x" << std::hex << (int)policy.tos;
                      append_detail(ss.str());
+                }
+                if (policy.flowLabel != 0) {
+                    append_detail("FlowLabel: " + std::to_string(policy.flowLabel));
                 }
                 policyDetailsStr += "]";
                 if (policyDetailsStr.length() > 2) { // Contains more than "[]"
