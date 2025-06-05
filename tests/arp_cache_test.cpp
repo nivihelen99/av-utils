@@ -130,29 +130,30 @@ TEST(ARPCacheTest, FastFailoverInLookupIfStale) {
 
 TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    auto test_reachable_time = std::chrono::seconds(20);
-    auto test_stale_time = std::chrono::seconds(5);
-    auto test_probe_interval = std::chrono::seconds(1);
-    auto test_max_backoff = std::chrono::seconds(60);
-    auto test_failed_lifetime = std::chrono::seconds(20);
-    auto test_delay_duration = std::chrono::seconds(5);
-    auto test_flap_window = std::chrono::seconds(10);
-    int test_max_flaps = 3;
-    size_t test_max_size = 1024;
+    auto test_probe_interval = std::chrono::seconds(1); // Base probe interval
+    auto test_max_backoff = std::chrono::seconds(60);   // Max backoff for this test
 
-    MockARPCache cache(dev_mac, test_reachable_time, test_stale_time, test_probe_interval,
-                       test_max_backoff, test_failed_lifetime, test_delay_duration,
-                       test_flap_window, test_max_flaps, test_max_size);
+    MockARPCache cache(dev_mac,
+                       std::chrono::seconds(20),  // reachable_time
+                       std::chrono::seconds(5),   // stale_time
+                       test_probe_interval,       // probe_retransmit_interval
+                       test_max_backoff,          // max_probe_backoff_interval
+                       std::chrono::seconds(20),  // failed_entry_lifetime
+                       std::chrono::seconds(10),  // flap_detection_window (default)
+                       3,                         // max_flaps (default)
+                       std::chrono::seconds(5),   // delay_duration (default)
+                       1024);                     // max_cache_size (default)
 
     uint32_t ip1 = 0xC0A80102;
     mac_addr_t mac1_primary_dummy = {};
     mac_addr_t mac1_backup  = {0x00, 0x11, 0x22, 0x33, 0x44, 0xBB};
     mac_addr_t mac_out;
 
-    // Initial lookup for ip1. This creates an INCOMPLETE entry.
-    auto t_ref = std::chrono::steady_clock::now();
+    // Initial lookup for ip1. This creates an INCOMPLETE entry and sends Probe #1.
+    // ARPEntry state: probe_count=0, backoff_exponent=0. Timestamp is set.
+    auto current_time_base = std::chrono::steady_clock::now();
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-    ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy)); // ip1 is now INCOMPLETE in the cache
+    ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy));
     testing::Mock::VerifyAndClearExpectations(&cache);
 
     // Now that an entry for ip1 exists, add the backup MAC.
@@ -160,36 +161,46 @@ TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
 
     EXPECT_CALL(cache, log_ip_conflict(testing::_, testing::_, testing::_)).Times(0);
 
-    auto current_test_time = t_ref;
-    // Loop for MAX_PROBES -1 because lookup already sent one.
-    // The backoff_exponent for the current wait interval is effectively 'i' for this loop's probes.
-    for (int i = 0; i < ARPCache::MAX_PROBES - 1; ++i) { // Corrected loop condition based on task
-        long long wait_seconds = test_probe_interval.count();
-        if (i > 0) { // First probe by age_entries uses backoff_exponent=0, second uses 1, etc.
-            wait_seconds *= (1LL << i);
+    auto last_probe_time = current_time_base; // Timestamp of the last probe sent
+
+    // Simulate ARPCache::MAX_PROBES probes sent by age_entries (Probes #2, #3, #4 if MAX_PROBES=3)
+    // Loop variable 'k' represents the value of entry.backoff_exponent at the START of the wait period.
+    for (int k = 0; k < ARPCache::MAX_PROBES; ++k) {
+        // k is 0, 1, 2 if MAX_PROBES = 3
+        long long wait_multiplier = (1LL << k);
+        std::chrono::seconds wait_duration = std::chrono::seconds(test_probe_interval.count() * wait_multiplier);
+        if (wait_duration > test_max_backoff) {
+            wait_duration = test_max_backoff;
         }
-        wait_seconds = std::min(wait_seconds, static_cast<long long>(test_max_backoff.count()));
-        current_test_time += std::chrono::seconds(wait_seconds) + std::chrono::milliseconds(100);
+
+        last_probe_time += wait_duration + std::chrono::milliseconds(100);
 
         EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-        cache.age_entries(current_test_time);
+        cache.age_entries(last_probe_time);
+        // Inside age_entries: probe_count becomes k+1, backoff_exponent becomes k+1.
         testing::Mock::VerifyAndClearExpectations(&cache);
     }
+    // After this loop, ARPEntry's internal state:
+    // probe_count = MAX_PROBES (e.g., 3)
+    // backoff_exponent = MAX_PROBES (e.g., 3)
+    // last_probe_time is the timestamp of the last probe sent by age_entries.
 
-    // Determine wait for the probe attempt that should trigger failover.
-    // At this point, entry's backoff_exponent would be (ARPCache::MAX_PROBES - 1).
-    long long final_wait_seconds = test_probe_interval.count();
-    if ((ARPCache::MAX_PROBES - 1) > 0) { // Check if backoff_exponent for last probe was > 0
-         final_wait_seconds *= (1LL << (ARPCache::MAX_PROBES - 1));
+    // This next age_entries call should trigger failover.
+    // Wait time is based on current backoff_exponent (which is MAX_PROBES).
+    long long final_wait_multiplier = (1LL << ARPCache::MAX_PROBES);
+    std::chrono::seconds final_wait_duration = std::chrono::seconds(test_probe_interval.count() * final_wait_multiplier);
+    if (final_wait_duration > test_max_backoff) {
+        final_wait_duration = test_max_backoff;
     }
-    final_wait_seconds = std::min(final_wait_seconds, static_cast<long long>(test_max_backoff.count()));
-    current_test_time += std::chrono::seconds(final_wait_seconds) + std::chrono::milliseconds(100);
+    last_probe_time += final_wait_duration + std::chrono::milliseconds(100);
 
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(0); // No more probes, should failover
-    cache.age_entries(current_test_time); // This call should trigger failover
+    cache.age_entries(last_probe_time);
+    // Inside age_entries: probe_count becomes MAX_PROBES+1. This triggers failover.
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0); // Should be REACHABLE with backup
+    // Verify failover
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
     ASSERT_TRUE(cache.lookup(ip1, mac_out)) << "Lookup failed after expected failover.";
     ASSERT_EQ(mac_out, mac1_backup) << "MAC address did not match backup MAC after failover.";
     testing::Mock::VerifyAndClearExpectations(&cache);
@@ -245,26 +256,60 @@ TEST(ARPCacheTest, ConfigurableTimers_StaleToProbe) {
 
 TEST(ARPCacheTest, ConfigurableTimers_ProbeRetransmit) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x07};
-    auto custom_probe_interval = std::chrono::seconds(2);
-    MockARPCache cache(dev_mac, std::chrono::seconds(10), std::chrono::seconds(5), custom_probe_interval);
+    auto base_interval = std::chrono::seconds(2);
+    auto max_backoff = std::chrono::seconds(60);
+
+    MockARPCache cache(dev_mac,
+                       std::chrono::seconds(10),  // reachable_time
+                       std::chrono::seconds(5),   // stale_time
+                       base_interval,             // probe_retransmit_interval (base for backoff)
+                       max_backoff,               // max_probe_backoff_interval
+                       std::chrono::seconds(20),  // failed_entry_lifetime (default-like)
+                       std::chrono::seconds(10),  // flap_detection_window (default-like)
+                       3,                         // max_flaps (default-like)
+                       std::chrono::seconds(5),   // delay_duration (default-like)
+                       1024);                     // max_cache_size (default-like)
 
     uint32_t ip1 = 0xC0A80103;
     mac_addr_t mac_out;
 
-    auto time_reference_lookup = std::chrono::steady_clock::now();
+    // Initial lookup for non-existent IP. This sends Probe #1.
+    // Internally, ARPEntry for ip1 has probe_count=0, backoff_exponent=0. Timestamp is set.
+    auto current_time_base = std::chrono::steady_clock::now();
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
     ASSERT_FALSE(cache.lookup(ip1, mac_out));
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    auto time_for_second_probe = time_reference_lookup + custom_probe_interval + std::chrono::milliseconds(100);
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-    cache.age_entries(time_for_second_probe);
-    testing::Mock::VerifyAndClearExpectations(&cache);
+    auto last_probe_time = current_time_base; // Timestamp of the last probe sent (initially by lookup)
 
-    auto time_for_third_probe = time_for_second_probe + custom_probe_interval + std::chrono::milliseconds(100);
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-    cache.age_entries(time_for_third_probe);
-    testing::Mock::VerifyAndClearExpectations(&cache);
+    // Simulate ARPCache::MAX_PROBES probes sent by age_entries.
+    // These are Probes #2, #3, #4 if MAX_PROBES = 3.
+    // The loop variable 'k' represents the value of 'entry.backoff_exponent'
+    // that was set *after* the (k-1)th probe by age_entries, and is used to calculate the current wait.
+    // Or, more simply, k is the 0-indexed count of probes sent by age_entries so far in this loop.
+    for (int k = 0; k < ARPCache::MAX_PROBES; ++k) {
+        // entry.backoff_exponent for calculating current wait is 'k'.
+        // (0 for 1st age_entries probe, 1 for 2nd, 2 for 3rd)
+        long long current_backoff_exponent_for_wait = k;
+        long long wait_multiplier = (1LL << current_backoff_exponent_for_wait);
+        std::chrono::seconds wait_duration = std::chrono::seconds(base_interval.count() * wait_multiplier);
+        if (wait_duration > max_backoff) {
+            wait_duration = max_backoff;
+        }
+
+        // Advance time from the timestamp of the *last* probe sent
+        auto next_probe_trigger_time = last_probe_time + wait_duration + std::chrono::milliseconds(100);
+
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(next_probe_trigger_time);
+        // Inside age_entries for this successful probe:
+        // - entry.probe_count becomes k+1 (relative to age_entries probes).
+        // - This probe is sent.
+        // - entry.timestamp is updated to next_probe_trigger_time.
+        // - entry.backoff_exponent becomes k+1.
+        last_probe_time = next_probe_trigger_time; // Update for next iteration's timing
+        testing::Mock::VerifyAndClearExpectations(&cache);
+    }
 }
 
 TEST(ARPCacheTest, ExponentialBackoff_ProbeIntervalIncrease) {
@@ -382,42 +427,72 @@ TEST(ARPCacheTest, ExponentialBackoff_ResetOnReachable) {
 TEST(ARPCacheTest, FailedState_TransitionOnProbeFailure) {
     mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0B};
     auto base_interval = std::chrono::seconds(1);
-    auto max_backoff = std::chrono::seconds(2);
-    auto failed_lifetime = std::chrono::seconds(10);
-    MockARPCache cache(dev_mac, std::chrono::seconds(30), std::chrono::seconds(5), base_interval, max_backoff, failed_lifetime);
+    auto max_backoff_for_test = std::chrono::seconds(2); // Keep test fast
+    auto failed_lifetime_for_test = std::chrono::seconds(10);
+    // Full 10-argument constructor for MockARPCache:
+    // mac, reachable, stale, probe_interval, max_backoff, failed_life,
+    // flap_window, max_flaps, delay_duration, max_size
+    MockARPCache cache(dev_mac,
+                       std::chrono::seconds(30),  // reachable_time
+                       std::chrono::seconds(5),   // stale_time
+                       base_interval,             // probe_retransmit_interval
+                       max_backoff_for_test,      // max_probe_backoff_interval
+                       failed_lifetime_for_test,  // failed_entry_lifetime
+                       std::chrono::seconds(10),  // flap_detection_window (default)
+                       3,                         // max_flaps (default)
+                       std::chrono::seconds(5),   // delay_duration (default)
+                       1024);                     // max_cache_size (default)
 
     uint32_t ip1 = 0xC0A8010D;
     mac_addr_t mac_out;
+    // No backup MACs are added for ip1 in this test.
 
-    auto current_time = std::chrono::steady_clock::now();
+    // Initial lookup sends probe 1.
+    // Entry state: INCOMPLETE, probe_count=0, backoff_exponent=0. Timestamp is set.
+    auto current_time_ref = std::chrono::steady_clock::now();
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
     ASSERT_FALSE(cache.lookup(ip1, mac_out));
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    for (int i = 0; i < ARPCache::MAX_PROBES; ++i) {
-        long long current_wait_s = base_interval.count();
-        if (i > 0) {
-             current_wait_s *= (static_cast<long long>(1) << (i-1) );
+    auto last_probe_time = current_time_ref; // Timestamp of the last probe sent
+
+    // Simulate ARPCache::MAX_PROBES probes sent by age_entries (Probes #2, #3, #4 if MAX_PROBES=3)
+    // Loop variable 'k' represents the value of entry.backoff_exponent at the START of the wait period.
+    for (int k = 0; k < ARPCache::MAX_PROBES; ++k) {
+        // k is 0, 1, 2 if MAX_PROBES = 3
+        long long wait_multiplier = (1LL << k);
+        std::chrono::seconds wait_duration = std::chrono::seconds(base_interval.count() * wait_multiplier);
+        if (wait_duration > max_backoff_for_test) {
+            wait_duration = max_backoff_for_test;
         }
-        current_wait_s = std::min(current_wait_s, static_cast<long long>(max_backoff.count()));
-        current_time += std::chrono::seconds(current_wait_s) + std::chrono::milliseconds(100);
+
+        last_probe_time += wait_duration + std::chrono::milliseconds(100);
 
         EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-        cache.age_entries(current_time);
+        cache.age_entries(last_probe_time);
+        // Inside age_entries: probe_count becomes k+1, backoff_exponent becomes k+1.
         testing::Mock::VerifyAndClearExpectations(&cache);
     }
+    // After this loop, ARPEntry's internal state:
+    // probe_count = MAX_PROBES (e.g., 3)
+    // backoff_exponent = MAX_PROBES (e.g., 3)
+    // last_probe_time is the timestamp of the last probe sent by age_entries.
 
-    long long final_wait_s = base_interval.count();
-    if (ARPCache::MAX_PROBES > 0) {
-        final_wait_s *= (static_cast<long long>(1) << (ARPCache::MAX_PROBES -1) );
+    // This next age_entries call should trigger the transition to FAILED.
+    // Wait time is based on current backoff_exponent (which is MAX_PROBES).
+    long long final_wait_multiplier = (1LL << ARPCache::MAX_PROBES);
+    std::chrono::seconds final_wait_duration = std::chrono::seconds(base_interval.count() * final_wait_multiplier);
+    if (final_wait_duration > max_backoff_for_test) {
+        final_wait_duration = max_backoff_for_test;
     }
-    final_wait_s = std::min(final_wait_s, static_cast<long long>(max_backoff.count()));
-    current_time += std::chrono::seconds(final_wait_s) + std::chrono::milliseconds(100);
+    last_probe_time += final_wait_duration + std::chrono::milliseconds(100);
 
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
-    cache.age_entries(current_time);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0); // No more probes, should transition to FAILED
+    cache.age_entries(last_probe_time);
+    // Inside age_entries: probe_count becomes MAX_PROBES+1. This triggers FAILED state.
     testing::Mock::VerifyAndClearExpectations(&cache);
 
+    // Verify entry is FAILED by trying to look it up (should return false).
     ASSERT_FALSE(cache.lookup(ip1, mac_out)) << "Lookup should fail for FAILED entry.";
 }
 
@@ -546,3 +621,5 @@ TEST(ARPCacheTest, BackgroundRefresh_ToStaleIfNoReply) {
 // for full testability (e.g., forcing entry states, mocking non-virtual methods,
 // or checking stderr output without a test framework's capture abilities).
 // The existing assertions primarily check the cache's state after operations.
+
+[end of tests/arp_cache_test.cpp]
