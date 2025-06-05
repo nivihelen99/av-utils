@@ -1,9 +1,14 @@
-#include "../include/arp_cache.h" // Adjust path as necessary
 #include <iostream>
 #include <vector>
 #include <array>
 #include <thread> // For std::this_thread::sleep_for
 #include <chrono> // For std::chrono::seconds
+// #include <cstdio> // For printf, if not using iostream for all output. Current example uses printf in print_mac.
+// Let's ensure cstdio is included if printf is used.
+#include <cstdio>
+
+
+#include "../include/arp_cache.h" // Adjust path as necessary
 
 // For examples, we don't have a mock framework.
 // We'll assume the send_arp_request in ARPCache prints to stdout or is a no-op.

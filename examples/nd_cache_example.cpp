@@ -1,9 +1,11 @@
-#include "../include/nd_cache.h" // Adjust path as necessary
 #include <iostream>
 #include <vector>
 #include <array>
 #include <thread> // For std::this_thread::sleep_for
 #include <chrono> // For std::chrono::seconds
+#include <cstdio> // For printf in helper functions
+
+#include "../include/nd_cache.h" // Adjust path as necessary
 
 // Helper to print MAC addresses
 void print_mac_nd(const mac_addr_t& mac) {

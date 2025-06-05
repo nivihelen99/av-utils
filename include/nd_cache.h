@@ -7,13 +7,30 @@
 #include <cstdint> // For uintX_t types
 #include <queue>   // For pending packets, similar to ARPCache
 #include <algorithm> // For std::remove_if
+#include <functional> // For std::hash specialization
 
 // Forward declaration for classes/structs if needed later
 // class NetworkInterface; // Example if we need to interact with network interface specifics
 
-// Define IPv6 address type for convenience
+// Define IPv6 address type for convenience. Must be defined before std::hash specialization.
 using ipv6_addr_t = std::array<uint8_t, 16>; /**< Type alias for IPv6 addresses. */
 using mac_addr_t = std::array<uint8_t, 6>;  /**< Type alias for MAC addresses. */
+
+// Specialization of std::hash for ipv6_addr_t to allow its use as a key in std::unordered_map.
+namespace std {
+    template <>
+    struct hash<ipv6_addr_t> {
+        std::size_t operator()(const ipv6_addr_t& addr) const {
+            std::size_t h = 0;
+            // Simple hash combination; more sophisticated methods could be used.
+            for (uint8_t byte : addr) {
+                h ^= std::hash<uint8_t>{}(byte) + 0x9e3779b9 + (h << 6) + (h >> 2);
+            }
+            return h;
+        }
+    };
+} // namespace std
+
 
 // ND Message Types (RFC 4861)
 /** @brief Defines the types of Neighbor Discovery Protocol messages. */
@@ -95,38 +112,64 @@ private:
     ipv6_addr_t link_local_address_;                /**< Link-local IPv6 address of the device. */
     bool link_local_dad_completed_ = false;         /**< Tracks DAD completion for the link-local address. */
 
+    // Internal helper methods
+    /** @brief Generates the EUI-64 interface identifier from a MAC address. */
+    std::array<uint8_t, 8> generate_eui64_interface_id_bytes(const mac_addr_t& mac);
+    /** @brief Constructs the Solicited-Node Multicast address for a given IPv6 target address. */
+    ipv6_addr_t solicited_node_multicast_address(const ipv6_addr_t& target_ip);
+    void generate_link_local_address(); // Generates link-local address using EUI-64.
+    void initiate_link_local_dad();     // Starts DAD for the generated link-local address.
+    ipv6_addr_t get_unspecified_address() const { ipv6_addr_t addr; addr.fill(0); return addr; } // Returns '::'.
+
+public:
+    // Publicly accessible constants (e.g. for testing or configuration)
     // Constants for ND protocol (values typically from RFC 4861)
     static constexpr int MAX_RTR_SOLICITATION_DELAY = 1; // second (used for DAD random delay)
     static constexpr int RTR_SOLICITATION_INTERVAL = 4; // seconds
-    static constexpr int MAX_RTR_SOLICITATIONS = 3;
-    static constexpr int MAX_MULTICAST_SOLICIT = 3; // For DAD and address resolution
-    static constexpr int MAX_UNICAST_SOLICIT = 3; // For NUD
-    static constexpr int RETRANS_TIMER = 1000; // milliseconds (RFC 4861 default)
-    static constexpr int DELAY_FIRST_PROBE_TIME = 5; // seconds (RFC 4861)
-    static constexpr std::chrono::seconds DEFAULT_REACHABLE_TIME = std::chrono::seconds(30); // RFC 4861
+    static constexpr int MAX_RTR_SOLICITATIONS = 3;     // Max Router Solicitations to send
+    static constexpr int MAX_MULTICAST_SOLICIT = 3;     // Max DAD NS / Address Resolution NS
+    static constexpr int MAX_UNICAST_SOLICIT = 3;       // Max NUD NS probes
+    static constexpr int RETRANS_TIMER = 1000;          // Milliseconds for NS retransmission timer (RFC 4861 default)
+    static constexpr int DELAY_FIRST_PROBE_TIME = 5;    // Seconds to wait in DELAY state before first PROBE (RFC 4861)
+    static constexpr std::chrono::seconds DEFAULT_REACHABLE_TIME = std::chrono::seconds(30); // RFC 4861 default
 
-    // Helper to generate EUI-64 based interface ID (lower 64 bits of an IPv6 address)
-    std::array<uint8_t, 8> generate_eui64_interface_id_bytes(const mac_addr_t& mac); // Forms the interface identifier part of an IPv6 address.
-    // Helper to construct solicited-node multicast address
-    ipv6_addr_t solicited_node_multicast_address(const ipv6_addr_t& target_ip); // Used as destination for NS messages.
-
-public:
     /**
      * @brief Constructs an NDCache.
+     * Initializes the cache and starts DAD for the link-local address.
      * @param own_mac The MAC address of the device this cache is on; used for EUI-64 generation.
      */
     NDCache(const mac_addr_t& own_mac);
     ~NDCache();
 
     // --- Virtual methods for sending ND packets (to be implemented by network layer/driver) ---
-    /** @brief Sends a Router Solicitation message. (Placeholder - override in derived class for actual sending) */
+    // These methods are expected to be overridden by a derived class that handles actual network I/O.
+    // The base implementations here are placeholders (e.g., can log to stderr for simulation).
+
+    /**
+     * @brief Sends a Router Solicitation message.
+     * @param source_ip The source IPv6 address to use in the RS packet (usually link-local or unspecified).
+     */
     virtual void send_router_solicitation(const ipv6_addr_t& source_ip);
-    /** @brief Sends a Neighbor Solicitation message. (Placeholder - override in derived class for actual sending) */
+    /**
+     * @brief Sends a Neighbor Solicitation message.
+     * @param target_ip The IPv6 address being solicited.
+     * @param source_ip The source IPv6 address of the sender. For DAD, this is the unspecified address.
+     * @param sllao Pointer to the Source Link-Layer Address Option (MAC address of sender). Null if not included (e.g., for DAD).
+     * @param for_dad True if this NS is for Duplicate Address Detection, false for address resolution.
+     */
     virtual void send_neighbor_solicitation(const ipv6_addr_t& target_ip, const ipv6_addr_t& source_ip, const mac_addr_t* sllao, bool for_dad = false);
-    /** @brief Sends a Neighbor Advertisement message. (Placeholder - override in derived class for actual sending) */
+    /**
+     * @brief Sends a Neighbor Advertisement message.
+     * @param target_ip The destination IPv6 address of the NA packet (e.g., source of NS, or all-nodes multicast).
+     * @param adv_source_ip The IPv6 address whose link-layer address is being advertised (the "Target Address" field in NA).
+     * @param tllao The Target Link-Layer Address Option (MAC address being advertised).
+     * @param is_router R-flag: True if the sender is a router.
+     * @param solicited S-flag: True if the NA is a response to a unicast NS.
+     * @param override_flag O-flag: True if this NA should override an existing cache entry.
+     */
     virtual void send_neighbor_advertisement(const ipv6_addr_t& target_ip, const ipv6_addr_t& adv_source_ip, const mac_addr_t& tllao, bool is_router, bool solicited, bool override_flag);
 
-    // --- Structures for simplified message info processing ---
+    // --- Structures for simplified message info processing (passed into processing methods) ---
     /** @brief Simplified structure to pass Router Advertisement data into the cache. */
     struct RAInfo {
         ipv6_addr_t source_ip;      /**< Source IPv6 address of the RA (router's link-local). */
@@ -227,10 +270,6 @@ private:
         std::chrono::steady_clock::time_point start_time;      /**< When DAD process started (for overall timeout, if any). */
     };
     std::vector<DadState> dad_in_progress_; /**< List of addresses currently undergoing DAD. */
-
-    void generate_link_local_address(); // Generates link-local address using EUI-64.
-    void initiate_link_local_dad();     // Starts DAD for the generated link-local address.
-    ipv6_addr_t get_unspecified_address() const { ipv6_addr_t addr; addr.fill(0); return addr; } // Returns '::'.
 };
 
 // --- Method Implementations ---
