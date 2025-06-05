@@ -1,6 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <ostream> // For std::ostream
+#include <istream> // For std::istream, std::ws, std::getline
+#include <cctype>  // For std::isspace
+#include <sstream> // For std::stringstream
 #include <unordered_map>
 #include <bitset>
 #include <memory>
@@ -219,10 +223,12 @@ public:
         // that use temp_port_ranges, specificity might be approximate if their range_id
         // is not yet in this->port_ranges. This is a known limitation for atomicity here
         // without refactoring calculate_specificity to accept a port_ranges argument.
-        std::sort(temp_rules.begin(), temp_rules.end(), [this](const Rule& a, const Rule& b) {
+        // CORRECTED: The comment above is now addressed by passing temp_port_ranges.
+        std::sort(temp_rules.begin(), temp_rules.end(),
+            [this, &temp_port_ranges](const Rule& a, const Rule& b) { // Capture temp_port_ranges
             if (a.priority != b.priority) { return a.priority > b.priority; }
-            // Pass this->port_ranges explicitly if calculate_specificity is refactored
-            return this->calculate_specificity(a) > this->calculate_specificity(b);
+            return this->calculate_specificity(a, temp_port_ranges) >
+                   this->calculate_specificity(b, temp_port_ranges);
         });
 
         // Commit changes
@@ -251,7 +257,7 @@ public:
 
                 // If rule[i] is a subset of rule[j] and they have the same action,
                 // then rule[i] is redundant because rule[j] would have already matched.
-                if (rules[i].action == rules[j].action && is_subset(rules[i], rules[j])) {
+                if (rules[i].action == rules[j].action && is_subset(rules[i], rules[j], this->port_ranges)) {
                     redundant_rule_indices.push_back(i);
                     break; // Found a rule that makes rules[i] redundant
                 }
@@ -630,7 +636,9 @@ public: // This public keyword is just to mark where the next section starts in 
             if (a.priority != b.priority) {
                 return a.priority > b.priority; // Higher priority comes first
             }
-            return this->calculate_specificity(a) > this->calculate_specificity(b); // Higher specificity comes first
+            // In add_rule_with_ranges, specificity is calculated against the main port_ranges
+            return this->calculate_specificity(a, this->port_ranges) >
+                   this->calculate_specificity(b, this->port_ranges);
         };
 
         // 3. Find insertion point in the now active and sorted (or soon to be fully sorted) list
@@ -1044,6 +1052,9 @@ private: // Start of private section
         // Check rules directly attached to this node (wildcarded for this field or at max depth)
         for (int rule_idx_val : current_node->rule_indices) {
             if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Checking rule index " + std::to_string(rule_idx_val) + " (ID: " + (static_cast<size_t>(rule_idx_val) < rules.size() ? std::to_string(rules[rule_idx_val].id) : "OOB") + ") at current node.");
+            // Pass this->port_ranges for matches_rule if it needs port_ranges context not implicitly available
+            // However, matches_rule itself uses get_effective_port_range which uses this->port_ranges.
+            // This is okay if traverse_decision_tree is only ever called on the main TCAM `rules` and `port_ranges`.
             if (static_cast<size_t>(rule_idx_val) < rules.size() && matches_rule(packet, rules[rule_idx_val], debug_trace_log)) {
                 if (debug_trace_log) debug_trace_log->push_back("traverse_decision_tree: Matched rule index " + std::to_string(rule_idx_val) + " at current node. Returning index.");
                 return rule_idx_val; // Return rule index
@@ -1094,7 +1105,8 @@ private: // This is where the rest of the private methods will remain or start.
         return count;
     }
 
-    int calculate_specificity(const Rule& r) const {
+    // Modified to accept port_ranges context
+    int calculate_specificity(const Rule& r, const std::vector<RangeEntry>& current_port_ranges) const {
         int specificity_score = 0;
 
         // Non-port fields specificity
@@ -1103,50 +1115,42 @@ private: // This is where the rest of the private methods will remain or start.
             bool is_dst_port_field = (k == 10 || k == 11);
 
             if (is_src_port_field && r.src_port_range_id != std::numeric_limits<uint32_t>::max()) {
-                // Skip byte-wise specificity for source port if range ID is used
-                if (k == 8) { // Only process once for the range
-                    const auto& range = port_ranges[r.src_port_range_id];
-                    uint32_t size = static_cast<uint32_t>(range.max_port) - range.min_port + 1;
-                    specificity_score += (16 - static_cast<int>(std::round(std::log2(size > 0 ? size : 1))));
+                if (k == 8) {
+                    if (r.src_port_range_id < current_port_ranges.size()){ // Check against current_port_ranges
+                        const auto& range = current_port_ranges[r.src_port_range_id];
+                        uint32_t size = static_cast<uint32_t>(range.max_port) - range.min_port + 1;
+                        specificity_score += (16 - static_cast<int>(std::round(std::log2(size > 0 ? size : 1))));
+                    } else { /* Invalid range_id, treat as least specific or add 0 */ }
                 }
                 continue;
             }
             if (is_dst_port_field && r.dst_port_range_id != std::numeric_limits<uint32_t>::max()) {
-                // Skip byte-wise specificity for destination port if range ID is used
-                if (k == 10) { // Only process once for the range
-                    const auto& range = port_ranges[r.dst_port_range_id];
-                    uint32_t size = static_cast<uint32_t>(range.max_port) - range.min_port + 1;
-                    specificity_score += (16 - static_cast<int>(std::round(std::log2(size > 0 ? size : 1))));
+                if (k == 10) {
+                     if (r.dst_port_range_id < current_port_ranges.size()){ // Check against current_port_ranges
+                        const auto& range = current_port_ranges[r.dst_port_range_id];
+                        uint32_t size = static_cast<uint32_t>(range.max_port) - range.min_port + 1;
+                        specificity_score += (16 - static_cast<int>(std::round(std::log2(size > 0 ? size : 1))));
+                    } else { /* Invalid range_id */ }
                 }
                 continue;
             }
             specificity_score += popcount_manual(r.mask[k]);
         }
-
-        // Handle cases where port range ID is NOT used (i.e. exact match or wildcard in mask bits)
-        // These would have been skipped above, or their popcount was already added if mask wasn't 0 for all bits.
-        // This ensures that if range ID is not used, the byte-wise popcount of mask bits is used.
-        // If a range ID *is* used, we've already added its specificity and skipped the byte-wise count.
-        // If no range ID is used, the general loop already added popcount for mask[8], mask[9], mask[10], mask[11].
-        // So, no explicit separate handling for "Else" for port specificity is needed here if general loop covers it.
-
         return specificity_score;
     }
 
-    std::pair<uint16_t, uint16_t> get_effective_port_range(const Rule& r, bool is_source) const {
+    // Modified to accept port_ranges context
+    std::pair<uint16_t, uint16_t> get_effective_port_range(const Rule& r, bool is_source, const std::vector<RangeEntry>& current_port_ranges) const {
         uint32_t range_id = is_source ? r.src_port_range_id : r.dst_port_range_id;
         size_t port_idx_start = is_source ? 8 : 10;
 
         if (range_id != std::numeric_limits<uint32_t>::max()) {
-            if (range_id < port_ranges.size()) {
-                return {port_ranges[range_id].min_port, port_ranges[range_id].max_port};
+            if (range_id < current_port_ranges.size()) { // Check against current_port_ranges
+                return {current_port_ranges[range_id].min_port, current_port_ranges[range_id].max_port};
             } else {
-                // This case should ideally not happen if data is consistent
-                // Return a range that won't overlap if ID is invalid.
-                return {0, 0};
+                return {0, 0}; // Invalid range_id
             }
         } else {
-            // Check mask bits for wildcard
             if (r.mask.size() > port_idx_start + 1 &&
                 r.mask[port_idx_start] == 0x00 && r.mask[port_idx_start + 1] == 0x00) {
                 return {0, 0xFFFF}; // Wildcard
@@ -1154,13 +1158,13 @@ private: // This is where the rest of the private methods will remain or start.
                 uint16_t port = (static_cast<uint16_t>(r.value[port_idx_start]) << 8) | r.value[port_idx_start + 1];
                 return {port, port}; // Exact port
             } else {
-                // Should not happen with valid rule structure
-                return {0,0}; // Non-overlapping range
+                return {0,0};
             }
         }
     }
 
-    bool are_rules_overlapping(const Rule& r1, const Rule& r2, size_t r1_idx, size_t r2_idx) const {
+    // Modified to accept port_ranges context for calls to get_effective_port_range
+    bool are_rules_overlapping(const Rule& r1, const Rule& r2, size_t r1_idx, size_t r2_idx, const std::vector<RangeEntry>& current_port_ranges) const {
         // Field-wise overlap check
         size_t common_size = std::min({r1.value.size(), r2.value.size(), r1.mask.size(), r2.mask.size()});
         for (size_t k = 0; k < common_size; ++k) {
@@ -1172,14 +1176,14 @@ private: // This is where the rest of the private methods will remain or start.
         }
 
         // Port range overlap check
-        auto r1_src_ports = get_effective_port_range(r1, true);
-        auto r2_src_ports = get_effective_port_range(r2, true);
+        auto r1_src_ports = get_effective_port_range(r1, true, current_port_ranges);
+        auto r2_src_ports = get_effective_port_range(r2, true, current_port_ranges);
         if (std::max(r1_src_ports.first, r2_src_ports.first) > std::min(r1_src_ports.second, r2_src_ports.second)) {
             return false; // Source ports do not overlap
         }
 
-        auto r1_dst_ports = get_effective_port_range(r1, false);
-        auto r2_dst_ports = get_effective_port_range(r2, false);
+        auto r1_dst_ports = get_effective_port_range(r1, false, current_port_ranges);
+        auto r2_dst_ports = get_effective_port_range(r2, false, current_port_ranges);
         if (std::max(r1_dst_ports.first, r2_dst_ports.first) > std::min(r1_dst_ports.second, r2_dst_ports.second)) {
             return false; // Destination ports do not overlap
         }
@@ -1198,8 +1202,8 @@ public:
                 if (r1.action == r2.action) {
                     continue; // No conflict in outcome
                 }
-
-                if (are_rules_overlapping(r1, r2, i, j)) {
+                // detect_conflicts always operates on the main this->rules and this->port_ranges
+                if (are_rules_overlapping(r1, r2, i, j, this->port_ranges)) {
                     conflicts_list.push_back({i, j, "Conflicting actions for overlapping rules"});
                 }
             }
@@ -1207,22 +1211,67 @@ public:
         return conflicts_list;
     }
 
-    std::vector<uint64_t> age_rules(std::chrono::steady_clock::duration max_age) {
+public:
+    enum class AgeCriteria {
+        CREATION_TIME,
+        LAST_HIT_TIME
+    };
+
+    std::vector<uint64_t> age_rules(std::chrono::steady_clock::duration max_age, AgeCriteria criteria) {
         std::vector<uint64_t> aged_rule_ids;
         const auto current_time = std::chrono::steady_clock::now();
 
-        for (Rule& rule : rules) { // Iterate by reference to modify is_active
-            if (rule.is_active) {
+        for (Rule& rule : rules) {
+            if (!rule.is_active) {
+                continue;
+            }
+
+            bool should_age = false;
+            if (criteria == AgeCriteria::CREATION_TIME) {
                 if ((current_time - rule.creation_time) > max_age) {
-                    rule.is_active = false;
-                    aged_rule_ids.push_back(rule.id);
+                    should_age = true;
+                }
+            } else if (criteria == AgeCriteria::LAST_HIT_TIME) {
+                if (rule.last_hit_timestamp != std::chrono::steady_clock::time_point{}) {
+                    if ((current_time - rule.last_hit_timestamp) > max_age) {
+                        should_age = true;
+                    }
+                }
+            }
+
+            if (should_age) {
+                rule.is_active = false;
+                aged_rule_ids.push_back(rule.id);
+            }
+        }
+        std::sort(aged_rule_ids.begin(), aged_rule_ids.end());
+        return aged_rule_ids;
+    }
+
+    std::vector<uint64_t> eliminate_shadowed_rules(bool dry_run) {
+        std::vector<size_t> shadowed_indices = detect_shadowed_rules();
+        std::vector<uint64_t> deactivated_rule_ids;
+        deactivated_rule_ids.reserve(shadowed_indices.size());
+
+        if (shadowed_indices.empty()) {
+            return deactivated_rule_ids;
+        }
+        std::sort(shadowed_indices.rbegin(), shadowed_indices.rend());
+
+        for (size_t idx : shadowed_indices) {
+            if (idx < rules.size() && rules[idx].is_active) {
+                deactivated_rule_ids.push_back(rules[idx].id);
+                if (!dry_run) {
+                    rules[idx].is_active = false;
                 }
             }
         }
-        // Note: This method intentionally does not call rebuild_optimized_structures.
-        // A separate call to rebuild_optimized_structures or an add_rule call
-        // would be needed to compact the rule list and update optimized structures.
-        return aged_rule_ids;
+        std::sort(deactivated_rule_ids.begin(), deactivated_rule_ids.end());
+
+        if (!dry_run && !shadowed_indices.empty()) {
+            rebuild_optimized_structures();
+        }
+        return deactivated_rule_ids;
     }
 
 public:
@@ -1238,67 +1287,52 @@ public:
     }
 
 private:
-    bool is_subset(const Rule& r_sub, const Rule& r_super) const {
+    // Modified to accept port_ranges context
+    bool is_subset(const Rule& r_sub, const Rule& r_super, const std::vector<RangeEntry>& current_port_ranges) const {
         // Field-wise check (non-port fields)
         size_t common_value_size = std::min(r_sub.value.size(), r_super.value.size());
         size_t common_mask_size = std::min(r_sub.mask.size(), r_super.mask.size());
         size_t common_size = std::min(common_value_size, common_mask_size);
 
         for (size_t k = 0; k < common_size; ++k) {
-            // Skip port fields for this check, they are handled by port range checks below
             if (k >= 8 && k <= 11) continue;
-
-            // If r_sub's value differs from r_super's value in a bit position where r_super's mask is set,
-            // then r_sub is not a subset.
             if (((r_sub.value[k] ^ r_super.value[k]) & r_super.mask[k]) != 0) {
                 return false;
             }
-            // If r_super's mask has a bit set that r_sub's mask does not (i.e., r_sub is more general),
-            // then r_sub cannot be a subset of r_super for this field.
             if ((r_super.mask[k] & ~r_sub.mask[k]) != 0) {
                 return false;
             }
         }
-         // If r_super has more specific fields defined than r_sub, r_sub cannot be a subset.
-        if (r_super.mask.size() > r_sub.mask.size()) { // Assuming masks are padded with 0 for non-existent fields
+        if (r_super.mask.size() > r_sub.mask.size()) {
             for(size_t k = r_sub.mask.size(); k < r_super.mask.size(); ++k) {
-                if (r_super.mask[k] != 0) return false; // r_super has a specific bit where r_sub is wildcard by omission
+                if (r_super.mask[k] != 0) return false;
             }
         }
 
-
         // Port range check
-        auto sub_src_ports = get_effective_port_range(r_sub, true);
-        auto super_src_ports = get_effective_port_range(r_super, true);
+        auto sub_src_ports = get_effective_port_range(r_sub, true, current_port_ranges);
+        auto super_src_ports = get_effective_port_range(r_super, true, current_port_ranges);
         if (!(sub_src_ports.first >= super_src_ports.first && sub_src_ports.second <= super_src_ports.second)) {
-            return false; // Source port range of r_sub is not within r_super
+            return false;
         }
 
-        auto sub_dst_ports = get_effective_port_range(r_sub, false);
-        auto super_dst_ports = get_effective_port_range(r_super, false);
+        auto sub_dst_ports = get_effective_port_range(r_sub, false, current_port_ranges);
+        auto super_dst_ports = get_effective_port_range(r_super, false, current_port_ranges);
         if (!(sub_dst_ports.first >= super_dst_ports.first && sub_dst_ports.second <= super_dst_ports.second)) {
-            return false; // Destination port range of r_sub is not within r_super
+            return false;
         }
-
-        return true; // All checks passed
+        return true;
     }
 
 public:
     std::vector<size_t> detect_shadowed_rules() const {
         std::vector<size_t> shadowed_rule_indices;
-        // Assumes rules are already sorted by priority then specificity by rebuild_optimized_structures()
-
-        for (size_t i = 0; i < rules.size(); ++i) { // rules[i] is the candidate shadowed rule
-            for (size_t j = 0; j < i; ++j) { // rules[j] is the potential shadowing rule (higher priority/specificity)
-                // If rules[i] and rules[j] have different actions and rules[i] is a subset of rules[j],
-                // then rules[i] is shadowed by rules[j].
-                // If actions are the same, it's not "shadowed" in a problematic way, but redundant.
-                // The problem definition of "shadowed" usually implies a different outcome is hidden.
-                // However, if any higher priority rule (rules[j]) that is a superset of rules[i] exists,
-                // rules[i] will never be the highest priority match.
-                if (rules[i].action != rules[j].action && is_subset(rules[i], rules[j])) {
+        for (size_t i = 0; i < rules.size(); ++i) {
+            for (size_t j = 0; j < i; ++j) {
+                // detect_shadowed_rules always operates on the main this->rules and this->port_ranges
+                if (rules[i].action != rules[j].action && is_subset(rules[i], rules[j], this->port_ranges)) {
                     shadowed_rule_indices.push_back(i);
-                    break; // Found a rule that shadows rules[i], no need to check further for rules[i]
+                    break;
                 }
             }
         }
@@ -1364,7 +1398,8 @@ private:
             if (a.priority != b.priority) {
                 return a.priority > b.priority;
             }
-            return this->calculate_specificity(a) > this->calculate_specificity(b);
+            return this->calculate_specificity(a, this->port_ranges) >
+                   this->calculate_specificity(b, this->port_ranges);
         });
 
         // 3. Call the new method that rebuilds from already sorted & active rules
@@ -1447,5 +1482,141 @@ public: // Statistics methods
             // metrics.avg_latency_ns = std::chrono::nanoseconds::zero();
         }
         return metrics;
+    }
+
+    // Backup and Restore Methods (Placed before the final class closing brace)
+    void backup_rules(std::ostream& stream) const {
+        for (const auto& rule : rules) {
+            if (!rule.is_active) {
+                continue;
+            }
+
+            WildcardFields fields;
+            // Reconstruct basic fields
+            fields.src_ip = (static_cast<uint32_t>(rule.value[0]) << 24) | (static_cast<uint32_t>(rule.value[1]) << 16) | (static_cast<uint32_t>(rule.value[2]) << 8) | static_cast<uint32_t>(rule.value[3]);
+            fields.src_ip_mask = (static_cast<uint32_t>(rule.mask[0]) << 24) | (static_cast<uint32_t>(rule.mask[1]) << 16) | (static_cast<uint32_t>(rule.mask[2]) << 8) | static_cast<uint32_t>(rule.mask[3]);
+            fields.dst_ip = (static_cast<uint32_t>(rule.value[4]) << 24) | (static_cast<uint32_t>(rule.value[5]) << 16) | (static_cast<uint32_t>(rule.value[6]) << 8) | static_cast<uint32_t>(rule.value[7]);
+            fields.dst_ip_mask = (static_cast<uint32_t>(rule.mask[4]) << 24) | (static_cast<uint32_t>(rule.mask[5]) << 16) | (static_cast<uint32_t>(rule.mask[6]) << 8) | static_cast<uint32_t>(rule.mask[7]);
+            fields.protocol = rule.value[12];
+            fields.protocol_mask = rule.mask[12];
+            fields.eth_type = (static_cast<uint16_t>(rule.value[13]) << 8) | static_cast<uint16_t>(rule.value[14]);
+            fields.eth_type_mask = (static_cast<uint16_t>(rule.mask[13]) << 8) | static_cast<uint16_t>(rule.mask[14]);
+
+            stream << fields.src_ip << " " << fields.src_ip_mask << " "
+                   << fields.dst_ip << " " << fields.dst_ip_mask << " ";
+
+            // Source Port reconstruction and serialization
+            if (rule.src_port_range_id != std::numeric_limits<uint32_t>::max()) {
+                if (rule.src_port_range_id < port_ranges.size()) {
+                    const auto& range = port_ranges[rule.src_port_range_id];
+                    stream << "R " << range.min_port << " " << range.max_port << " ";
+                } else { // Should not happen: inconsistent state
+                    stream << "E 0 0 "; // Fallback to exact port 0
+                }
+            } else if (rule.mask[8] == 0x00 && rule.mask[9] == 0x00) { // Wildcard
+                stream << "W 0 0 "; // Value for wildcard doesn't matter, use 0 0 for consistency
+            } else { // Exact port
+                uint16_t port = (static_cast<uint16_t>(rule.value[8]) << 8) | static_cast<uint16_t>(rule.value[9]);
+                stream << "E " << port << " 0 "; // Second value for E is dummy
+            }
+
+            // Destination Port reconstruction and serialization
+            if (rule.dst_port_range_id != std::numeric_limits<uint32_t>::max()) {
+                 if (rule.dst_port_range_id < port_ranges.size()) {
+                    const auto& range = port_ranges[rule.dst_port_range_id];
+                    stream << "R " << range.min_port << " " << range.max_port << " ";
+                } else {
+                    stream << "E 0 0 ";
+                }
+            } else if (rule.mask[10] == 0x00 && rule.mask[11] == 0x00) { // Wildcard
+                stream << "W 0 0 ";
+            } else { // Exact port
+                uint16_t port = (static_cast<uint16_t>(rule.value[10]) << 8) | static_cast<uint16_t>(rule.value[11]);
+                stream << "E " << port << " 0 ";
+            }
+
+            stream << static_cast<int>(fields.protocol) << " " << static_cast<int>(fields.protocol_mask) << " "
+                   << fields.eth_type << " " << fields.eth_type_mask << " "
+                   << rule.priority << " " << rule.action << "\n";
+        }
+    }
+
+    // Helper for backup_rules (no longer needed for JSON specific formatting)
+    // size_t count_active_rules_const() const { ... }
+    // This can be removed or kept if used by other methods; for now, backup_rules doesn't need it.
+
+    bool restore_rules(std::istream& stream) {
+        rules.clear();
+        port_ranges.clear();
+        next_rule_id = 0;
+        decision_tree.reset();
+        field_bitmaps.clear();
+        // stats = {};
+
+        std::vector<RuleOperation> batch;
+        std::string line;
+
+        while (std::getline(stream, line)) {
+            if (line.empty() || line[0] == '#') continue; // Skip empty lines or comments
+
+            std::stringstream ss(line);
+            WildcardFields fields{};
+            int priority, action;
+            char src_port_mode, dst_port_mode;
+            uint16_t p1, p2, p3, p4;
+
+            // Expected format:
+            // src_ip src_ip_mask dst_ip dst_ip_mask
+            // src_port_mode p1 p2 dst_port_mode p3 p4
+            // protocol protocol_mask eth_type eth_type_mask priority action
+            uint16_t temp_proto_val, temp_proto_mask_val;
+            uint16_t temp_eth_type_val, temp_eth_type_mask_val;
+
+            if (!(ss >> fields.src_ip >> fields.src_ip_mask
+                  >> fields.dst_ip >> fields.dst_ip_mask
+                  >> src_port_mode >> p1 >> p2
+                  >> dst_port_mode >> p3 >> p4
+                  >> temp_proto_val >> temp_proto_mask_val
+                  >> temp_eth_type_val >> temp_eth_type_mask_val
+                  >> priority >> action)) {
+                rules.clear(); port_ranges.clear(); next_rule_id = 0; decision_tree.reset(); field_bitmaps.clear();
+                return false; // Malformed line
+            }
+
+            // Check for any trailing non-whitespace characters on the line
+            char trailing_char_check;
+            if (ss >> trailing_char_check) {
+                // If we successfully read another character, it means there's unexpected data
+                rules.clear(); port_ranges.clear(); next_rule_id = 0; decision_tree.reset(); field_bitmaps.clear();
+                return false; // Trailing data found
+            }
+
+            fields.protocol = static_cast<uint8_t>(temp_proto_val);
+            fields.protocol_mask = static_cast<uint8_t>(temp_proto_mask_val);
+            fields.eth_type = temp_eth_type_val;
+            fields.eth_type_mask = temp_eth_type_mask_val;
+
+
+            // Process Source Port
+            if (src_port_mode == 'W') { fields.src_port_min = 0; fields.src_port_max = 0xFFFF; }
+            else if (src_port_mode == 'E') { fields.src_port_min = p1; fields.src_port_max = p1; }
+            else if (src_port_mode == 'R') { fields.src_port_min = p1; fields.src_port_max = p2; }
+            else { rules.clear(); port_ranges.clear(); next_rule_id = 0; decision_tree.reset(); field_bitmaps.clear(); return false; } // Invalid mode
+
+            // Process Destination Port
+            if (dst_port_mode == 'W') { fields.dst_port_min = 0; fields.dst_port_max = 0xFFFF; }
+            else if (dst_port_mode == 'E') { fields.dst_port_min = p3; fields.dst_port_max = p3; }
+            else if (dst_port_mode == 'R') { fields.dst_port_min = p3; fields.dst_port_max = p4; }
+            else { rules.clear(); port_ranges.clear(); next_rule_id = 0; decision_tree.reset(); field_bitmaps.clear(); return false; }
+
+            batch.push_back(RuleOperation::AddRule(fields, priority, action));
+        }
+
+        if (stream.bad()) { // IO error
+             rules.clear(); port_ranges.clear(); next_rule_id = 0; decision_tree.reset(); field_bitmaps.clear();
+            return false;
+        }
+
+        return update_rules_atomic(batch);
     }
 };
