@@ -40,6 +40,8 @@ public: // ARPState made public for test access
         std::queue<std::vector<uint8_t>> pending_packets; /**< Queue of packets waiting for this ARP resolution. */
         std::vector<mac_addr_t> backup_macs; /**< List of backup MAC addresses for failover. */
         int backoff_exponent;
+        uint8_t flap_count;
+        std::chrono::steady_clock::time_point last_mac_update_time;
     };
     
     mac_addr_t device_mac_; /**< MAC address of this device (used for Proxy ARP). */
@@ -57,6 +59,8 @@ protected: // cache_ made protected for test access via MockARPCache
     std::chrono::seconds max_probe_backoff_interval_sec_;
     std::chrono::seconds failed_entry_lifetime_sec_;
     std::chrono::seconds delay_duration_sec_;
+    std::chrono::seconds flap_detection_window_sec_;
+    int max_flaps_allowed_;
     size_t max_cache_size_;
     std::list<uint32_t> lru_tracker_;
     std::unordered_map<uint32_t, std::list<uint32_t>::iterator> ip_to_lru_iterator_;
@@ -144,6 +148,8 @@ public:
      * @param max_probe_backoff_interval Maximum interval for exponential backoff probing.
      * @param failed_entry_lifetime Lifetime for entries in the FAILED state.
      * @param delay_duration Duration for the DELAY state.
+     * @param flap_detection_window Time window for detecting flaps.
+     * @param max_flaps Maximum allowed flaps within the detection window before penalizing.
      * @param max_cache_size Maximum number of entries in the cache.
      */
     explicit ARPCache(const mac_addr_t& dev_mac,
@@ -152,7 +158,9 @@ public:
                       std::chrono::seconds probe_retransmit_interval = std::chrono::seconds(1),
                       std::chrono::seconds max_probe_backoff_interval = std::chrono::seconds(60),
                       std::chrono::seconds failed_entry_lifetime = std::chrono::seconds(20),
-                      std::chrono::seconds delay_duration = std::chrono::seconds(5), // New parameter
+                      std::chrono::seconds delay_duration = std::chrono::seconds(5),
+                      std::chrono::seconds flap_detection_window = std::chrono::seconds(10), // New
+                      int max_flaps = 3,                                                    // New
                       size_t max_cache_size = 1024)
         : device_mac_(dev_mac),
           reachable_time_sec_(reachable_time),
@@ -160,7 +168,9 @@ public:
           probe_retransmit_interval_sec_(probe_retransmit_interval),
           max_probe_backoff_interval_sec_(max_probe_backoff_interval),
           failed_entry_lifetime_sec_(failed_entry_lifetime),
-          delay_duration_sec_(delay_duration), // Initialize new member
+          delay_duration_sec_(delay_duration),
+          flap_detection_window_sec_(flap_detection_window), // Initialize
+          max_flaps_allowed_(max_flaps),                     // Initialize
           max_cache_size_(max_cache_size) {}
 
     /**
@@ -254,13 +264,15 @@ public:
                 if ((ip & subnet.mask) == subnet.prefix) {
                     mac_out = device_mac_;
                     if (it == cache_.end()) { // New entry for proxy ARP
-                        cache_[ip] = {device_mac_, ARPState::REACHABLE, current_time, 0, {}, {}, 0};
+                        cache_[ip] = {device_mac_, ARPState::REACHABLE, current_time, 0, {}, {}, 0, 0, current_time};
                     } else { // Entry was INCOMPLETE, now resolved by proxy ARP
                         it->second.mac = device_mac_;
                         it->second.state = ARPState::REACHABLE;
                         it->second.timestamp = current_time;
                         it->second.probe_count = 0;
                         it->second.backoff_exponent = 0;
+                        it->second.flap_count = 0;
+                        it->second.last_mac_update_time = current_time;
                     }
                     promoteToMRU(ip);
                     return true; // Proxy ARP success
@@ -270,7 +282,7 @@ public:
             // Not a proxy ARP case. Send ARP request for INCOMPLETE or new entry.
             this->send_arp_request(ip);
             if (it == cache_.end()) { // Create new INCOMPLETE entry
-                cache_[ip] = {{}, ARPState::INCOMPLETE, current_time, 0, {}, {}, 0};
+                cache_[ip] = {{}, ARPState::INCOMPLETE, current_time, 0, {}, {}, 0, 0, {}};
                 promoteToMRU(ip);
             } else { // Entry was already INCOMPLETE (it->second.state == ARPState::INCOMPLETE)
                 it->second.timestamp = current_time; // Update timestamp for this new probe attempt initiated by lookup
@@ -291,23 +303,66 @@ public:
      */
     void add_entry(uint32_t ip, const mac_addr_t& new_mac) {
         auto it = cache_.find(ip);
-        std::vector<mac_addr_t> existing_backups;
+        auto current_time = std::chrono::steady_clock::now();
+        std::vector<mac_addr_t> existing_backups; // Keep existing backups
 
-        if (it != cache_.end()) {
-            if (it->second.mac != new_mac) {
-                 this->log_ip_conflict(ip, it->second.mac, new_mac);
+        if (it != cache_.end()) { // Entry exists
+            ARPEntry& entry = it->second;
+            existing_backups = entry.backup_macs; // Preserve backups
+
+            if (entry.mac != new_mac) { // MAC address has changed
+                this->log_ip_conflict(ip, entry.mac, new_mac); // Log the conflict
+
+                if (current_time - entry.last_mac_update_time < flap_detection_window_sec_) {
+                    if (entry.flap_count < 255) { // Prevent overflow
+                        entry.flap_count++;
+                    }
+                } else {
+                    entry.flap_count = 1; // Reset flap count if change is outside the window
+                }
+                entry.last_mac_update_time = current_time;
+
+                entry.mac = new_mac; // Update to the new MAC
+                entry.timestamp = current_time;
+                entry.probe_count = 0;
+                entry.backoff_exponent = 0;
+                // entry.pending_packets queue should be cleared, which happens if we re-assign 'entry' or clear it.
+                // If just modifying members, ensure pending_packets are handled if necessary.
+                // The original code re-assigned cache_[ip], effectively clearing queue. Let's ensure that.
+                while (!entry.pending_packets.empty()) entry.pending_packets.pop();
+
+
+                if (entry.flap_count >= max_flaps_allowed_) {
+                    entry.state = ARPState::STALE; // Penalize by setting to STALE
+                    fprintf(stderr, "INFO: Flapping detected for IP %u (count %u). Setting to STALE with new MAC to force re-verify.\n", ip, entry.flap_count);
+                } else {
+                    entry.state = ARPState::REACHABLE;
+                }
+            } else { // MAC is the same, just refresh to REACHABLE
+                entry.state = ARPState::REACHABLE;
+                entry.timestamp = current_time;
+                entry.probe_count = 0; // Reset probe activity trackers
+                entry.backoff_exponent = 0;
+                // Optionally reset flap_count if MAC is same and confirmed:
+                // entry.flap_count = 0;
+                // Resetting flap_count here means any prior flaps are forgiven on a successful re-confirmation of the same MAC.
+                // If we want flaps to only decay over time (i.e., only reset if last_mac_update_time is old), then don't reset flap_count here.
+                // Current requirement implies reset only if outside window or penalty.
+                // For a non-changing MAC, it makes sense to reset flap_count to 0 as it's stable.
+                entry.flap_count = 0; // Explicitly reset on same MAC confirmation
+                entry.last_mac_update_time = current_time; // Also update time to solidify this state
             }
-            existing_backups = it->second.backup_macs;
+        } else { // New entry
+            // Initialize ARPEntry including new flap fields
+            // ARPEntry { mac, state, timestamp, probe_count, pending_packets_q, backup_macs_vec, backoff_exp, flap_cnt, last_mac_update_t }
+            std::queue<std::vector<uint8_t>> no_packets; // Define empty queue
+            // existing_backups is already empty if new entry
+            cache_[ip] = {new_mac, ARPState::REACHABLE, current_time, 0, no_packets, existing_backups, 0, 0, current_time};
+            // For a truly new entry, last_mac_update_time could be 'epoch' or current_time. Current_time is fine.
         }
 
-        cache_[ip] = {new_mac, ARPState::REACHABLE, std::chrono::steady_clock::now(), 0, {}, existing_backups, 0};
         promoteToMRU(ip);
         evictLRUEntries();
-        
-        auto& entry = cache_[ip];
-        while (!entry.pending_packets.empty()) {
-            entry.pending_packets.pop();
-        }
     }
     
     /**
@@ -328,84 +383,92 @@ public:
             
             bool entry_erased = false;
             switch (entry.state) {
-                case ARPState::REACHABLE:
-                    // Define a factor for when to start proactive refresh (e.g., at 90% of reachable_time)
-                    constexpr double REFRESH_THRESHOLD_FACTOR = 0.9;
-                    auto refresh_trigger_duration = std::chrono::duration_cast<std::chrono::seconds>(reachable_time_sec_.count() * REFRESH_THRESHOLD_FACTOR);
+                case ARPState::REACHABLE: { // Add braces for scope
+                    // auto age_duration = ... (already calculated before switch)
+                    constexpr double REFRESH_THRESHOLD_FACTOR = 0.9; // Define inside the case block
+                    auto refresh_trigger_duration = std::chrono::seconds(static_cast<std::chrono::seconds::rep>(reachable_time_sec_.count() * REFRESH_THRESHOLD_FACTOR));
 
                     if (age_duration >= refresh_trigger_duration && age_duration < reachable_time_sec_) {
                         // Proactive refresh condition met
                         entry.state = ARPState::PROBE;
-                        entry.timestamp = current_time;     // Mark start of probing
-                        entry.probe_count = 0;              // Reset for this new probe cycle
-                        entry.backoff_exponent = 0;         // Reset backoff
+                        entry.timestamp = current_time;
+                        entry.probe_count = 0;
+                        entry.backoff_exponent = 0;
+                        promoteToMRU(it->first); // Promote as it becomes active for probing
                         this->send_arp_request(it->first);
                         fprintf(stderr, "INFO: Proactive ARP refresh for IP %u.\n", it->first);
-                        // No further processing for this entry in this aging cycle under REACHABLE state logic
                     } else if (age_duration >= reachable_time_sec_) {
                         // Standard transition to STALE if refresh window was missed or this is later
                         entry.state = ARPState::STALE;
-                        entry.timestamp = current_time;     // Mark time it became STALE
-                        // probe_count and backoff_exponent are not modified here;
-                        // STALE -> PROBE transition (if it happens) will reset them.
+                        entry.timestamp = current_time;
+                        // No MRU promotion for STALE here, lookup would handle it if accessed.
                         fprintf(stderr, "INFO: ARP entry for IP %u became STALE.\n", it->first);
                     }
-                    break; // End of case ARPState::REACHABLE
+                    break;
+                } // Close scope for case REACHABLE
                 case ARPState::STALE:
                     if (age_duration >= stale_time_sec_) {
                         entry.state = ARPState::PROBE;
                         entry.timestamp = current_time;
                         entry.probe_count = 0;
                         entry.backoff_exponent = 0;
+                        entry.flap_count = 0; // Reset flap count
+                        entry.last_mac_update_time = std::chrono::steady_clock::time_point{}; // Reset time
+                        promoteToMRU(it->first); // Promote as it becomes active for probing
                         this->send_arp_request(it->first);
                     }
                     break;
                 case ARPState::INCOMPLETE:
-                case ARPState::PROBE:
-                    // Exponential backoff logic
+                    // [[fallthrough]]; // Optional C++17 attribute to denote intentional fallthrough
+                case ARPState::PROBE: { // Add braces for scope
                     long long interval_val_s = probe_retransmit_interval_sec_.count();
                     if (entry.backoff_exponent > 0) {
                         int current_exp = (entry.backoff_exponent > 30) ? 30 : entry.backoff_exponent;
                         interval_val_s *= (static_cast<long long>(1) << current_exp);
                     }
-                    interval_val_s = std::min(interval_val_s, max_probe_backoff_interval_sec_.count());
+                    // Corrected std::min usage
+                    interval_val_s = std::min(interval_val_s, static_cast<long long>(max_probe_backoff_interval_sec_.count()));
                     std::chrono::seconds current_required_wait(interval_val_s);
 
                     if (age_duration >= current_required_wait) {
                         entry.probe_count++;
-
                         if (entry.probe_count > MAX_PROBES) {
                             if (!entry.backup_macs.empty()) {
+                                // ... (failover to backup logic as before, including promoteToMRU) ...
                                 entry.mac = entry.backup_macs.front();
                                 entry.backup_macs.erase(entry.backup_macs.begin());
                                 entry.state = ARPState::REACHABLE;
                                 entry.timestamp = current_time;
                                 entry.probe_count = 0;
                                 entry.backoff_exponent = 0;
-                                promoteToMRU(it->first); // Entry became REACHABLE
+                                entry.flap_count = 0; // Reset flap count on successful failover
+                                entry.last_mac_update_time = current_time; // Update time for new MAC
+                                promoteToMRU(it->first); // Promote on becoming REACHABLE
                                 fprintf(stderr, "INFO: Primary MAC failed for IP %u. Switched to backup MAC: %02x:%02x:%02x:%02x:%02x:%02x\n",
                                         it->first, entry.mac[0], entry.mac[1], entry.mac[2], entry.mac[3], entry.mac[4], entry.mac[5]);
-                            } else { // No backup MACs, transition to FAILED
+                            } else {
+                                // ... (transition to FAILED logic as before) ...
                                 entry.state = ARPState::FAILED;
                                 entry.timestamp = current_time;
                                 entry.probe_count = 0;
                                 entry.backoff_exponent = 0;
-                                // FAILED entries are not actively used, could be removed from active LRU front
-                                // but removeFromLRUTracking will handle it if it gets evicted by LRU later
-                                // For now, let's keep it simple: FAILED state means it's a candidate for eviction.
-                                // If it were promoted here, it might prevent other useful entries from staying.
+                                entry.flap_count = 0; // Reset flap count when resolution fails
+                                entry.last_mac_update_time = std::chrono::steady_clock::time_point{}; // Reset time
+                                // No MRU promotion for FAILED
                                 fprintf(stderr, "INFO: IP %u resolution failed, entry marked FAILED.\n", it->first);
                             }
-                        } else { // Send another probe
+                        } else {
+                            // ... (send another probe logic as before) ...
                             this->send_arp_request(it->first);
-                            promoteToMRU(it->first); // Actively probing, so promote
                             entry.timestamp = current_time;
                             if (entry.backoff_exponent < 30) {
                                  entry.backoff_exponent++;
                             }
+                            // No MRU promotion just for re-probing, only when state definitively changes to active/reachable.
                         }
                     }
                     break;
+                } // Close scope for case PROBE (and INCOMPLETE due to fallthrough)
                 case ARPState::DELAY:
                     // age_duration is calculated from entry.timestamp, which should be set when entry enters DELAY state.
                     if (age_duration >= delay_duration_sec_) {
@@ -413,6 +476,8 @@ public:
                         entry.timestamp = current_time;     // Mark start of probing
                         entry.probe_count = 0;              // Reset for this new probe cycle
                         entry.backoff_exponent = 0;         // Reset backoff
+                        entry.flap_count = 0;               // Reset flap count
+                        entry.last_mac_update_time = std::chrono::steady_clock::time_point{}; // Reset time
                         // Also promote to MRU as it's becoming active for probing
                         promoteToMRU(it->first);
                         this->send_arp_request(it->first);
