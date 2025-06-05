@@ -521,7 +521,8 @@ TEST_F(ARPCacheTestFixture, FastFailoverInLookupIfStale) {
 
 TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
     ReinitializeCache(); // Use default timing for this specific test from original
-    cache_->add_entry(ip1_, mac1_primary_dummy_ ); // mac1_primary_dummy_ needs to be defined or use mac1_
+    mac_addr_t mac1_primary_dummy_ = {}; // Define the missing variable
+    cache_->add_entry(ip1_, mac1_primary_dummy_ );
     cache_->add_backup_mac(ip1_, mac2_); // mac2_ is backup
 
     // Make entry INCOMPLETE to trigger probes
