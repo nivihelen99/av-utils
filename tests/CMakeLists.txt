@@ -14,7 +14,14 @@ FetchContent_MakeAvailable(googletest) # Fetches and configures googletest
 
 # Define test executable
 # Source files are now relative to this tests/CMakeLists.txt
-add_executable(run_tests trie_test.cpp policy_radix_test.cpp skiplist_test.cpp tcam_test.cpp)
+add_executable(run_tests
+  trie_test.cpp
+  policy_radix_test.cpp
+  skiplist_test.cpp
+  tcam_test.cpp
+  arp_cache_test.cpp
+  nd_cache_test.cpp
+)
 
 # Important: The header files for the code being tested are in the 'include' directory
 # at the project root. We need to tell this target where to find them.
