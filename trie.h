@@ -541,7 +541,7 @@ private: // Starting private section earlier for insertHelperRadix
         }
     }
 
-// public: // Public section resumes
+public: // Public section resumes
     // Suffix search methods
     bool endsWith(const std::string& suffix) const {
         if (is_internally_reversed_instance_) {
@@ -858,6 +858,8 @@ private:
 
 // public: // Public section resumes after private helpers
     // ... (other public methods like Trie constructor, search, etc. remain here)
+
+public: // Ensuring fuzzySearch is public
     std::vector<std::pair<std::string, int>> fuzzySearch(const std::string& query_word, int max_k) const {
         std::string normalized_query = normalizeString(query_word);
         std::map<std::string, int> results_map;
