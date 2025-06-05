@@ -28,7 +28,7 @@ class Trie {
 private:
     std::unique_ptr<TrieNode> root;
     bool isCaseSensitive;
-    Trie reversed_trie_;
+    std::unique_ptr<Trie> reversed_trie_; // 1. unique_ptr change
     bool is_internally_reversed_instance_; // Flag to manage behavior for the reversed_trie_ member
 
     std::string normalizeString(const std::string& word) const {
@@ -161,7 +161,7 @@ public:
           isCaseSensitive(cs),
           // The reversed_trie_ member of an 'is_reversed_instance_tag=true' Trie is also marked as such.
           // This stops recursion effectively at one level. Its own reversed_trie_ will not be used.
-          reversed_trie_(cs, true, true), // Pass dummy bool to select the deepest private constructor
+          reversed_trie_(is_reversed_instance_tag ? nullptr : std::make_unique<Trie>(cs, true, true)), // 1. unique_ptr change
           is_internally_reversed_instance_(is_reversed_instance_tag) {}
 
     // Deepest private constructor to break recursion for reversed_trie_'s own reversed_trie_
@@ -169,9 +169,7 @@ public:
     Trie(bool cs, bool /*is_reversed_instance_tag*/, bool /*dummy_to_break_recursion*/)
         : root(std::make_unique<TrieNode>()),
           isCaseSensitive(cs),
-          // reversed_trie_ member of this specific instance is default-constructed using the main public constructor,
-          // which will then call the (cs, true) constructor for its own reversed_trie_, which then calls this.
-          // This is still a bit tangled. The key is that is_internally_reversed_instance_ will be true.
+          reversed_trie_(nullptr), // 1. unique_ptr change
           is_internally_reversed_instance_(true)
     {}
 
@@ -179,7 +177,7 @@ public:
     Trie(bool caseSensitive = true)
         : root(std::make_unique<TrieNode>()),
           isCaseSensitive(caseSensitive),
-          reversed_trie_(caseSensitive, true), // Mark the member as an internal reversed instance
+          reversed_trie_(std::make_unique<Trie>(caseSensitive, true)), // 1. unique_ptr change
           is_internally_reversed_instance_(false) // This is a primary Trie instance
     {}
     
@@ -202,81 +200,13 @@ public:
             }
         }
 
-        if (!is_internally_reversed_instance_) {
+        if (!is_internally_reversed_instance_ && reversed_trie_) { // 1. unique_ptr change (null check)
             std::string reversed_normalized_word = normalizedWord;
             std::reverse(reversed_normalized_word.begin(), reversed_normalized_word.end());
-            reversed_trie_.insert(reversed_normalized_word);
+            reversed_trie_->insert(reversed_normalized_word); // 1. unique_ptr change (pointer access)
         }
     }
 
-private: // Starting private section earlier for insertHelperRadix
-    void insertHelperRadix(TrieNode* node, const std::string& current_word_part) {
-        if (current_word_part.empty()) {
-            node->isEndOfWord = true;
-            node->frequency++;
-            return;
-        }
-
-        char first_char = current_word_part[0];
-        auto it = node->edges.find(first_char);
-
-        if (it == node->edges.end()) { // No edge starts with this character
-            auto new_child = std::make_unique<TrieNode>();
-            new_child->isEndOfWord = true;
-            new_child->frequency = 1; // New word ending
-            node->edges[first_char] = {current_word_part, std::move(new_child)};
-        } else { // Edge exists
-            std::string& edge_label = it->second.first;
-            std::unique_ptr<TrieNode>& child_node_ptr = it->second.second;
-
-            size_t lcp_len = 0;
-            while (lcp_len < edge_label.length() && lcp_len < current_word_part.length() &&
-                   edge_label[lcp_len] == current_word_part[lcp_len]) {
-                lcp_len++;
-            }
-
-            if (lcp_len == edge_label.length()) {
-                // Edge label is fully matched, continue insertion into child node
-                insertHelperRadix(child_node_ptr.get(), current_word_part.substr(lcp_len));
-            } else if (lcp_len < edge_label.length()) {
-                // Edge needs to be split
-                std::string original_edge_suffix = edge_label.substr(lcp_len);
-                std::string word_suffix = current_word_part.substr(lcp_len);
-
-                auto intermediate_node = std::make_unique<TrieNode>();
-                // The original child_node_ptr (and its original_edge_suffix) becomes a child of intermediate_node
-                intermediate_node->edges[original_edge_suffix[0]] = {original_edge_suffix, std::move(child_node_ptr)};
-
-                // Update the current edge to point to intermediate_node with LCP as label
-                it->second.first = edge_label.substr(0, lcp_len); // LCP
-                it->second.second = std::move(intermediate_node); // Points to new intermediate_node
-
-                // If the word_suffix is empty, the intermediate_node itself is an end of a word.
-                // Otherwise, continue inserting the word_suffix from the intermediate_node.
-                insertHelperRadix(it->second.second.get(), word_suffix);
-            } else { // lcp_len == current_word_part.length() AND lcp_len < edge_label.length()
-                     // This means current_word_part is a prefix of edge_label. This case was covered by the one above.
-                     // This specific 'else' means lcp_len == current_word_part.length() (because previous conditions were false)
-                     // This implies the word being inserted is a prefix of the existing edge_label.
-
-                // This case should be: current_word_part is fully matched (lcp_len == current_word_part.length())
-                // but edge_label is longer (lcp_len < edge_label.length())
-                // This is the "word is prefix of edge label" scenario.
-                std::string new_edge_label_for_original_child = edge_label.substr(lcp_len); // = edge_label.substr(current_word_part.length())
-
-                auto new_node_for_inserted_word = std::make_unique<TrieNode>();
-                new_node_for_inserted_word->isEndOfWord = true;
-                new_node_for_inserted_word->frequency = 1;
-
-                new_node_for_inserted_word->edges[new_edge_label_for_original_child[0]] = {new_edge_label_for_original_child, std::move(child_node_ptr)};
-
-                it->second.first = current_word_part; // Update edge label to the inserted word (which is the LCP)
-                it->second.second = std::move(new_node_for_inserted_word);
-            }
-        }
-    }
-
-// public: // Public section resumes
     // Search for a word in the trie (Radix version)
     bool search(const std::string& word) const {
         std::string normalized_word = normalizeString(word);
@@ -415,49 +345,6 @@ private: // Starting private section earlier for insertHelperRadix
         return result;
     }
 
-    // Suffix search methods
-    bool endsWith(const std::string& suffix) const {
-        if (is_internally_reversed_instance_) {
-            // This method should not be called on an internal reversed_trie directly.
-            return false;
-        }
-        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
-        if (normalized_suffix.empty()) {
-            return true; // Empty suffix matches any word
-        }
-        std::string reversed_suffix = normalized_suffix;
-        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
-        // reversed_trie_ will use its own normalizeString if needed, but its case sensitivity
-        // should match the main trie's.
-        return reversed_trie_.startsWith(reversed_suffix);
-    }
-
-    std::vector<std::string> getWordsEndingWith(const std::string& suffix) const {
-        if (is_internally_reversed_instance_) {
-            return {};
-        }
-        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
-        std::string reversed_suffix = normalized_suffix;
-        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
-
-        std::vector<std::string> reversed_matches = reversed_trie_.getWordsWithPrefix(reversed_suffix);
-        std::vector<std::string> result;
-        result.reserve(reversed_matches.size());
-
-        for (const std::string& rev_word : reversed_matches) {
-            std::string original_word = rev_word;
-            std::reverse(original_word.begin(), original_word.end());
-            result.push_back(original_word);
-        }
-        return result;
-    }
-
-    // Get the frequency of a word in the trie (NEEDS RADIX UPDATE)
-    int getWordFrequency(const std::string& word) const {
-        // This implementation is broken.
-        return 0;
-    }
-    
     // Delete a word from the trie (Radix version)
     bool deleteWord(const std::string& word) {
         std::string normalized_word = normalizeString(word);
@@ -474,12 +361,228 @@ private: // Starting private section earlier for insertHelperRadix
             main_deleted = deleteRadixHelper(root.get(), normalized_word);
         }
 
-        if (main_deleted && !is_internally_reversed_instance_) {
+        if (main_deleted && !is_internally_reversed_instance_ && reversed_trie_) { // 1. unique_ptr change
             std::string reversed_normalized_word = normalized_word;
             std::reverse(reversed_normalized_word.begin(), reversed_normalized_word.end());
-            reversed_trie_.deleteWord(reversed_normalized_word);
+            reversed_trie_->deleteWord(reversed_normalized_word); // 1. unique_ptr change
         }
         return main_deleted;
+    }
+
+    std::vector<std::string> wildcardSearch(const std::string& pattern) const {
+        std::string normalized_pattern = normalizeString(pattern);
+        std::vector<std::string> result;
+        if (!root) return result;
+
+        wildcardSearchRecursive(root.get(), normalized_pattern, 0, "", result);
+
+        return result;
+    }
+
+    bool saveToFile(const std::string& filename) const {
+        std::vector<std::pair<std::string, int>> allWordsWithFreq;
+        if (!root) return false; // Should not happen
+
+        // Handle empty string case if it's a word
+        if (root->isEndOfWord) {
+            allWordsWithFreq.push_back({"", root->frequency});
+        }
+        collectWordsWithFrequenciesRadixHelper(root.get(), "", allWordsWithFreq);
+
+        std::ofstream output_file(filename);
+        if (!output_file.is_open()) {
+            std::cerr << "Error: Could not open file for saving: " << filename << std::endl;
+            return false;
+        }
+
+        for (const auto& pair : allWordsWithFreq) {
+            output_file << (pair.first.empty() ? "@@EMPTY@@" : pair.first) << " " << pair.second << std::endl;
+        }
+
+        output_file.close();
+        return true;
+    }
+
+    bool loadFromFile(const std::string& filename) {
+        root = std::make_unique<TrieNode>();
+        if (!is_internally_reversed_instance_) {
+            // For a primary Trie, reset its reversed_trie_ properly.
+            reversed_trie_ = std::make_unique<Trie>(this->isCaseSensitive, true); // 1. unique_ptr change
+        } else {
+            reversed_trie_ = nullptr; // 1. unique_ptr change
+        }
+
+        if (!root) return false;
+
+        std::ifstream input_file(filename);
+        if (!input_file.is_open()) {
+            std::cerr << "Error: Could not open file for loading: " << filename << std::endl;
+            return false;
+        }
+
+        std::string line;
+        while (std::getline(input_file, line)) {
+            std::stringstream ss(line);
+            std::string word_from_file;
+            int freq_from_file;
+
+            if (ss >> word_from_file >> freq_from_file) {
+                if (word_from_file == "@@EMPTY@@") {
+                    word_from_file = "";
+                }
+                this->insert(word_from_file); // insert internally handles reversed_trie_
+
+                std::string normalized_word_nav = normalizeString(word_from_file);
+                TrieNode* target_node = root.get();
+
+                if (normalized_word_nav.empty()) {
+                    if (target_node->isEndOfWord) {
+                        target_node->frequency = freq_from_file;
+                    }
+                } else {
+                    std::string path_part_remaining = normalized_word_nav;
+                    bool node_found_for_freq_set = true;
+
+                    while(!path_part_remaining.empty() && target_node) {
+                        char first_char_nav = path_part_remaining[0];
+                        auto it_nav = target_node->edges.find(first_char_nav);
+
+                        if (it_nav == target_node->edges.end()) {
+                            node_found_for_freq_set = false;
+                            break;
+                        }
+
+                        const std::string& current_edge_label = it_nav->second.first;
+                        if (path_part_remaining.rfind(current_edge_label, 0) == 0) {
+                            path_part_remaining = path_part_remaining.substr(current_edge_label.length());
+                            target_node = it_nav->second.second.get();
+                        } else {
+                            node_found_for_freq_set = false;
+                            break;
+                        }
+                    }
+
+                    if (node_found_for_freq_set && path_part_remaining.empty() && target_node && target_node->isEndOfWord) {
+                        target_node->frequency = freq_from_file;
+                    } else {
+                        // std::cerr << "Warning: Could not accurately set frequency for word '" << word_from_file << "' from file." << std::endl;
+                    }
+                }
+            }
+        }
+        input_file.close();
+        return true;
+    }
+
+private: // Starting private section earlier for insertHelperRadix
+    void insertHelperRadix(TrieNode* node, const std::string& current_word_part) {
+        if (current_word_part.empty()) {
+            node->isEndOfWord = true;
+            node->frequency++;
+            return;
+        }
+
+        char first_char = current_word_part[0];
+        auto it = node->edges.find(first_char);
+
+        if (it == node->edges.end()) { // No edge starts with this character
+            auto new_child = std::make_unique<TrieNode>();
+            new_child->isEndOfWord = true;
+            new_child->frequency = 1; // New word ending
+            node->edges[first_char] = {current_word_part, std::move(new_child)};
+        } else { // Edge exists
+            std::string& edge_label = it->second.first;
+            std::unique_ptr<TrieNode>& child_node_ptr = it->second.second;
+
+            size_t lcp_len = 0;
+            while (lcp_len < edge_label.length() && lcp_len < current_word_part.length() &&
+                   edge_label[lcp_len] == current_word_part[lcp_len]) {
+                lcp_len++;
+            }
+
+            if (lcp_len == edge_label.length()) {
+                // Edge label is fully matched, continue insertion into child node
+                insertHelperRadix(child_node_ptr.get(), current_word_part.substr(lcp_len));
+            } else if (lcp_len < edge_label.length()) {
+                // Edge needs to be split
+                std::string original_edge_suffix = edge_label.substr(lcp_len);
+                std::string word_suffix = current_word_part.substr(lcp_len);
+
+                auto intermediate_node = std::make_unique<TrieNode>();
+                // The original child_node_ptr (and its original_edge_suffix) becomes a child of intermediate_node
+                intermediate_node->edges[original_edge_suffix[0]] = {original_edge_suffix, std::move(child_node_ptr)};
+
+                // Update the current edge to point to intermediate_node with LCP as label
+                it->second.first = edge_label.substr(0, lcp_len); // LCP
+                it->second.second = std::move(intermediate_node); // Points to new intermediate_node
+
+                // If the word_suffix is empty, the intermediate_node itself is an end of a word.
+                // Otherwise, continue inserting the word_suffix from the intermediate_node.
+                insertHelperRadix(it->second.second.get(), word_suffix);
+            } else { // lcp_len == current_word_part.length() AND lcp_len < edge_label.length()
+                     // This means current_word_part is a prefix of edge_label. This case was covered by the one above.
+                     // This specific 'else' means lcp_len == current_word_part.length() (because previous conditions were false)
+                     // This implies the word being inserted is a prefix of the existing edge_label.
+
+                // This case should be: current_word_part is fully matched (lcp_len == current_word_part.length())
+                // but edge_label is longer (lcp_len < edge_label.length())
+                // This is the "word is prefix of edge label" scenario.
+                std::string new_edge_label_for_original_child = edge_label.substr(lcp_len); // = edge_label.substr(current_word_part.length())
+
+                auto new_node_for_inserted_word = std::make_unique<TrieNode>();
+                new_node_for_inserted_word->isEndOfWord = true;
+                new_node_for_inserted_word->frequency = 1;
+
+                new_node_for_inserted_word->edges[new_edge_label_for_original_child[0]] = {new_edge_label_for_original_child, std::move(child_node_ptr)};
+
+                it->second.first = current_word_part; // Update edge label to the inserted word (which is the LCP)
+                it->second.second = std::move(new_node_for_inserted_word);
+            }
+        }
+    }
+
+// public: // Public section resumes
+    // Suffix search methods
+    bool endsWith(const std::string& suffix) const {
+        if (is_internally_reversed_instance_) {
+            // This method should not be called on an internal reversed_trie directly.
+            return false;
+        }
+        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
+        if (normalized_suffix.empty()) {
+            return true; // Empty suffix matches any word
+        }
+        std::string reversed_suffix = normalized_suffix;
+        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
+        // reversed_trie_ will use its own normalizeString if needed, but its case sensitivity
+        // should match the main trie's.
+        return reversed_trie_ ? reversed_trie_->startsWith(reversed_suffix) : false; // 1. unique_ptr change
+    }
+
+    std::vector<std::string> getWordsEndingWith(const std::string& suffix) const {
+        if (is_internally_reversed_instance_ || !reversed_trie_) { // 1. unique_ptr change
+            return {};
+        }
+        std::string normalized_suffix = normalizeString(suffix); // Use own normalizeString
+        std::string reversed_suffix = normalized_suffix;
+        std::reverse(reversed_suffix.begin(), reversed_suffix.end());
+
+        std::vector<std::string> reversed_matches = reversed_trie_->getWordsWithPrefix(reversed_suffix); // 1. unique_ptr change
+        std::vector<std::string> result;
+        result.reserve(reversed_matches.size());
+
+        for (const std::string& rev_word : reversed_matches) {
+            std::string original_word = rev_word;
+            std::reverse(original_word.begin(), original_word.end());
+            result.push_back(original_word);
+        }
+        return result;
+    }
+
+    // Get the frequency of a word in the trie (NEEDS RADIX UPDATE)
+    int getWordFrequency(const std::string& word) const {
+        // This implementation is broken.
+        return 0;
     }
     
     // Print all words in the trie (for debugging)
@@ -569,7 +672,7 @@ private:
 
                 // Condition 2: Child is non-word and has only one child -> merge
                 if (!child_node->isEndOfWord && child_node->edges.size() == 1) {
-                    auto& grandchild_edge_entry = child_node->edges.begin(); // Get the single edge from child
+                    auto grandchild_edge_entry = child_node->edges.begin(); // 2. auto& fix
                     std::string& grandchild_label = grandchild_edge_entry->second.first;
                     std::unique_ptr<TrieNode>& grandchild_node_unique_ptr = grandchild_edge_entry->second.second;
 
@@ -755,16 +858,6 @@ private:
 
 // public: // Public section resumes after private helpers
     // ... (other public methods like Trie constructor, search, etc. remain here)
-    std::vector<std::string> wildcardSearch(const std::string& pattern) const {
-        std::string normalized_pattern = normalizeString(pattern);
-        std::vector<std::string> result;
-        if (!root) return result;
-
-        wildcardSearchRecursive(root.get(), normalized_pattern, 0, "", result);
-
-        return result;
-    }
-
     std::vector<std::pair<std::string, int>> fuzzySearch(const std::string& query_word, int max_k) const {
         std::string normalized_query = normalizeString(query_word);
         std::map<std::string, int> results_map;
@@ -798,95 +891,5 @@ private:
         return final_results;
     }
 
-    bool saveToFile(const std::string& filename) const {
-        std::vector<std::pair<std::string, int>> allWordsWithFreq;
-        if (!root) return false; // Should not happen
-
-        // Handle empty string case if it's a word
-        if (root->isEndOfWord) {
-            allWordsWithFreq.push_back({"", root->frequency});
-        }
-        collectWordsWithFrequenciesRadixHelper(root.get(), "", allWordsWithFreq);
-
-        std::ofstream output_file(filename);
-        if (!output_file.is_open()) {
-            std::cerr << "Error: Could not open file for saving: " << filename << std::endl;
-            return false;
-        }
-
-        for (const auto& pair : allWordsWithFreq) {
-            output_file << pair.first << " " << pair.second << std::endl;
-        }
-
-        output_file.close();
-        return true;
-    }
-
-    bool loadFromFile(const std::string& filename) {
-        root = std::make_unique<TrieNode>();
-        if (!is_internally_reversed_instance_) {
-            // For a primary Trie, reset its reversed_trie_ properly.
-            reversed_trie_ = Trie(this->isCaseSensitive, true);
-        }
-        // If this IS an internal reversed instance, its own reversed_trie_ member is not used/reset further.
-
-        if (!root) return false;
-
-        std::ifstream input_file(filename);
-        if (!input_file.is_open()) {
-            std::cerr << "Error: Could not open file for loading: " << filename << std::endl;
-            return false;
-        }
-
-        std::string line;
-        while (std::getline(input_file, line)) {
-            std::stringstream ss(line);
-            std::string word_from_file; // Renamed to avoid confusion with normalized_word
-            int freq_from_file;
-
-            if (ss >> word_from_file >> freq_from_file) {
-                this->insert(word_from_file);
-
-                std::string normalized_word_nav = normalizeString(word_from_file);
-                TrieNode* target_node = root.get();
-
-                if (normalized_word_nav.empty()) {
-                    if (target_node->isEndOfWord) { // target_node is root here
-                        target_node->frequency = freq_from_file;
-                    }
-                } else {
-                    std::string path_part_remaining = normalized_word_nav;
-                    bool node_found_for_freq_set = true;
-
-                    while(!path_part_remaining.empty() && target_node) {
-                        char first_char_nav = path_part_remaining[0];
-                        auto it_nav = target_node->edges.find(first_char_nav);
-
-                        if (it_nav == target_node->edges.end()) {
-                            node_found_for_freq_set = false;
-                            break;
-                        }
-
-                        const std::string& current_edge_label = it_nav->second.first;
-                        if (path_part_remaining.rfind(current_edge_label, 0) == 0) { // current_edge_label is prefix
-                            path_part_remaining = path_part_remaining.substr(current_edge_label.length());
-                            target_node = it_nav->second.second.get();
-                        } else {
-                            node_found_for_freq_set = false;
-                            break;
-                        }
-                    }
-
-                    if (node_found_for_freq_set && path_part_remaining.empty() && target_node && target_node->isEndOfWord) {
-                        target_node->frequency = freq_from_file;
-                    } else {
-                        // std::cerr << "Warning: Could not accurately set frequency for word '" << word_from_file << "' from file." << std::endl;
-                    }
-                }
-            }
-        }
-        input_file.close();
-        return true;
-    }
 };
 
