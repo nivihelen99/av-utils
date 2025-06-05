@@ -159,5 +159,84 @@ int main() {
     bulkStringList.display(); // Should be unchanged
     bulkStringList.printValues();
 
+
+    std::cout << "\n\n=== Iterator Test (int) ===" << std::endl;
+    SkipList<int> iter_list;
+    iter_list.insert(1);
+    iter_list.insert(5);
+    iter_list.insert(2);
+    iter_list.insert(8);
+    iter_list.insert(3);
+
+    std::cout << "Initial list for iterator tests:" << std::endl;
+    iter_list.display();
+
+    std::cout << "Iterating using begin()/end(): ";
+    for (SkipList<int>::iterator it = iter_list.begin(); it != iter_list.end(); ++it) {
+        std::cout << *it << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Iterating using range-based for: ";
+    for (int val : iter_list) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Iterating using cbegin()/cend(): ";
+    const auto& const_iter_list = iter_list;
+    for (SkipList<int>::const_iterator cit = const_iter_list.cbegin(); cit != const_iter_list.cend(); ++cit) {
+        std::cout << *cit << " ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "Iterating using range-based for (const): ";
+    for (int val : const_iter_list) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+
+
+    std::cout << "\n\n=== Key-Value Pair Test (std::pair<const int, std::string>) ===" << std::endl;
+    SkipList<std::pair<const int, std::string>> kv_list;
+
+    std::cout << "--- Inserting key-value pairs ---" << std::endl;
+    kv_list.insert({10, "apple"});
+    kv_list.insert({5, "banana"});
+    kv_list.insert({20, "cherry"});
+    std::cout << "Attempting to insert duplicate key 5 (banana should remain):" << std::endl;
+    kv_list.insert({5, "orange"}); // Test duplicate key insertion
+
+    kv_list.display();
+    kv_list.printValues();
+
+    std::cout << "--- Search operations (key-value) ---" << std::endl;
+    std::cout << "Search for key 5: " << (kv_list.search({5, ""}) ? "Found" : "Not found") << std::endl;
+    std::cout << "Search for key 15: " << (kv_list.search({15, ""}) ? "Found" : "Not found") << std::endl;
+
+    std::cout << "--- Iterating through key-value pairs ---" << std::endl;
+    std::cout << "Pairs: ";
+    for (const auto& kv_pair : kv_list) {
+        std::cout << "<" << kv_pair.first << ":" << kv_pair.second << "> ";
+    }
+    std::cout << std::endl;
+
+    std::cout << "--- Remove operation (key-value) ---" << std::endl;
+    std::cout << "Removing key 5: " << (kv_list.remove({5, ""}) ? "Removed" : "Not removed") << std::endl;
+    kv_list.display();
+    std::cout << "Removing key 15 (non-existent): " << (kv_list.remove({15, ""}) ? "Removed" : "Not removed") << std::endl;
+    kv_list.display();
+
+
+    std::cout << "--- Range query for keys [7, 25] (key-value) ---" << std::endl;
+    // For rangeQuery, T is std::pair<const int, std::string>.
+    // So minVal and maxVal should be of this type. Key part is used for comparison.
+    auto kv_range_result = kv_list.rangeQuery({7, ""}, {25, ""});
+    std::cout << "Values in range: ";
+    for (const auto& p : kv_range_result) {
+        std::cout << "<" << p.first << ":" << p.second << "> ";
+    }
+    std::cout << std::endl;
+
     return 0;
 }
