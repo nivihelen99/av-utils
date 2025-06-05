@@ -4,99 +4,113 @@
 #include <vector>
 #include <array>
 #include <iostream> // For std::cerr for warnings, if not captured by test
+#include <thread> // For std::this_thread
 
 // MockARPCache to allow mocking of virtual methods from ARPCache
 class MockARPCache : public ARPCache {
 public:
     // Constructor must call the base class constructor
-    MockARPCache(const mac_addr_t& dev_mac) : ARPCache(dev_mac) {}
+    MockARPCache(const mac_addr_t& dev_mac,
+                 std::chrono::seconds reachable_time = std::chrono::seconds(300),
+                 std::chrono::seconds stale_time = std::chrono::seconds(30),
+                 std::chrono::seconds probe_retransmit_interval = std::chrono::seconds(1),
+                 std::chrono::seconds max_probe_backoff_interval = std::chrono::seconds(60),
+                 std::chrono::seconds failed_entry_lifetime = std::chrono::seconds(20),
+                 std::chrono::seconds delay_duration = std::chrono::seconds(5),
+                 std::chrono::seconds flap_detection_window = std::chrono::seconds(10),
+                 int max_flaps = 3,
+                 size_t max_cache_size = 1024)
+        : ARPCache(dev_mac, reachable_time, stale_time, probe_retransmit_interval, max_probe_backoff_interval, failed_entry_lifetime, delay_duration, flap_detection_window, max_flaps, max_cache_size) {}
 
     // Mock for the virtual send_arp_request method (must be virtual in ARPCache)
     MOCK_METHOD(void, send_arp_request, (uint32_t ip), (override));
 
     // Mock for the virtual log_ip_conflict method (must be virtual in ARPCache)
     MOCK_METHOD(void, log_ip_conflict, (uint32_t ip, const mac_addr_t& existing_mac, const mac_addr_t& new_mac), (override));
+
+    // Helper for tests to force an entry into a specific state
+    void force_set_state_for_test(uint32_t ip, ARPState new_state, std::chrono::steady_clock::time_point timestamp) {
+        auto it = cache_.find(ip);
+        if (it == cache_.end()) { // If entry doesn't exist, create a dummy one to set state
+            mac_addr_t dummy_mac = {0};
+            // ARPEntry { mac, state, timestamp, probe_count, pending_packets_q, backup_macs_vec, backoff_exp, flap_cnt, last_mac_update_t }
+            cache_[ip] = {dummy_mac, new_state, timestamp, 0, {}, {}, 0, 0, std::chrono::steady_clock::time_point{}};
+            promoteToMRU(ip);
+        } else {
+            it->second.state = new_state;
+            it->second.timestamp = timestamp;
+            promoteToMRU(ip);
+        }
+    }
 };
 
 TEST(ARPCacheTest, AddAndLookup) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    MockARPCache cache(dev_mac); // Use MockARPCache
+    MockARPCache cache(dev_mac);
 
-    uint32_t ip1 = 0xC0A80101; // 192.168.1.1
+    uint32_t ip1 = 0xC0A80101;
     mac_addr_t mac1 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01};
     mac_addr_t mac_out;
 
-    // Test lookup miss - Expect send_arp_request to be called
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
     ASSERT_FALSE(cache.lookup(ip1, mac_out));
 
-    // Test add_entry and lookup hit
     cache.add_entry(ip1, mac1);
-    // No send_arp_request expected here as it should be a hit
-    EXPECT_CALL(cache, send_arp_request(testing::_)).Times(0); // Ensure no unexpected calls
+    EXPECT_CALL(cache, send_arp_request(testing::_)).Times(0);
     ASSERT_TRUE(cache.lookup(ip1, mac_out));
     ASSERT_EQ(mac_out, mac1);
-    testing::Mock::VerifyAndClearExpectations(&cache); // Clear expectations for this part
+    testing::Mock::VerifyAndClearExpectations(&cache);
 }
 
 TEST(ARPCacheTest, GratuitousARP) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    MockARPCache cache(dev_mac); // Use MockARPCache to check log_ip_conflict
+    MockARPCache cache(dev_mac);
 
-    uint32_t ip1 = 0xC0A80101; // 192.168.1.1
+    uint32_t ip1 = 0xC0A80101;
     mac_addr_t mac1 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01};
-    mac_addr_t mac2 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02}; // Different MAC
+    mac_addr_t mac2 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02};
 
-    cache.add_entry(ip1, mac1); // Initial entry
+    cache.add_entry(ip1, mac1);
 
-    // Adding same IP, same MAC - no conflict log expected
     EXPECT_CALL(cache, log_ip_conflict(testing::_, testing::_, testing::_)).Times(0);
     cache.add_entry(ip1, mac1);
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // Adding same IP, different MAC - conflict log expected
     EXPECT_CALL(cache, log_ip_conflict(ip1, mac1, mac2)).Times(1);
     cache.add_entry(ip1, mac2);
 
     mac_addr_t mac_out;
-    ASSERT_TRUE(cache.lookup(ip1, mac_out)); // Should now find mac2
+    ASSERT_TRUE(cache.lookup(ip1, mac_out));
     ASSERT_EQ(mac_out, mac2);
     testing::Mock::VerifyAndClearExpectations(&cache);
 }
 
 TEST(ARPCacheTest, ProxyARP) {
     mac_addr_t dev_mac = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
-    MockARPCache cache(dev_mac); // Use mock to check send_arp_request calls
+    MockARPCache cache(dev_mac);
 
-    uint32_t proxy_ip_prefix = 0xC0A80A00; // 192.168.10.0
-    uint32_t proxy_subnet_mask = 0xFFFFFF00; // 255.255.255.0
+    uint32_t proxy_ip_prefix = 0xC0A80A00;
+    uint32_t proxy_subnet_mask = 0xFFFFFF00;
     cache.add_proxy_subnet(proxy_ip_prefix, proxy_subnet_mask);
 
-    uint32_t ip_in_proxy_subnet = 0xC0A80A05; // 192.168.10.5
-    uint32_t ip_not_in_proxy_subnet = 0xC0A80B05; // 192.168.11.5
+    uint32_t ip_in_proxy_subnet = 0xC0A80A05;
+    uint32_t ip_not_in_proxy_subnet = 0xC0A80B05;
     mac_addr_t mac_out;
 
-    // Test lookup for IP in proxy subnet (not in cache) - no ARP request expected for proxy
     EXPECT_CALL(cache, send_arp_request(testing::_)).Times(0);
     ASSERT_TRUE(cache.lookup(ip_in_proxy_subnet, mac_out));
     ASSERT_EQ(mac_out, dev_mac);
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // Verify it was added to cache, so still no ARP request
     EXPECT_CALL(cache, send_arp_request(testing::_)).Times(0);
     ASSERT_TRUE(cache.lookup(ip_in_proxy_subnet, mac_out));
     ASSERT_EQ(mac_out, dev_mac);
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // Test lookup for IP not in proxy subnet (not in cache) - ARP request expected
     EXPECT_CALL(cache, send_arp_request(ip_not_in_proxy_subnet)).Times(1);
     ASSERT_FALSE(cache.lookup(ip_not_in_proxy_subnet, mac_out));
     testing::Mock::VerifyAndClearExpectations(&cache);
 }
-
-// Note: The failover tests below are still somewhat conceptual without
-// direct state manipulation helpers in ARPCache (e.g., force_set_state, force_set_probe_count)
-// or precise time control for aging. We test what's possible via the public API.
 
 TEST(ARPCacheTest, FastFailoverInLookupIfStale) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
@@ -111,75 +125,400 @@ TEST(ARPCacheTest, FastFailoverInLookupIfStale) {
     cache.add_backup_mac(ip1, mac2_backup);
 
     ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1_primary);
-
     GTEST_LOG_(INFO) << "FastFailoverInLookupIfStale test is conceptual for forcing STALE state.";
 }
 
-
 TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    MockARPCache cache(dev_mac); // Use MockARPCache for expectations
+    auto test_reachable_time = std::chrono::seconds(20);
+    auto test_stale_time = std::chrono::seconds(5);
+    auto test_probe_interval = std::chrono::seconds(1);
+    MockARPCache cache(dev_mac, test_reachable_time, test_stale_time, test_probe_interval);
 
-    uint32_t ip1 = 0xC0A80102; // Using a different IP to avoid interference from other tests
-    mac_addr_t mac1_primary_dummy = {}; // Will be written to by lookup, actual value not critical for this test setup
+    uint32_t ip1 = 0xC0A80102;
+    mac_addr_t mac1_primary_dummy = {};
     mac_addr_t mac1_backup  = {0x00, 0x11, 0x22, 0x33, 0x44, 0xBB};
     mac_addr_t mac_out;
 
-    // Add backup MAC. If ip1 doesn't have an entry yet, add_backup_mac handles it gracefully.
     cache.add_backup_mac(ip1, mac1_backup);
 
-    // 1. Initial lookup for a non-existent IP. This should:
-    //    - Create an INCOMPLETE entry for ip1.
-    //    - Call send_arp_request once for this initial attempt.
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
     ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy));
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // Ensure no IP conflict logs are expected during probing of this entry
     EXPECT_CALL(cache, log_ip_conflict(testing::_, testing::_, testing::_)).Times(0);
 
-    // 2. Simulate subsequent probes via age_entries.
-    //    The entry for ip1 is now INCOMPLETE. ARPCache::MAX_PROBES is the total number of probes.
-    //    One probe was already sent by the initial lookup.
-    //    So, expect (ARPCache::MAX_PROBES - 1) more calls to send_arp_request via age_entries.
     int remaining_probes = ARPCache::MAX_PROBES - 1;
     if (remaining_probes < 0) remaining_probes = 0;
 
     if (remaining_probes > 0) {
         EXPECT_CALL(cache, send_arp_request(ip1)).Times(remaining_probes);
     }
-    // else if MAX_PROBES is 1, no more calls from age_entries before failover/erase.
 
     auto test_time = std::chrono::steady_clock::now();
-    // Advance time slightly to ensure the first age_entries call processes the INCOMPLETE entry
-    // if its timestamp was set to 'now' by the preceding lookup.
-    test_time += ARPCache::PROBE_RETRANSMIT_INTERVAL + std::chrono::milliseconds(10);
+    test_time += test_probe_interval + std::chrono::milliseconds(10);
 
     for (int i = 0; i < remaining_probes; ++i) {
-        cache.age_entries(test_time); // Use parameterized version
-        // Advance time for the next probe interval
-        test_time += ARPCache::PROBE_RETRANSMIT_INTERVAL + std::chrono::milliseconds(10);
+        cache.age_entries(test_time);
+        test_time += test_probe_interval + std::chrono::milliseconds(10);
     }
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // 3. The next call to age_entries.
-    //    At this stage, probe_count should be ARPCache::MAX_PROBES.
-    //    This call to age_entries, using the advanced test_time, should find the entry
-    //    INCOMPLETE, timed out, and with probe_count at MAX_PROBES, triggering failover.
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
-    // std::cerr << "GTEST_NOTE: Expecting an INFO log for failover (ARP age_entries) on next age_entries(" << test_time.time_since_epoch().count() << ") call." << std::endl;
-    cache.age_entries(test_time); // Use parameterized version for the failover-triggering call
+    cache.age_entries(test_time);
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // 4. Verify failover: Looking up ip1 should now yield the backup MAC and be REACHABLE.
-    //    The lookup itself should not trigger send_arp_request now.
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
     ASSERT_TRUE(cache.lookup(ip1, mac_out)) << "Lookup failed after expected failover.";
     ASSERT_EQ(mac_out, mac1_backup) << "MAC address did not match backup MAC after failover.";
-
-    // Optional: Verify the state is REACHABLE (needs a getter or friend class for ARPEntry state)
-    // EXPECT_EQ(get_arp_entry_state_for_test(cache, ip1), ARPCache::ARPState::REACHABLE);
     testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, ConfigurableTimers_ReachableToStale) {
+    mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
+    auto custom_reachable_time = std::chrono::seconds(5);
+    auto custom_stale_time = std::chrono::seconds(3);
+    MockARPCache cache(dev_mac, custom_reachable_time, custom_stale_time, std::chrono::seconds(1));
+
+    uint32_t ip1 = 0xC0A8010F;
+    mac_addr_t mac1 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x0F};
+    mac_addr_t mac_out;
+
+    auto time_reference_add = std::chrono::steady_clock::now();
+    cache.add_entry(ip1, mac1);
+
+    auto time_for_staling = time_reference_add + custom_reachable_time + std::chrono::milliseconds(100);
+    cache.age_entries(time_for_staling);
+
+    ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1);
+
+    auto time_for_probing = time_for_staling + custom_stale_time + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_for_probing);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, ConfigurableTimers_StaleToProbe) {
+    mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x06};
+    auto reachable_time = std::chrono::seconds(2);
+    auto custom_stale_time = std::chrono::seconds(3);
+    MockARPCache cache(dev_mac, reachable_time, custom_stale_time, std::chrono::seconds(1));
+
+    uint32_t ip1 = 0xC0A80102;
+    mac_addr_t mac1 = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x02};
+    mac_addr_t mac_out;
+
+    auto time_reference_add = std::chrono::steady_clock::now();
+    cache.add_entry(ip1, mac1);
+
+    auto time_when_staled = time_reference_add + reachable_time + std::chrono::milliseconds(100);
+    cache.age_entries(time_when_staled);
+
+    ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1);
+
+    auto time_to_probe_from_stale = time_when_staled + custom_stale_time + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_to_probe_from_stale);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, ConfigurableTimers_ProbeRetransmit) {
+    mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x07};
+    auto custom_probe_interval = std::chrono::seconds(2);
+    MockARPCache cache(dev_mac, std::chrono::seconds(10), std::chrono::seconds(5), custom_probe_interval);
+
+    uint32_t ip1 = 0xC0A80103;
+    mac_addr_t mac_out;
+
+    auto time_reference_lookup = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto time_for_second_probe = time_reference_lookup + custom_probe_interval + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_for_second_probe);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto time_for_third_probe = time_for_second_probe + custom_probe_interval + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_for_third_probe);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, ExponentialBackoff_ProbeIntervalIncrease) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x08};
+    auto base_interval = std::chrono::seconds(1);
+    auto reachable_time = std::chrono::seconds(300);
+    auto stale_time = std::chrono::seconds(30);
+    auto max_backoff = std::chrono::seconds(60);
+    MockARPCache cache(dev_mac, reachable_time, stale_time, base_interval, max_backoff);
+
+    uint32_t ip1 = 0xC0A8010A;
+    mac_addr_t mac_out;
+
+    auto t_ref = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto t_probe2 = t_ref + base_interval * (static_cast<long long>(1) << 0) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(t_probe2);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto t_probe3 = t_probe2 + base_interval * (static_cast<long long>(1) << 1) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(t_probe3);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    if (ARPCache::MAX_PROBES >= 3) {
+        auto t_probe4 = t_probe3 + base_interval * (static_cast<long long>(1) << 2) + std::chrono::milliseconds(100);
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(t_probe4);
+        testing::Mock::VerifyAndClearExpectations(&cache);
+    }
+}
+
+TEST(ARPCacheTest, ExponentialBackoff_MaxIntervalCap) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x09};
+    auto base_interval = std::chrono::seconds(1);
+    auto max_backoff_cap = std::chrono::seconds(3);
+    MockARPCache cache(dev_mac, std::chrono::seconds(300), std::chrono::seconds(30), base_interval, max_backoff_cap);
+
+    uint32_t ip1 = 0xC0A8010B;
+    mac_addr_t mac_out;
+
+    auto t_ref = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto t_probe2 = t_ref + base_interval * (static_cast<long long>(1) << 0) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(t_probe2);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto t_probe3 = t_probe2 + base_interval * (static_cast<long long>(1) << 1) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(t_probe3);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    if (ARPCache::MAX_PROBES >= 3) {
+        auto t_probe4 = t_probe3 + max_backoff_cap + std::chrono::milliseconds(100);
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(t_probe4);
+        testing::Mock::VerifyAndClearExpectations(&cache);
+
+        if (ARPCache::MAX_PROBES >= 4) {
+             auto t_probe5 = t_probe4 + max_backoff_cap + std::chrono::milliseconds(100);
+             EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+             cache.age_entries(t_probe5);
+             testing::Mock::VerifyAndClearExpectations(&cache);
+        }
+    }
+}
+
+TEST(ARPCacheTest, ExponentialBackoff_ResetOnReachable) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0A};
+    auto base_interval = std::chrono::seconds(1);
+    auto reachable_t = std::chrono::seconds(5);
+    auto stale_t = std::chrono::seconds(2);
+    auto max_backoff = std::chrono::seconds(60);
+    MockARPCache cache(dev_mac, reachable_t, stale_t, base_interval, max_backoff);
+
+    uint32_t ip1 = 0xC0A8010C;
+    mac_addr_t mac1 = {0xAA,0xBB,0xCC,0xDD,0xEE,0xFF};
+    mac_addr_t mac_out;
+
+    auto t_ref = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto t_probe2_time = t_ref + base_interval * (static_cast<long long>(1) << 0) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(t_probe2_time);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    cache.add_entry(ip1, mac1);
+    auto time_entry_made_reachable = std::chrono::steady_clock::now();
+
+    auto time_becomes_stale = time_entry_made_reachable + reachable_t + std::chrono::milliseconds(100);
+    cache.age_entries(time_becomes_stale);
+
+    auto time_becomes_probe = time_becomes_stale + stale_t + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_becomes_probe);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto time_for_next_probe = time_becomes_probe + base_interval * (static_cast<long long>(1) << 0) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_for_next_probe);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, FailedState_TransitionOnProbeFailure) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0B};
+    auto base_interval = std::chrono::seconds(1);
+    auto max_backoff = std::chrono::seconds(2);
+    auto failed_lifetime = std::chrono::seconds(10);
+    MockARPCache cache(dev_mac, std::chrono::seconds(30), std::chrono::seconds(5), base_interval, max_backoff, failed_lifetime);
+
+    uint32_t ip1 = 0xC0A8010D;
+    mac_addr_t mac_out;
+
+    auto current_time = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    for (int i = 0; i < ARPCache::MAX_PROBES; ++i) {
+        long long current_wait_s = base_interval.count();
+        if (i > 0) {
+             current_wait_s *= (static_cast<long long>(1) << (i-1) );
+        }
+        current_wait_s = std::min(current_wait_s, static_cast<long long>(max_backoff.count()));
+        current_time += std::chrono::seconds(current_wait_s) + std::chrono::milliseconds(100);
+
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(current_time);
+        testing::Mock::VerifyAndClearExpectations(&cache);
+    }
+
+    long long final_wait_s = base_interval.count();
+    if (ARPCache::MAX_PROBES > 0) {
+        final_wait_s *= (static_cast<long long>(1) << (ARPCache::MAX_PROBES -1) );
+    }
+    final_wait_s = std::min(final_wait_s, static_cast<long long>(max_backoff.count()));
+    current_time += std::chrono::seconds(final_wait_s) + std::chrono::milliseconds(100);
+
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    cache.age_entries(current_time);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    ASSERT_FALSE(cache.lookup(ip1, mac_out)) << "Lookup should fail for FAILED entry.";
+}
+
+TEST(ARPCacheTest, FailedState_LookupBehavior) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0C};
+    MockARPCache cache(dev_mac, std::chrono::seconds(30), std::chrono::seconds(5), std::chrono::seconds(1), std::chrono::seconds(2), std::chrono::seconds(10));
+    uint32_t ip1 = 0xC0A8010E;
+    mac_addr_t mac_out;
+
+    auto current_time = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.lookup(ip1, mac_out);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    for(int i=0; i < ARPCache::MAX_PROBES; ++i) {
+        current_time += std::chrono::seconds(1) + std::chrono::milliseconds(100);
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(current_time);
+        testing::Mock::VerifyAndClearExpectations(&cache);
+    }
+    current_time += std::chrono::seconds(1) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    cache.age_entries(current_time);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    ASSERT_FALSE(cache.lookup(ip1, mac_out)) << "Lookup on a FAILED entry should return false.";
+}
+
+TEST(ARPCacheTest, FailedState_PurgeAfterLifetime) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0D};
+    auto failed_lifetime_for_test = std::chrono::seconds(3);
+    MockARPCache cache(dev_mac, std::chrono::seconds(30), std::chrono::seconds(5), std::chrono::seconds(1), std::chrono::seconds(2), failed_lifetime_for_test);
+    uint32_t ip1 = 0xC0A8010F;
+    mac_addr_t mac_out;
+
+    auto current_time = std::chrono::steady_clock::now();
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.lookup(ip1, mac_out);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto time_failed_state_set = current_time;
+    for(int i=0; i < ARPCache::MAX_PROBES + 1; ++i) {
+        time_failed_state_set += std::chrono::seconds(1) + std::chrono::milliseconds(100);
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(testing::AtMost(1));
+        cache.age_entries(time_failed_state_set);
+        testing::Mock::VerifyAndClearExpectations(&cache);
+    }
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+
+    auto time_to_purge = time_failed_state_set + failed_lifetime_for_test + std::chrono::milliseconds(100);
+    cache.age_entries(time_to_purge);
+
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    ASSERT_FALSE(cache.lookup(ip1, mac_out)) << "Lookup after purge should initiate new resolution.";
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, BackgroundRefresh_Successful) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0E};
+    auto reachable_t = std::chrono::seconds(10);
+    auto stale_t = std::chrono::seconds(5);
+    auto base_interval = std::chrono::seconds(1);
+    auto max_backoff = std::chrono::seconds(5);
+    auto failed_lt = std::chrono::seconds(10);
+    MockARPCache cache(dev_mac, reachable_t, stale_t, base_interval, max_backoff, failed_lt);
+
+    uint32_t ip1 = 0xC0A80110;
+    mac_addr_t mac1 = {0xAA,0xBB,0xCC,0xDD,0xEE,0x10};
+    mac_addr_t mac_out;
+
+    auto time_ref = std::chrono::steady_clock::now();
+    cache.add_entry(ip1, mac1);
+
+    auto time_in_refresh_window = time_ref + std::chrono::seconds(static_cast<std::chrono::seconds::rep>(reachable_t.count() * 0.91)) + std::chrono::milliseconds(100);
+
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_in_refresh_window);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto time_reply_received = time_in_refresh_window + std::chrono::milliseconds(50);
+    cache.add_entry(ip1, mac1);
+
+    ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1);
+
+    auto time_past_original_expiry = time_reply_received + reachable_t - std::chrono::seconds(1);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    cache.age_entries(time_past_original_expiry);
+    ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+}
+
+TEST(ARPCacheTest, BackgroundRefresh_ToStaleIfNoReply) {
+    mac_addr_t dev_mac = {0x00,0x01,0x02,0x03,0x04,0x0F};
+    auto reachable_t = std::chrono::seconds(10);
+    auto stale_t = std::chrono::seconds(3);
+    auto base_interval = std::chrono::seconds(1);
+    auto max_backoff = std::chrono::seconds(5);
+    auto failed_lt = std::chrono::seconds(10);
+    MockARPCache cache(dev_mac, reachable_t, stale_t, base_interval, max_backoff, failed_lt);
+
+    uint32_t ip1 = 0xC0A80111;
+    mac_addr_t mac1 = {0xAA,0xBB,0xCC,0xDD,0xEE,0x11};
+    mac_addr_t mac_out;
+
+    auto time_ref = std::chrono::steady_clock::now();
+    cache.add_entry(ip1, mac1);
+
+    auto time_in_refresh_window = time_ref + std::chrono::seconds(static_cast<std::chrono::seconds::rep>(reachable_t.count() * 0.91)) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(time_in_refresh_window);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    auto current_probe_time = time_in_refresh_window;
+
+    current_probe_time += base_interval * (static_cast<long long>(1)<<0) + std::chrono::milliseconds(100);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+    cache.age_entries(current_probe_time);
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+
+    auto time_check_stale_behavior = current_probe_time + stale_t + std::chrono::milliseconds(100);
 }
 
 // Note: Some tests above are marked as conceptual or requiring ARPCache modifications
