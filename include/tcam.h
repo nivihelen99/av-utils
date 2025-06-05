@@ -153,6 +153,8 @@ public:
                 rule_obj.id = current_next_rule_id++;
                 rule_obj.is_active = true;
                 rule_obj.creation_time = std::chrono::steady_clock::now();
+
+                normalize_rule_fields(rule_obj); // Normalize before adding to temp_rules
                 temp_rules.push_back(rule_obj);
 
             } else if (op.type == RuleOperation::Type::DELETE) {
@@ -204,7 +206,106 @@ public:
         return true;
     }
 
+public:
+    std::vector<size_t> detect_redundant_rules() const {
+        std::vector<size_t> redundant_rule_indices;
+        // Assumes rules are sorted by priority/specificity.
+        // And also that is_active flags are current.
+
+        for (size_t i = 0; i < rules.size(); ++i) {
+            if (!rules[i].is_active) {
+                continue;
+            }
+            for (size_t j = 0; j < i; ++j) { // Check against higher-priority/specificity rules
+                if (!rules[j].is_active) {
+                    continue;
+                }
+
+                // If rule[i] is a subset of rule[j] and they have the same action,
+                // then rule[i] is redundant because rule[j] would have already matched.
+                if (rules[i].action == rules[j].action && is_subset(rules[i], rules[j])) {
+                    redundant_rule_indices.push_back(i);
+                    break; // Found a rule that makes rules[i] redundant
+                }
+            }
+        }
+        return redundant_rule_indices;
+    }
+
+    void compact_redundant_rules(bool trigger_rebuild = false) {
+        std::vector<size_t> redundant_indices = detect_redundant_rules();
+
+        if (redundant_indices.empty()) {
+            return;
+        }
+
+        for (size_t idx : redundant_indices) {
+            if (idx < rules.size()) { // Boundary check, though indices should be valid
+                rules[idx].is_active = false;
+            }
+        }
+
+        if (trigger_rebuild) {
+            rebuild_optimized_structures();
+        }
+    }
+
+public:
+    struct MemoryUsageStats {
+        size_t total_rules_in_vector = 0;
+        size_t active_rules_count = 0;
+        size_t inactive_rules_count = 0;
+
+        size_t rules_vector_capacity_bytes = 0;
+        size_t rules_vector_size_bytes = 0; // Memory for the Rule objects themselves in the vector
+
+        size_t port_ranges_capacity_bytes = 0;
+        size_t port_ranges_size_bytes = 0;
+
+        size_t field_bitmaps_count = 0;
+        size_t field_bitmaps_approx_bytes = 0;
+
+        size_t decision_tree_nodes_count = 0;
+        size_t decision_tree_approx_bytes = 0;
+
+        size_t total_approx_bytes = 0;
+    };
+
+    MemoryUsageStats get_memory_usage_stats() const {
+        MemoryUsageStats stats;
+        stats.total_rules_in_vector = rules.size();
+        for(const auto& rule : rules) {
+            if (rule.is_active) {
+                stats.active_rules_count++;
+            }
+        }
+        stats.inactive_rules_count = stats.total_rules_in_vector - stats.active_rules_count;
+
+        stats.rules_vector_capacity_bytes = rules.capacity() * sizeof(Rule);
+        stats.rules_vector_size_bytes = rules.size() * sizeof(Rule); // Does not include heap data per rule (like vectors in Rule)
+
+        stats.port_ranges_capacity_bytes = port_ranges.capacity() * sizeof(RangeEntry);
+        stats.port_ranges_size_bytes = port_ranges.size() * sizeof(RangeEntry);
+
+        stats.field_bitmaps_count = field_bitmaps.size();
+        // field_bitmaps stores BitmapTCAM objects directly.
+        stats.field_bitmaps_approx_bytes = field_bitmaps.size() * sizeof(BitmapTCAM);
+
+        stats.decision_tree_nodes_count = count_decision_tree_nodes_recursive(decision_tree.get());
+        // decision_tree_nodes are heap allocated via unique_ptr.
+        stats.decision_tree_approx_bytes = stats.decision_tree_nodes_count * sizeof(DecisionNode);
+
+        // Note: sizeof(Rule) doesn't account for std::vector<uint8_t> value and mask data if stored on heap.
+        // This calculation is an approximation of the main structures.
+        stats.total_approx_bytes = stats.rules_vector_size_bytes +
+                                   stats.port_ranges_size_bytes +
+                                   stats.field_bitmaps_approx_bytes +
+                                   stats.decision_tree_approx_bytes;
+        return stats;
+    }
+
 private:
+    // --- Struct Definitions ---
     struct Rule {
         std::vector<uint8_t> value;
         std::vector<uint8_t> mask;
@@ -270,14 +371,37 @@ private:
         }
     };
     
+    // --- Member Variable Declarations ---
     std::vector<Rule> rules;
     std::vector<RangeEntry> port_ranges;
     std::unique_ptr<DecisionNode> decision_tree;
     std::vector<BitmapTCAM> field_bitmaps;
     uint64_t next_rule_id = 0;
-    
-    // WildcardFields moved to public section
 
+    // --- Helper Methods that depend on struct definitions and member variables ---
+    static void normalize_rule_fields(Rule& rule) {
+        // Ensures that if mask[i] is 0x00 (wildcard), value[i] is also 0x00.
+        size_t common_size = std::min(rule.value.size(), rule.mask.size());
+        for (size_t i = 0; i < common_size; ++i) {
+            if (rule.mask[i] == 0x00) {
+                rule.value[i] = 0x00;
+            }
+        }
+        // If value or mask is longer than common_size, those bytes are not touched here.
+        // This assumes that rule construction ensures value and mask have meaningful (and typically equal) lengths.
+    }
+
+    size_t count_decision_tree_nodes_recursive(const DecisionNode* node) const {
+        if (!node) {
+            return 0;
+        }
+        // Accesses node->left and node->right, requiring DecisionNode to be fully defined.
+        return 1 + count_decision_tree_nodes_recursive(node->left.get()) +
+                   count_decision_tree_nodes_recursive(node->right.get());
+    }
+
+    // --- Other Private Methods ---
+    // (The comment "WildcardFields moved to public section" below was likely a general note from earlier refactoring, not specific to this line)
     std::unique_ptr<DecisionNode> build_tree_recursive(const std::vector<int>& rule_indices_for_node, int current_depth,
                                                        const int leaf_threshold, const int max_depth) {
         if (rule_indices_for_node.empty()) {
@@ -411,7 +535,16 @@ private:
         return node;
     }
 
-public:
+    // --- Public methods start here in the original file ---
+    // The SEARCH block should end before this, and the REPLACE block will re-insert the private methods
+    // like add_port_range, pack_ip, etc., after the reordered helper methods.
+    // For the purpose of this diff, I will assume the SEARCH block ends before the next public method,
+    // and the REPLACE block will correctly place ALL private methods after the moved ones.
+    // The provided SEARCH block in the prompt ends before `build_tree_recursive`, which is fine.
+    // The REPLACE block will then put the struct definitions, then members, then the two moved methods,
+    // then `build_tree_recursive` and the rest of the private methods.
+
+public: // This public keyword is just to mark where the next section starts in the original file
     void add_rule_with_ranges(const WildcardFields& fields, int priority, int action) {
         Rule rule_obj;
         rule_obj.priority = priority;
@@ -457,6 +590,8 @@ public:
         rule_obj.value[14] = static_cast<uint8_t>(fields.eth_type & 0xFF);
         rule_obj.mask[14] = static_cast<uint8_t>(fields.eth_type_mask & 0xFF);
 
+        normalize_rule_fields(rule_obj); // Normalize before insertion logic
+
         // 1. Remove inactive rules first
         rules.erase(std::remove_if(rules.begin(), rules.end(), [](const Rule& r){ return !r.is_active; }), rules.end());
 
@@ -470,7 +605,7 @@ public:
 
         // 3. Find insertion point in the now active and sorted (or soon to be fully sorted) list
         auto it = std::lower_bound(rules.begin(), rules.end(), rule_obj, rule_comparator);
-        
+
         // 4. Insert the new rule
         rules.insert(it, rule_obj);
 
@@ -951,6 +1086,7 @@ public:
 private:
     void rebuild_optimized_structures_from_sorted_rules() {
         // This method assumes rules are already active and sorted.
+    // It rebuilds data structures like bitmaps and decision trees from the current `rules` vector.
         field_bitmaps.clear();
         if (!rules.empty()) {
             size_t num_fields_for_bitmap = rules[0].value.size(); // Assuming all rules have same size
@@ -981,7 +1117,8 @@ private:
     }
 
     void rebuild_optimized_structures() {
-        // 1. Filter to keep only active rules
+        // This method serves as a full rebuild and defragmentation step.
+        // 1. Filter to keep only active rules, effectively compacting the rules vector.
         rules.erase(std::remove_if(rules.begin(), rules.end(), [](const Rule& r){ return !r.is_active; }), rules.end());
 
         // 2. Sort the active rules
