@@ -14,94 +14,10 @@
 #include <iomanip>    // For std::setw
 #include <stdexcept>  // For std::runtime_error
 
-class PolicyRoutingTree; // Forward declaration
+// Forward declaration (if needed by types below, but PolicyRoutingTree itself is now defined earlier)
+// class PolicyRoutingTree;
 
-class VrfRoutingTableManager {
-private:
-    std::unordered_map<uint32_t, std::unique_ptr<PolicyRoutingTree>> vrfTables;
-
-    PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = true) {
-        auto it = vrfTables.find(vrfId);
-        if (it != vrfTables.end()) {
-            return it->second.get();
-        }
-
-        if (createIfNotFound) {
-            auto newTable = std::make_unique<PolicyRoutingTree>();
-            PolicyRoutingTree* newTablePtr = newTable.get();
-            vrfTables[vrfId] = std::move(newTable);
-            return newTablePtr;
-        }
-        return nullptr;
-    }
-
-    // Const version for const methods
-    const PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = false) const {
-        auto it = vrfTables.find(vrfId);
-        if (it != vrfTables.end()) {
-            return it->second.get();
-        }
-        // Cannot create if not found in a const method if creation modifies the map
-        return nullptr;
-    }
-
-public:
-    VrfRoutingTableManager() = default;
-
-    void addRoute(uint32_t vrfId, const std::string& prefixStr, uint8_t prefixLen,
-                  PolicyRule policy, const RouteAttributes& attrs) {
-        PolicyRoutingTree* table = getVrfTable(vrfId, true);
-        if (table) {
-            table->addRoute(prefixStr, prefixLen, policy, attrs);
-        }
-    }
-
-    std::optional<RouteAttributes> selectEcmpPathUsingFlowHash(uint32_t vrfId, const PacketInfo& packet) {
-        PolicyRoutingTree* table = getVrfTable(vrfId, false);
-        if (table) {
-            return table->selectEcmpPathUsingFlowHash(packet);
-        }
-        return std::nullopt;
-    }
-
-    void displayRoutes(uint32_t vrfId) const {
-        const PolicyRoutingTree* table = getVrfTable(vrfId, false);
-        if (table) {
-            std::cout << "\n--- Routing Table for VRF ID: " << vrfId << " ---" << std::endl;
-            table->displayRoutes();
-        } else {
-            std::cout << "\n--- VRF ID: " << vrfId << " not found or has no routes ---" << std::endl;
-        }
-    }
-
-    void displayAllRoutes() const {
-        if (vrfTables.empty()) {
-            std::cout << "\n--- No VRFs configured ---" << std::endl;
-            return;
-        }
-        for (const auto& pair : vrfTables) {
-            std::cout << "\n--- Routing Table for VRF ID: " << pair.first << " ---" << std::endl;
-            pair.second->displayRoutes();
-        }
-    }
-
-    void simulatePacket(uint32_t vrfId, const std::string& srcIPStr, const std::string& dstIPStr,
-                       uint16_t srcPort, uint16_t dstPort, uint8_t protocol,
-                       uint8_t tos = 0, uint32_t flowLabel = 0) {
-        PolicyRoutingTree* table = getVrfTable(vrfId, false); // Don't create VRF on simulation if it doesn't exist
-        if (table) {
-            std::cout << "\n=== Simulating Packet in VRF ID: " << vrfId << " ===" << std::endl;
-            table->simulatePacket(srcIPStr, dstIPStr, srcPort, dstPort, protocol, tos, flowLabel);
-        } else {
-            std::cout << "\n=== VRF ID: " << vrfId << " not found for packet simulation. Packet dropped. ===" << std::endl;
-            // Optionally, print packet details here too
-            std::cout << "Packet Details: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
-                      << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
-                      << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
-                      << ", FlowLabel=" << flowLabel << std::endl;
-        }
-    }
-};
+// Moved definitions to the top
 
 // Route attributes for policy-based routing
 struct RouteAttributes {
@@ -573,3 +489,92 @@ private:
     }
 };
 
+class VrfRoutingTableManager {
+private:
+    std::unordered_map<uint32_t, std::unique_ptr<PolicyRoutingTree>> vrfTables;
+
+    PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = true) {
+        auto it = vrfTables.find(vrfId);
+        if (it != vrfTables.end()) {
+            return it->second.get();
+        }
+
+        if (createIfNotFound) {
+            auto newTable = std::make_unique<PolicyRoutingTree>();
+            PolicyRoutingTree* newTablePtr = newTable.get();
+            vrfTables[vrfId] = std::move(newTable);
+            return newTablePtr;
+        }
+        return nullptr;
+    }
+
+    // Const version for const methods
+    const PolicyRoutingTree* getVrfTable(uint32_t vrfId, bool createIfNotFound = false) const {
+        auto it = vrfTables.find(vrfId);
+        if (it != vrfTables.end()) {
+            return it->second.get();
+        }
+        // Cannot create if not found in a const method if creation modifies the map
+        return nullptr;
+    }
+
+public:
+    VrfRoutingTableManager() = default;
+
+    void addRoute(uint32_t vrfId, const std::string& prefixStr, uint8_t prefixLen,
+                  PolicyRule policy, const RouteAttributes& attrs) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, true);
+        if (table) {
+            table->addRoute(prefixStr, prefixLen, policy, attrs);
+        }
+    }
+
+    std::optional<RouteAttributes> selectEcmpPathUsingFlowHash(uint32_t vrfId, const PacketInfo& packet) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, false);
+        if (table) {
+            return table->selectEcmpPathUsingFlowHash(packet);
+        }
+        return std::nullopt;
+    }
+
+    void displayRoutes(uint32_t vrfId) const {
+        const PolicyRoutingTree* table = getVrfTable(vrfId, false);
+        if (table) {
+            std::cout << "\n--- Routing Table for VRF ID: " << vrfId << " ---" << std::endl;
+            table->displayRoutes();
+        } else {
+            std::cout << "\n--- VRF ID: " << vrfId << " not found or has no routes ---" << std::endl;
+        }
+    }
+
+    void displayAllRoutes() const {
+        if (vrfTables.empty()) {
+            std::cout << "\n--- No VRFs configured ---" << std::endl;
+            return;
+        }
+        for (const auto& pair : vrfTables) {
+            std::cout << "\n--- Routing Table for VRF ID: " << pair.first << " ---" << std::endl;
+            pair.second->displayRoutes();
+        }
+    }
+
+    void simulatePacket(uint32_t vrfId, const std::string& srcIPStr, const std::string& dstIPStr,
+                       uint16_t srcPort, uint16_t dstPort, uint8_t protocol,
+                       uint8_t tos = 0, uint32_t flowLabel = 0) {
+        PolicyRoutingTree* table = getVrfTable(vrfId, false); // Don't create VRF on simulation if it doesn't exist
+        if (table) {
+            std::cout << "\n=== Simulating Packet in VRF ID: " << vrfId << " ===" << std::endl;
+            table->simulatePacket(srcIPStr, dstIPStr, srcPort, dstPort, protocol, tos, flowLabel);
+        } else {
+            std::cout << "\n=== VRF ID: " << vrfId << " not found for packet simulation. Packet dropped. ===" << std::endl;
+            // Optionally, print packet details here too
+            std::cout << "Packet Details: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
+                      << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
+                      << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
+                      << ", FlowLabel=" << flowLabel << std::endl;
+        }
+    }
+};
+
+// This content is now moved to the top of the file.
+// Ensure VrfRoutingTableManager is defined AFTER PolicyRoutingTree and other necessary types.
