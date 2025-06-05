@@ -1,67 +1,43 @@
 #include "tcam.h"
+#include <iostream>
+#include <vector>
 
-// Usage example with performance comparison
-void tcam_optimization_example() {
-    OptimizedTCAM tcam;
-    
-    // Add some rules with ranges
-    OptimizedTCAM::WildcardFields rule1;
-    rule1.src_ip = 0x0A000000; rule1.src_ip_mask = 0xFF000000; // 10.0.0.0/8
-    rule1.dst_ip = 0xC0A80000; rule1.dst_ip_mask = 0xFFFF0000; // 192.168.0.0/16
-    rule1.src_port_min = 1024; rule1.src_port_max = 65535;     // High ports
-    rule1.dst_port_min = 80; rule1.dst_port_max = 80;         // HTTP
-    rule1.protocol = 6; rule1.protocol_mask = 0xFF;           // TCP
-    
-    tcam.add_rule_with_ranges(rule1, 100, 1);
-    
-    // Test different lookup methods
-    std::vector<uint8_t> test_packet = {
-        0x0A, 0x00, 0x00, 0x01,  // src IP: 10.0.0.1
-        0xC0, 0xA8, 0x01, 0x01,  // dst IP: 192.168.1.1
-        0x04, 0x00,              // src port: 1024
-        0x00, 0x50,              // dst port: 80
-        0x06,                    // protocol: TCP
-        0x08, 0x00               // eth_type: IPv4
-    };
-    
-    int result_linear = tcam.lookup_linear(test_packet);
-    int result_tree = tcam.lookup_decision_tree(test_packet);
-    int result_bitmap = tcam.lookup_bitmap(test_packet);
-    
-    // Batch processing
-    std::vector<std::vector<uint8_t>> batch_packets(100, test_packet);
-    std::vector<int> batch_results;
-    tcam.lookup_batch(batch_packets, batch_results);
-    
-    // Optimize for traffic pattern
-    tcam.optimize_for_traffic_pattern(batch_packets);
+// Helper function to create a packet (vector<uint8_t>)
+std::vector<uint8_t> make_example_packet(uint32_t src_ip, uint32_t dst_ip,
+                                         uint16_t src_port, uint16_t dst_port,
+                                         uint8_t proto, uint16_t eth_type) {
+    std::vector<uint8_t> p(15);
+    p[0] = (src_ip >> 24) & 0xFF; p[1] = (src_ip >> 16) & 0xFF; p[2] = (src_ip >> 8) & 0xFF; p[3] = src_ip & 0xFF;
+    p[4] = (dst_ip >> 24) & 0xFF; p[5] = (dst_ip >> 16) & 0xFF; p[6] = (dst_ip >> 8) & 0xFF; p[7] = dst_ip & 0xFF;
+    p[8] = (src_port >> 8) & 0xFF; p[9] = src_port & 0xFF;
+    p[10] = (dst_port >> 8) & 0xFF; p[11] = dst_port & 0xFF;
+    p[12] = proto;
+    p[13] = (eth_type >> 8) & 0xFF; p[14] = eth_type & 0xFF;
+    return p;
 }
-// Usage example
-int main() {
-    // TCAM for firewall rules
-    TCAM firewall;
-    std::vector<uint8_t> rule_val = {0x0A, 0x00, 0x00, 0x01}; // 10.0.0.1
-    std::vector<uint8_t> rule_mask = {0xFF, 0xFF, 0xFF, 0xFF}; // Exact match
-    firewall.add_rule(rule_val, rule_mask, 100, 1); // Priority 100, action 1
-    
-    // ARP cache
-    ARPCache arp;
-    std::array<uint8_t, 6> mac;
-    bool found = arp.lookup(0x0A000001, mac);
-    
-    // VLAN processing
-    VLANProcessor vlan_proc;
-    vlan_proc.configure_port(1, 100, false); // Access port, VLAN 100
-    vlan_proc.configure_port(2, 1, true, {100, 200}); // Trunk port
-    
-    // STP
-    std::array<uint8_t, 6> bridge_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    STPProcessor stp(32768, bridge_mac);
-    stp.add_port(1, 100);
-    
-    // Multicast
-    MulticastManager mcast;
-    mcast.join_group(0xE0000001, 1); // 224.0.0.1 on port 1
 
-    tcam_optimization_example();
+int main() {
+    OptimizedTCAM my_tcam;
+
+    OptimizedTCAM::WildcardFields fields1{};
+    fields1.src_ip = 0x0A000001; fields1.src_ip_mask = 0xFFFFFFFF;
+    fields1.dst_ip = 0xC0A80001; fields1.dst_ip_mask = 0xFFFFFFFF;
+    fields1.src_port_min = 1024; fields1.src_port_max = 1024;
+    fields1.dst_port_min = 80; fields1.dst_port_max = 80;
+    fields1.protocol = 6; fields1.protocol_mask = 0xFF;
+    fields1.eth_type = 0x0800; fields1.eth_type_mask = 0xFFFF;
+
+    my_tcam.add_rule_with_ranges(fields1, 100, 1);
+
+    auto packet = make_example_packet(0x0A000001, 0xC0A80001, 1024, 80, 6, 0x0800);
+    int action = my_tcam.lookup_linear(packet);
+
+    if (action != -1) {
+        std::cout << "Packet matched action: " << action << std::endl;
+    } else {
+        std::cout << "Packet did not match any rule." << std::endl;
+    }
+
+    std::cout << "OptimizedTCAM example usage complete." << std::endl;
+    return 0;
 }
