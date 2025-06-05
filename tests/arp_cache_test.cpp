@@ -133,42 +133,63 @@ TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
     auto test_reachable_time = std::chrono::seconds(20);
     auto test_stale_time = std::chrono::seconds(5);
     auto test_probe_interval = std::chrono::seconds(1);
-    MockARPCache cache(dev_mac, test_reachable_time, test_stale_time, test_probe_interval);
+    auto test_max_backoff = std::chrono::seconds(60);
+    auto test_failed_lifetime = std::chrono::seconds(20);
+    auto test_delay_duration = std::chrono::seconds(5);
+    auto test_flap_window = std::chrono::seconds(10);
+    int test_max_flaps = 3;
+    size_t test_max_size = 1024;
+
+    MockARPCache cache(dev_mac, test_reachable_time, test_stale_time, test_probe_interval,
+                       test_max_backoff, test_failed_lifetime, test_delay_duration,
+                       test_flap_window, test_max_flaps, test_max_size);
 
     uint32_t ip1 = 0xC0A80102;
     mac_addr_t mac1_primary_dummy = {};
     mac_addr_t mac1_backup  = {0x00, 0x11, 0x22, 0x33, 0x44, 0xBB};
     mac_addr_t mac_out;
 
-    cache.add_backup_mac(ip1, mac1_backup);
-
+    // Initial lookup for ip1. This creates an INCOMPLETE entry.
+    auto t_ref = std::chrono::steady_clock::now();
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-    ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy));
+    ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy)); // ip1 is now INCOMPLETE in the cache
     testing::Mock::VerifyAndClearExpectations(&cache);
+
+    // Now that an entry for ip1 exists, add the backup MAC.
+    cache.add_backup_mac(ip1, mac1_backup);
 
     EXPECT_CALL(cache, log_ip_conflict(testing::_, testing::_, testing::_)).Times(0);
 
-    int remaining_probes = ARPCache::MAX_PROBES - 1;
-    if (remaining_probes < 0) remaining_probes = 0;
+    auto current_test_time = t_ref;
+    // Loop for MAX_PROBES -1 because lookup already sent one.
+    // The backoff_exponent for the current wait interval is effectively 'i' for this loop's probes.
+    for (int i = 0; i < ARPCache::MAX_PROBES - 1; ++i) { // Corrected loop condition based on task
+        long long wait_seconds = test_probe_interval.count();
+        if (i > 0) { // First probe by age_entries uses backoff_exponent=0, second uses 1, etc.
+            wait_seconds *= (1LL << i);
+        }
+        wait_seconds = std::min(wait_seconds, static_cast<long long>(test_max_backoff.count()));
+        current_test_time += std::chrono::seconds(wait_seconds) + std::chrono::milliseconds(100);
 
-    if (remaining_probes > 0) {
-        EXPECT_CALL(cache, send_arp_request(ip1)).Times(remaining_probes);
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
+        cache.age_entries(current_test_time);
+        testing::Mock::VerifyAndClearExpectations(&cache);
     }
 
-    auto test_time = std::chrono::steady_clock::now();
-    test_time += test_probe_interval + std::chrono::milliseconds(10);
-
-    for (int i = 0; i < remaining_probes; ++i) {
-        cache.age_entries(test_time);
-        test_time += test_probe_interval + std::chrono::milliseconds(10);
+    // Determine wait for the probe attempt that should trigger failover.
+    // At this point, entry's backoff_exponent would be (ARPCache::MAX_PROBES - 1).
+    long long final_wait_seconds = test_probe_interval.count();
+    if ((ARPCache::MAX_PROBES - 1) > 0) { // Check if backoff_exponent for last probe was > 0
+         final_wait_seconds *= (1LL << (ARPCache::MAX_PROBES - 1));
     }
+    final_wait_seconds = std::min(final_wait_seconds, static_cast<long long>(test_max_backoff.count()));
+    current_test_time += std::chrono::seconds(final_wait_seconds) + std::chrono::milliseconds(100);
+
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0); // No more probes, should failover
+    cache.age_entries(current_test_time); // This call should trigger failover
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
-    cache.age_entries(test_time);
-    testing::Mock::VerifyAndClearExpectations(&cache);
-
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0); // Should be REACHABLE with backup
     ASSERT_TRUE(cache.lookup(ip1, mac_out)) << "Lookup failed after expected failover.";
     ASSERT_EQ(mac_out, mac1_backup) << "MAC address did not match backup MAC after failover.";
     testing::Mock::VerifyAndClearExpectations(&cache);
