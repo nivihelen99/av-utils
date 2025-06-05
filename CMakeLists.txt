@@ -16,6 +16,8 @@ add_executable(trie_example examples/example.cpp)
 add_executable(policy_example examples/use_policy.cpp)
 add_executable(skip_example examples/use_skip.cpp)
 add_executable(tcam_example examples/use_tcam.cpp)
+add_executable(arp_cache_example examples/arp_cache_example.cpp)
+add_executable(nd_cache_example examples/nd_cache_example.cpp)
 
 # Add the tests subdirectory
 # This will process the tests/CMakeLists.txt

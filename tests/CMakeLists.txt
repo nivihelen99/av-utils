@@ -14,7 +14,14 @@ FetchContent_MakeAvailable(googletest) # Fetches and configures googletest
 
 # Define test executable
 # Source files are now relative to this tests/CMakeLists.txt
-add_executable(run_tests trie_test.cpp policy_radix_test.cpp skiplist_test.cpp tcam_test.cpp)
+add_executable(run_tests
+  trie_test.cpp
+  policy_radix_test.cpp
+  skiplist_test.cpp
+  tcam_test.cpp
+  arp_cache_test.cpp
+  nd_cache_test.cpp
+)
 
 # Important: The header files for the code being tested are in the 'include' directory
 # at the project root. We need to tell this target where to find them.
@@ -23,7 +30,9 @@ add_executable(run_tests trie_test.cpp policy_radix_test.cpp skiplist_test.cpp t
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
 # Link GTest to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+# GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
+# GTest::gmock should provide the necessary gmock functionalities.
 
 # Discover and add tests to CTest
 include(GoogleTest)

@@ -45,6 +45,133 @@ The TCAM provides several methods to inspect its state and performance:
 - `get_memory_usage_stats() const`: Provides an approximation of memory usage by different internal TCAM components.
 - `lookup_single(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const`: The primary lookup function. It can optionally populate a vector of strings with a detailed trace of the lookup process, including which internal lookup strategies were attempted and rule matching steps.
 
+# ARPCache (`arp_cache.h`)
+
+The `ARPCache` class implements an ARP (Address Resolution Protocol) cache for IPv4. It's responsible for mapping IP addresses to MAC addresses within a local network segment. The implementation includes standard ARP entry management, as well as advanced features like gratuitous ARP detection, proxy ARP, and fast failover using backup MAC addresses.
+
+## Features & API
+
+### Core Functionality
+- **Adding Entries**: `add_entry(uint32_t ip, const std::array<uint8_t, 6>& mac)` adds or updates an ARP entry.
+- **Lookup**: `lookup(uint32_t ip, std::array<uint8_t, 6>& mac_out)` attempts to resolve an IP address to a MAC address. Returns `true` if found and MAC is considered usable (REACHABLE or DELAY state after failover), `false` otherwise (triggering an ARP request for INCOMPLETE or STALE entries without immediate failover).
+- **Aging**: `age_entries()` periodically called to transition entries through states (e.g., REACHABLE -> STALE, INCOMPLETE probe timeouts).
+
+### Gratuitous ARP & IP Conflict Detection
+- When `add_entry` is called for an IP address already in the cache but with a *different* MAC address, a warning is logged to `stderr`. This behavior helps in detecting potential IP address conflicts on the network, often signaled by gratuitous ARP packets from a new host claiming an existing IP.
+
+### Proxy ARP
+- The cache can be configured to act as a proxy ARP agent for specified subnets.
+- `add_proxy_subnet(uint32_t prefix, uint32_t mask)`: Configures a subnet (e.g., `192.168.10.0` with mask `255.255.255.0`) for which the device will answer ARP requests with its own MAC address.
+- **Use Case**: Allows devices in different physical segments (but same logical subnet from the requester's view) to communicate, or for a router to answer on behalf of hosts on another network. When a lookup occurs for an IP within a configured proxy subnet and the IP is not in the cache, the `ARPCache` will return the device's own MAC address.
+
+### Fast Failover
+- `ARPEntry` can store a list of backup MAC addresses for a given IP.
+- `add_backup_mac(uint32_t ip, const std::array<uint8_t, 6>& backup_mac)`: Adds a backup MAC address for an existing IP entry.
+- **Failover Logic**:
+    - **In `lookup`**: If the primary MAC address for an IP is in a STALE, PROBE, or DELAY state (indicating potential unreachability), and backup MACs are available, the cache will immediately promote the first backup MAC to be the primary. The old primary MAC is demoted to the backup list. The new primary is marked as REACHABLE. This provides rapid failover.
+    - **In `age_entries`**: If an entry in the INCOMPLETE or PROBE state fails its maximum number of ARP request probes (`MAX_PROBES`), the cache will attempt to switch to the next available backup MAC. The new backup becomes the primary and is marked REACHABLE. If no backups are available, the entry is removed.
+
+### ARP Entry States
+An ARP entry can be in one of the following states:
+- `INCOMPLETE`: Resolution is in progress; an ARP request has been sent.
+- `REACHABLE`: The MAC address has been recently confirmed.
+- `STALE`: Reachability is unknown (exceeded `REACHABLE_TIME`); will verify on next send.
+- `PROBE`: Actively sending ARP requests to verify a previously known MAC address (typically after STALE or DELAY).
+- `DELAY`: A short period after STALE before sending the first probe, allowing upper layers to use the MAC while probing starts.
+
+### Usage Example (Conceptual)
+```cpp
+#include "arp_cache.h" // Assuming ARPCache is in this header
+#include <iostream>
+
+// Assume device_mac, ip_to_resolve, primary_mac, backup_mac are defined
+// std::array<uint8_t, 6> device_mac = {...};
+// ARPCache cache(device_mac);
+// cache.add_entry(ip_to_resolve, primary_mac);
+// cache.add_backup_mac(ip_to_resolve, backup_mac);
+
+// ... time passes, primary_mac becomes STALE or fails probes ...
+
+// std::array<uint8_t, 6> resolved_mac;
+// if (cache.lookup(ip_to_resolve, resolved_mac)) {
+//   // resolved_mac might be backup_mac if failover occurred
+//   std::cout << "Resolved MAC: ... " << std::endl;
+// }
+```
+
+# NDCache (`nd_cache.h`)
+
+The `NDCache` class implements a Neighbor Discovery (ND) cache for IPv6. Neighbor Discovery Protocol (NDP, RFC 4861) is used by IPv6 nodes to discover other nodes on the same link, determine their link-layer addresses, find routers, and maintain reachability information. This cache supports key ND mechanisms including SLAAC, DAD, and fast failover.
+
+## Features & API
+
+### Core IPv6 Neighbor Discovery Principles
+- **Address Resolution**: Similar to ARP for IPv4, ND resolves IPv6 addresses to link-layer addresses (MAC addresses). Uses Neighbor Solicitation (NS) and Neighbor Advertisement (NA) messages.
+- **Router Discovery**: Nodes discover routers on the link using Router Solicitation (RS) and Router Advertisement (RA) messages.
+- **Reachability Tracking (NUD)**: Neighbor Unreachability Detection ensures that paths to neighbors are still valid.
+
+### SLAAC (Stateless Address Autoconfiguration)
+- `process_router_advertisement(const RAInfo& ra_info)`: Processes information from Router Advertisements.
+- If an RA contains prefix information with the 'Autonomous' (A) flag set, `NDCache` uses this prefix to generate a global IPv6 address.
+- `configure_address_slaac(const PrefixEntry& prefix_entry)`: Combines the received prefix (typically /64) with an interface identifier (generated using EUI-64 from the device's MAC address) to form a complete IPv6 address.
+- DAD is then performed on this newly generated address before it can be used.
+
+### DAD (Duplicate Address Detection)
+- **Importance**: Before an IPv6 address (link-local or global via SLAAC/DHCPv6) can be assigned to an interface, DAD must be performed to ensure no other node on the link is already using that address.
+- `start_dad(const ipv6_addr_t& address_to_check)`: Initiates DAD for a given address.
+- **Process**:
+    - The cache sends Neighbor Solicitation messages for the address being checked (target address = address being checked, source address = unspecified ::).
+    - If another node replies with a Neighbor Advertisement for that address, a duplicate is detected, and DAD fails (`process_dad_failure`).
+    - If an NS is received for the same address from another node also performing DAD (source address ::), DAD also fails.
+    - If no conflicting NAs or NSs are received after a certain number of probes, DAD succeeds (`process_dad_success`), and the address is considered unique and usable.
+- DAD is automatically performed for the link-local address upon `NDCache` initialization and for addresses generated via SLAAC.
+
+### Fast Failover
+- Similar to `ARPCache`, `NDEntry` can store a list of backup MAC addresses for an IPv6 neighbor.
+- `add_backup_mac(const ipv6_addr_t& ipv6, const mac_addr_t& backup_mac)`: Adds a backup MAC for an IPv6 entry.
+- **Failover Logic**:
+    - **In `lookup`**: If the primary MAC for an IPv6 neighbor is STALE, PROBE, or DELAY, and backups exist, the first backup is promoted to primary, marked REACHABLE, and the old primary is demoted.
+    - **In `age_entries`**: If NUD fails for the primary MAC (INCOMPLETE or PROBE states exceed max solicitations), a backup MAC is promoted if available. Otherwise, the entry is removed.
+
+### ND Entry States
+An ND entry can be in one of these states (similar to ARP, defined in RFC 4861):
+- `INCOMPLETE`: Address resolution is in progress (NS sent).
+- `REACHABLE`: Forward path recently confirmed (e.g., by NA).
+- `STALE`: Reachability unknown (exceeded `reachable_time`); will verify on next send.
+- `DELAY`: Waiting before sending the first probe to a STALE neighbor.
+- `PROBE`: Actively sending unicast NS probes to verify reachability of a STALE neighbor.
+- `PERMANENT`: Manually configured entry, does not age out.
+
+### Usage Example (Conceptual)
+```cpp
+#include "nd_cache.h" // Assuming NDCache is in this header
+#include <iostream>
+
+// Assume device_mac, router_ra_data, neighbor_ip, primary_mac, backup_mac are defined
+// mac_addr_t device_mac = {...};
+// ExampleNDCache cache(device_mac); // ExampleNDCache might have mock send functions
+
+// // DAD for link-local runs on construction & age_entries calls
+// while(!cache.is_link_local_dad_completed()) { cache.age_entries(); /* sleep */ }
+
+// // Simulate receiving an RA
+// // NDCache::RAInfo ra_data = parse_my_ra_packet_data(...);
+// // cache.process_router_advertisement(ra_data);
+// // This would trigger SLAAC and DAD for new global addresses.
+// // Run cache.age_entries() to drive DAD for SLAAC addresses.
+
+// // Adding a neighbor and backup
+// // cache.add_entry(neighbor_ip, primary_mac, NDCacheState::REACHABLE);
+// // cache.add_backup_mac(neighbor_ip, backup_mac);
+
+// // ... time passes, primary_mac becomes STALE or fails NUD ...
+
+// // mac_addr_t resolved_mac;
+// // if (cache.lookup(neighbor_ip, resolved_mac)) {
+// //   // resolved_mac might be backup_mac if failover occurred
+// // }
+```
+
 # C++ Data Structures: Skip List and Trie (Existing Content)
 
 ## Introduction
@@ -105,8 +232,11 @@ This project uses CMake to manage the build process. The data structures themsel
     Or, if using Makefiles (after \`cmake ..\`):
     \`\`\`bash
     make
+    # To build specific examples:
+    # make arp_cache_example
+    # make nd_cache_example
     \`\`\`
-    This will compile the example executables (e.g., \`trie_example\`, \`policy_example\`, \`skip_example\`) and the test runner (\`run_tests\`). The executables will typically be found in the \`build/\` directory.
+    This will compile the example executables (e.g., \`trie_example\`, \`arp_cache_example\`, \`nd_cache_example\`) and the test runner (\`run_tests\`). The executables will typically be found in the \`build/\` directory.
 
 ### Running Examples
 
@@ -115,6 +245,8 @@ After successful compilation, you can run the examples from the build directory:
 ./trie_example
 ./policy_example
 ./skip_example
+./arp_cache_example
+./nd_cache_example
 \`\`\`
 *(Note: On Windows, they would be \`.exe\` files, e.g., \`./trie_example.exe\`)*
 
