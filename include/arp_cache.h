@@ -13,6 +13,35 @@
 using mac_addr_t = std::array<uint8_t, 6>;
 
 /**
+ * @brief Defines the policy for handling ARP conflicts.
+ */
+enum class ConflictPolicy {
+    LOG_ONLY,        /**< Log the conflict but take no other action. */
+    DROP_NEW,        /**< Ignore the new ARP information, keeping the existing entry. */
+    UPDATE_EXISTING, /**< Update the existing entry with the new information (Default). */
+    ALERT_SYSTEM     /**< Log the conflict and send an alert to a system management entity. */
+};
+
+/**
+ * @brief Defines the policy for handling gratuitous ARP packets.
+ */
+enum class GratuitousArpPolicy {
+    PROCESS,                /**< Process the gratuitous ARP as a normal ARP packet (Default). */
+    LOG_AND_PROCESS,        /**< Log the gratuitous ARP and then process it normally. */
+    RATE_LIMIT_AND_PROCESS, /**< Process gratuitous ARPs, but apply rate limiting. */
+    DROP_IF_CONFLICT        /**< Drop the gratuitous ARP if it conflicts with an existing entry. */
+};
+
+/**
+ * @brief Distinguishes the type of ARP packet being processed.
+ */
+enum class ARPPacketType {
+    UNKNOWN,                /**< Type not determined or not specified by the caller. */
+    REPLY,                  /**< ARP Reply, typically in response to a request. */
+    GRATUITOUS_ANNOUNCEMENT /**< Unsolicited ARP (e.g., on IP change, startup, or failover). */
+};
+
+/**
  * @brief Implements an ARP (Address Resolution Protocol) cache for IPv4.
  *
  * Manages mappings from IP addresses to MAC addresses, including features like
@@ -65,6 +94,14 @@ protected: // cache_ made protected for test access via MockARPCache
     std::list<uint32_t> lru_tracker_;
     std::unordered_map<uint32_t, std::list<uint32_t>::iterator> ip_to_lru_iterator_;
 
+    // Policies
+    ConflictPolicy conflict_policy_;
+    GratuitousArpPolicy gratuitous_arp_policy_;
+
+    // Gratuitous ARP rate limiting
+    std::unordered_map<uint32_t, std::chrono::steady_clock::time_point> gratuitous_arp_last_seen_;
+    std::chrono::milliseconds gratuitous_arp_min_interval_ms_;
+
 protected: // promoteToMRU made protected for test access via MockARPCache
     void promoteToMRU(uint32_t ip) {
         if (ip_to_lru_iterator_.count(ip)) {
@@ -93,12 +130,18 @@ protected: // promoteToMRU made protected for test access via MockARPCache
                         cache_it->second.state != ARPState::PROBE) {
                         fprintf(stderr, "INFO: ARP Cache full. Evicting IP %u.\n", candidate_ip);
                         cache_.erase(cache_it);
+                        if (gratuitous_arp_last_seen_.count(candidate_ip)) {
+                            gratuitous_arp_last_seen_.erase(candidate_ip);
+                        }
                         removeFromLRUTracking(candidate_ip);
                         evicted_one_entry = true;
                         break;
                     }
                 } else {
                     // IP in LRU but not cache: inconsistency. Clean LRU.
+                    if (gratuitous_arp_last_seen_.count(candidate_ip)) { // Also try to clean from GARP tracking if present
+                        gratuitous_arp_last_seen_.erase(candidate_ip);
+                    }
                     removeFromLRUTracking(candidate_ip);
                     evicted_one_entry = true;
                     break;
@@ -135,6 +178,36 @@ protected:
                 new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
     }
 
+    /**
+     * @brief Triggers a system alert for an IP conflict.
+     * Default implementation logs to stderr. Override for custom alert mechanisms.
+     * @param ip The conflicting IP address.
+     * @param existing_mac The MAC address currently associated with the IP in the cache.
+     * @param new_mac The new MAC address that caused the conflict.
+     */
+    virtual void trigger_alert(uint32_t ip, const mac_addr_t& existing_mac, const mac_addr_t& new_mac) {
+        fprintf(stderr, "ALERT: IP Conflict for IP %u. Existing MAC: %02x:%02x:%02x:%02x:%02x:%02x, New MAC: %02x:%02x:%02x:%02x:%02x:%02x. System alert action should be taken.\n",
+                ip,
+                existing_mac[0], existing_mac[1], existing_mac[2], existing_mac[3], existing_mac[4], existing_mac[5],
+                new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
+    }
+
+    /**
+     * @brief (Placeholder) Checks if an IP-MAC mapping is considered valid by an external
+     *        DHCP snooping mechanism or IP source guard.
+     * @param ip The IP address.
+     * @param mac The MAC address.
+     * @return True if the mapping is considered valid or if no validation is performed,
+     *         false if the mapping is explicitly considered invalid.
+     */
+    virtual bool is_ip_mac_dhcp_validated(uint32_t ip, const mac_addr_t& mac) {
+        // Default implementation: assumes valid or no validation.
+        // Users can override this to integrate with a DHCP snooping database.
+        (void)ip; // Suppress unused parameter warning
+        (void)mac; // Suppress unused parameter warning
+        return true;
+    }
+
 public:
     // Publicly accessible constants
     static constexpr int MAX_PROBES = 3; /**< Max number of ARP probes before considering a primary MAC failed. */
@@ -151,6 +224,9 @@ public:
      * @param flap_detection_window Time window for detecting flaps.
      * @param max_flaps Maximum allowed flaps within the detection window before penalizing.
      * @param max_cache_size Maximum number of entries in the cache.
+     * @param conflict_pol Policy for handling ARP conflicts.
+     * @param garp_pol Policy for handling gratuitous ARP packets.
+     * @param gratuitous_arp_min_interval Minimum interval between gratuitous ARPs for the same IP.
      */
     explicit ARPCache(const mac_addr_t& dev_mac,
                       std::chrono::seconds reachable_time = std::chrono::seconds(300),
@@ -161,7 +237,10 @@ public:
                       std::chrono::seconds delay_duration = std::chrono::seconds(5),
                       std::chrono::seconds flap_detection_window = std::chrono::seconds(10), // New
                       int max_flaps = 3,                                                    // New
-                      size_t max_cache_size = 1024)
+                      size_t max_cache_size = 1024,
+                      ConflictPolicy conflict_pol = ConflictPolicy::UPDATE_EXISTING,
+                      GratuitousArpPolicy garp_pol = GratuitousArpPolicy::PROCESS,
+                      std::chrono::milliseconds gratuitous_arp_min_interval = std::chrono::milliseconds(1000))
         : device_mac_(dev_mac),
           reachable_time_sec_(reachable_time),
           stale_time_sec_(stale_time),
@@ -171,7 +250,10 @@ public:
           delay_duration_sec_(delay_duration),
           flap_detection_window_sec_(flap_detection_window), // Initialize
           max_flaps_allowed_(max_flaps),                     // Initialize
-          max_cache_size_(max_cache_size) {}
+          max_cache_size_(max_cache_size),
+          conflict_policy_(conflict_pol),
+          gratuitous_arp_policy_(garp_pol),
+          gratuitous_arp_min_interval_ms_(gratuitous_arp_min_interval) {}
 
     /**
      * @brief Adds a subnet configuration for Proxy ARP.
@@ -295,15 +377,146 @@ public:
         // Fallback, should ideally not be reached if all states are handled above
         return false;
     }
+
+    // --- Configuration Setters ---
+
+    /**
+     * @brief Sets the policy for handling IP address conflicts.
+     * @param policy The new conflict policy.
+     */
+    void set_conflict_policy(ConflictPolicy policy) {
+        conflict_policy_ = policy;
+    }
+
+    /**
+     * @brief Sets the policy for handling gratuitous ARP packets.
+     * @param policy The new gratuitous ARP policy.
+     */
+    void set_gratuitous_arp_policy(GratuitousArpPolicy policy) {
+        gratuitous_arp_policy_ = policy;
+    }
+
+    /**
+     * @brief Sets the minimum interval between processing gratuitous ARP packets for the same IP.
+     * @param interval The minimum interval. A value of zero disables rate limiting for new GARPs.
+     */
+    void set_gratuitous_arp_min_interval(std::chrono::milliseconds interval) {
+        gratuitous_arp_min_interval_ms_ = interval;
+    }
+
+    /**
+     * @brief Updates the device MAC address used for Proxy ARP.
+     * @param dev_mac The new device MAC address.
+     */
+    void set_device_mac(const mac_addr_t& dev_mac) {
+        device_mac_ = dev_mac;
+    }
+
+    /** @brief Sets the time an entry remains REACHABLE before becoming STALE. */
+    void set_reachable_time(std::chrono::seconds time) { reachable_time_sec_ = time; }
+
+    /** @brief Sets the time an entry remains STALE before transitioning to PROBE (or DELAY if configured). */
+    void set_stale_time(std::chrono::seconds time) { stale_time_sec_ = time; }
+
+    /** @brief Sets the base interval for re-probing INCOMPLETE/PROBE entries. */
+    void set_probe_retransmit_interval(std::chrono::seconds interval) { probe_retransmit_interval_sec_ = interval; }
+
+    /** @brief Sets the maximum interval for exponential backoff probing. */
+    void set_max_probe_backoff_interval(std::chrono::seconds interval) { max_probe_backoff_interval_sec_ = interval; }
+
+    /** @brief Sets the lifetime for entries in the FAILED state before being purged. */
+    void set_failed_entry_lifetime(std::chrono::seconds lifetime) { failed_entry_lifetime_sec_ = lifetime; }
+
+    /** @brief Sets the duration for the DELAY state before transitioning to PROBE. */
+    void set_delay_duration(std::chrono::seconds duration) { delay_duration_sec_ = duration; }
+
+    /** @brief Sets the time window for detecting MAC flaps. */
+    void set_flap_detection_window(std::chrono::seconds window) { flap_detection_window_sec_ = window; }
+
+    /** @brief Sets the maximum allowed MAC flaps within the detection window before penalizing. */
+    void set_max_flaps_allowed(int max_flaps) { max_flaps_allowed_ = max_flaps; }
+
+    /**
+     * @brief Sets the maximum number of entries in the cache.
+     * If the new size is smaller than the current number of entries, LRU entries will be evicted.
+     */
+    void set_max_cache_size(size_t size) {
+        max_cache_size_ = size;
+        if (size > 0 && cache_.size() > max_cache_size_) {
+            evictLRUEntries();
+        }
+    }
+
+    // --- Main ARP Cache Operations ---
     
     /**
      * @brief Adds or updates an ARP entry.
      * @param ip The IP address of the entry.
      * @param new_mac The MAC address corresponding to the IP.
+     * @param packet_type The type of ARP packet that triggered this entry update.
      */
-    void add_entry(uint32_t ip, const mac_addr_t& new_mac) {
+    void add_entry(uint32_t ip, const mac_addr_t& new_mac, ARPPacketType packet_type = ARPPacketType::UNKNOWN) {
+        auto current_time_for_processing = std::chrono::steady_clock::now(); // Time for GARP checks
+
+        // 1. Handle GratuitousArpPolicy::DROP_IF_CONFLICT
+        if (packet_type == ARPPacketType::GRATUITOUS_ANNOUNCEMENT &&
+            this->gratuitous_arp_policy_ == GratuitousArpPolicy::DROP_IF_CONFLICT) {
+            auto it_check_conflict = cache_.find(ip);
+            if (it_check_conflict != cache_.end() && it_check_conflict->second.mac != new_mac) {
+                bool existing_mac_is_valid = false;
+                for(uint8_t val : it_check_conflict->second.mac) if(val != 0) existing_mac_is_valid = true;
+
+                if (existing_mac_is_valid) {
+                     fprintf(stderr, "INFO: Gratuitous ARP Announcement for IP %u (MAC %02x:%02x:%02x:%02x:%02x:%02x) conflicts with existing MAC (%02x:%02x:%02x:%02x:%02x:%02x). Dropping due to DROP_IF_CONFLICT policy.\n",
+                             ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5],
+                             it_check_conflict->second.mac[0], it_check_conflict->second.mac[1], it_check_conflict->second.mac[2], it_check_conflict->second.mac[3], it_check_conflict->second.mac[4], it_check_conflict->second.mac[5]);
+                     this->log_ip_conflict(ip, it_check_conflict->second.mac, new_mac); // Log it formally as a conflict
+                     return; // Drop
+                }
+            }
+        }
+
+        // 2. Handle Rate Limiting for Gratuitous ARP
+        if (packet_type == ARPPacketType::GRATUITOUS_ANNOUNCEMENT &&
+            this->gratuitous_arp_policy_ == GratuitousArpPolicy::RATE_LIMIT_AND_PROCESS &&
+            gratuitous_arp_min_interval_ms_.count() > 0) {
+            auto last_seen_it = gratuitous_arp_last_seen_.find(ip);
+            if (last_seen_it != gratuitous_arp_last_seen_.end()) {
+                if (current_time_for_processing - last_seen_it->second < gratuitous_arp_min_interval_ms_) {
+                    fprintf(stderr, "INFO: Gratuitous ARP Announcement for IP %u (MAC %02x:%02x:%02x:%02x:%02x:%02x) dropped due to rate limiting.\n",
+                            ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
+                    return; // Drop the packet/update
+                }
+            }
+            // If not dropped by rate limit, the timestamp will be updated later
+        }
+
+        // 3. Handle Logging for Gratuitous ARP (LOG_AND_PROCESS)
+        if (packet_type == ARPPacketType::GRATUITOUS_ANNOUNCEMENT &&
+            this->gratuitous_arp_policy_ == GratuitousArpPolicy::LOG_AND_PROCESS) {
+            fprintf(stderr, "INFO: Processing Gratuitous ARP Announcement for IP %u with MAC %02x:%02x:%02x:%02x:%02x:%02x (LOG_AND_PROCESS policy).\n",
+                   ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
+        }
+
+        // Update last seen time for any processed Gratuitous ARP (not dropped by specific GARP policies above)
+        if (packet_type == ARPPacketType::GRATUITOUS_ANNOUNCEMENT) {
+            // This ensures that if it passed DROP_IF_CONFLICT and rate limit "too soon" check,
+            // its time is recorded for future rate limiting.
+            // current_time_for_processing is used here for consistency with checks above.
+            gratuitous_arp_last_seen_[ip] = current_time_for_processing;
+        }
+
+        // --- DHCP Snooping Validation Hook ---
+        if (!this->is_ip_mac_dhcp_validated(ip, new_mac)) {
+            fprintf(stderr, "WARNING: IP-MAC mapping for IP %u, MAC %02x:%02x:%02x:%02x:%02x:%02x failed DHCP snooping validation. Processing continues (no specific drop policy implemented for this yet).\n",
+                    ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
+            // Future: Could consult a policy here, e.g., if (dhcp_validation_policy_ == DROP_INVALID) return;
+        }
+        // --- End DHCP Snooping Validation Hook ---
+
+        // 4. Main add_entry logic (conflict detection, flap detection, etc.)
         auto it = cache_.find(ip);
-        auto current_time = std::chrono::steady_clock::now();
+        auto current_time = std::chrono::steady_clock::now(); // This is the main current_time for entry updates
         std::vector<mac_addr_t> existing_backups; // Keep existing backups
 
         if (it != cache_.end()) { // Entry exists
@@ -311,43 +524,63 @@ public:
             existing_backups = entry.backup_macs; // Preserve backups
 
             if (entry.mac != new_mac) { // MAC address has changed
-                this->log_ip_conflict(ip, entry.mac, new_mac); // Log the conflict
+                this->log_ip_conflict(ip, entry.mac, new_mac); // Always log
 
-                if (current_time - entry.last_mac_update_time < flap_detection_window_sec_) {
-                    if (entry.flap_count < 255) { // Prevent overflow
-                        entry.flap_count++;
+                mac_addr_t mac_to_potentially_update_to = new_mac;
+                bool should_update_mac = false;
+
+                switch (this->conflict_policy_) {
+                    case ConflictPolicy::DROP_NEW:
+                        // Logged already. Do nothing further. Existing MAC is kept.
+                        should_update_mac = false;
+                        break;
+                    case ConflictPolicy::ALERT_SYSTEM:
+                        this->trigger_alert(ip, entry.mac, mac_to_potentially_update_to);
+                        // Defaulting to alert AND update.
+                        should_update_mac = true;
+                        break;
+                    case ConflictPolicy::LOG_ONLY:
+                        // Logged already. Policy is to only log, not change.
+                        should_update_mac = false;
+                        break;
+                    case ConflictPolicy::UPDATE_EXISTING:
+                    default: // Default to update
+                        should_update_mac = true;
+                        break;
+                }
+
+                if (should_update_mac) {
+                    // Flap detection logic
+                    if (current_time - entry.last_mac_update_time < flap_detection_window_sec_) {
+                        if (entry.flap_count < 255) {
+                            entry.flap_count++;
+                        }
+                    } else {
+                        entry.flap_count = 1;
                     }
-                } else {
-                    entry.flap_count = 1; // Reset flap count if change is outside the window
+                    entry.last_mac_update_time = current_time;
+
+                    entry.mac = mac_to_potentially_update_to; // Update to the new MAC
+                    entry.timestamp = current_time;
+                    entry.probe_count = 0;
+                    entry.backoff_exponent = 0;
+                    while (!entry.pending_packets.empty()) entry.pending_packets.pop();
+
+                    if (entry.flap_count >= max_flaps_allowed_) {
+                        entry.state = ARPState::STALE;
+                        fprintf(stderr, "INFO: Flapping detected for IP %u (count %u). Setting to STALE with new MAC to force re-verify under conflict policy UPDATE_EXISTING/ALERT_SYSTEM.\n", ip, entry.flap_count);
+                    } else {
+                        entry.state = ARPState::REACHABLE;
+                    }
                 }
-                entry.last_mac_update_time = current_time;
-
-                entry.mac = new_mac; // Update to the new MAC
-                entry.timestamp = current_time;
-                entry.probe_count = 0;
-                entry.backoff_exponent = 0;
-                // entry.pending_packets queue should be cleared, which happens if we re-assign 'entry' or clear it.
-                // If just modifying members, ensure pending_packets are handled if necessary.
-                // The original code re-assigned cache_[ip], effectively clearing queue. Let's ensure that.
-                while (!entry.pending_packets.empty()) entry.pending_packets.pop();
-
-
-                if (entry.flap_count >= max_flaps_allowed_) {
-                    entry.state = ARPState::STALE; // Penalize by setting to STALE
-                    fprintf(stderr, "INFO: Flapping detected for IP %u (count %u). Setting to STALE with new MAC to force re-verify.\n", ip, entry.flap_count);
-                } else {
-                    entry.state = ARPState::REACHABLE;
-                }
+                // If should_update_mac is false, the old MAC and its state are preserved.
+                // (e.g. for LOG_ONLY or DROP_NEW policies)
+                // The timestamp of the entry is not updated in this case, and flap count for the *existing* MAC is not affected by this specific event.
             } else { // MAC is the same, just refresh to REACHABLE
                 entry.state = ARPState::REACHABLE;
                 entry.timestamp = current_time;
                 entry.probe_count = 0; // Reset probe activity trackers
                 entry.backoff_exponent = 0;
-                // Optionally reset flap_count if MAC is same and confirmed:
-                // entry.flap_count = 0;
-                // Resetting flap_count here means any prior flaps are forgiven on a successful re-confirmation of the same MAC.
-                // If we want flaps to only decay over time (i.e., only reset if last_mac_update_time is old), then don't reset flap_count here.
-                // Current requirement implies reset only if outside window or penalty.
                 // For a non-changing MAC, it makes sense to reset flap_count to 0 as it's stable.
                 entry.flap_count = 0; // Explicitly reset on same MAC confirmation
                 entry.last_mac_update_time = current_time; // Also update time to solidify this state
@@ -488,6 +721,9 @@ public:
                     if (age_duration >= failed_entry_lifetime_sec_) {
                         uint32_t purged_ip = it->first;
                         it = cache_.erase(it);
+                        if (gratuitous_arp_last_seen_.count(purged_ip)) {
+                            gratuitous_arp_last_seen_.erase(purged_ip);
+                        }
                         removeFromLRUTracking(purged_ip);
                         entry_erased = true;
                         fprintf(stderr, "INFO: Purged FAILED entry for IP %u after lifetime.\n", purged_ip);
@@ -509,6 +745,7 @@ public:
         cache_.clear(); // Removes all entries from the unordered_map
         lru_tracker_.clear();
         ip_to_lru_iterator_.clear();
-        fprintf(stderr, "INFO: ARP cache purged due to link-down event, including LRU tracking.\n");
+        gratuitous_arp_last_seen_.clear(); // Clear GARP tracking on link down
+        fprintf(stderr, "INFO: ARP cache purged due to link-down event, including LRU tracking and GARP history.\n");
     }
 };
