@@ -45,6 +45,49 @@ int main() {
     
     skipList.display();
     skipList.printValues();
+
+    std::cout << "\n\n=== Testing SkipList<std::string> ===" << std::endl;
+    SkipList<std::string> stringSkipList;
+
+    std::cout << "--- Inserting strings ---" << std::endl;
+    stringSkipList.insert("apple");
+    stringSkipList.insert("banana");
+    stringSkipList.insert("cherry");
+    stringSkipList.insert("date");
+    stringSkipList.insert("fig");
+
+    stringSkipList.display();
+    stringSkipList.printValues();
+
+    std::cout << "--- Search operations (string) ---" << std::endl;
+    std::cout << "Search 'cherry': " << (stringSkipList.search("cherry") ? "Found" : "Not found") << std::endl;
+    std::cout << "Search 'grape': " << (stringSkipList.search("grape") ? "Found" : "Not found") << std::endl;
+
+    std::cout << "--- String skip list size ---" << std::endl;
+    std::cout << "Size: " << stringSkipList.size() << std::endl;
+
+    std::cout << "--- K-th element (string) ---" << std::endl;
+    try {
+        std::cout << "1st smallest (0-indexed): " << stringSkipList.kthElement(1) << std::endl; // Should be banana
+    } catch (const std::exception& e) {
+        std::cout << "Error: " << e.what() << std::endl;
+    }
+
+    std::cout << "--- Range query ['banana', 'fig'] (string) ---" << std::endl;
+    auto stringRangeResult = stringSkipList.rangeQuery("banana", "fig");
+    std::cout << "Values in range ['banana', 'fig']: ";
+    for (const std::string& val : stringRangeResult) {
+        std::cout << "\"" << val << "\" ";
+    }
+    std::cout << std::endl;
+
+
+    std::cout << "--- Deletion operations (string) ---" << std::endl;
+    stringSkipList.remove("banana");
+    stringSkipList.remove("grape"); // Should fail
+
+    stringSkipList.display();
+    stringSkipList.printValues();
     
     return 0;
 }
