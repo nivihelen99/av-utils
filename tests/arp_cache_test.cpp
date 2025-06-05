@@ -112,96 +112,73 @@ TEST(ARPCacheTest, FastFailoverInLookupIfStale) {
 
     ASSERT_TRUE(cache.lookup(ip1, mac_out) && mac_out == mac1_primary);
 
-    // To simulate STALE for lookup-based failover, we'd ideally manipulate the entry's state directly.
-    // Since we can't, this test case relies on the fact that lookup() itself promotes
-    // if the state IS STALE/PROBE/DELAY. The actual transition to STALE is via age_entries().
-    // This test is more about "if it were stale and had a backup, lookup would use it".
-    // The logic `if (entry.state == STALE || entry.state == PROBE || entry.state == DELAY)`
-    // in `lookup` is what we are verifying conceptually.
-
-    // For a more concrete test of this path, one would need to:
-    // 1. Add entry.
-    // 2. Call `age_entries` enough times or wait for `REACHABLE_TIME` to pass to make it STALE.
-    //    (This requires control over time or knowledge of REACHABLE_TIME value which is private const).
-    //    Let's assume REACHABLE_TIME is very short for testing or we can inject time.
-    //    Since ARPCache::REACHABLE_TIME is 300s, this isn't easy to test quickly.
-    //    The failover logic in `lookup` is tested, but getting it into STALE state reliably is the challenge.
-
-    // A direct call to `age_entries` won't make it STALE unless time has passed.
-    // This test remains limited in its ability to force the STALE state for the lookup check.
-    // The actual failover print "INFO: Failover for IP..." happens in lookup if state is already bad.
     GTEST_LOG_(INFO) << "FastFailoverInLookupIfStale test is conceptual for forcing STALE state.";
 }
 
 
 TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
     mac_addr_t dev_mac = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
-    MockARPCache cache(dev_mac);
+    MockARPCache cache(dev_mac); // Use MockARPCache for expectations
 
-    uint32_t ip1 = 0xC0A80102;
-    mac_addr_t mac1_primary = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x11};
-    mac_addr_t mac2_backup = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x12};
+    uint32_t ip1 = 0xC0A80102; // Using a different IP to avoid interference from other tests
+    mac_addr_t mac1_primary_dummy = {}; // Will be written to by lookup, actual value not critical for this test setup
+    mac_addr_t mac1_backup  = {0x00, 0x11, 0x22, 0x33, 0x44, 0xBB};
     mac_addr_t mac_out;
 
-    // To test age_entries failover, an entry must be INCOMPLETE or PROBE and fail MAX_PROBES.
-    // `add_entry` sets it to REACHABLE.
-    // We need to get it to INCOMPLETE first. A lookup for a non-existent item does this.
+    // Add backup MAC. If ip1 doesn't have an entry yet, add_backup_mac handles it gracefully.
+    cache.add_backup_mac(ip1, mac1_backup);
 
-    // Initial lookup for ip1 (not present) will make it INCOMPLETE and send 1st ARP.
+    // 1. Initial lookup for a non-existent IP. This should:
+    //    - Create an INCOMPLETE entry for ip1.
+    //    - Call send_arp_request once for this initial attempt.
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(1);
-    ASSERT_FALSE(cache.lookup(ip1, mac_out));
+    ASSERT_FALSE(cache.lookup(ip1, mac1_primary_dummy));
     testing::Mock::VerifyAndClearExpectations(&cache);
 
-    // Now, add backup MACs to this INCOMPLETE entry.
-    // The primary MAC in the INCOMPLETE entry is currently zeroed by lookup's add.
-    // We should ideally set a specific primary MAC that is failing.
-    // For this test, let's assume the INCOMPLETE entry for ip1 exists.
-    // We'll then add backups. The failover will use the first backup.
-    // This test simulates a scenario where initial resolution for ip1 failed,
-    // and then backups were added.
-    // A more realistic test would involve an entry that *was* REACHABLE, became STALE, then PROBE.
+    // Ensure no IP conflict logs are expected during probing of this entry
+    EXPECT_CALL(cache, log_ip_conflict(testing::_, testing::_, testing::_)).Times(0);
 
-    // Let's re-add with a specific primary that will "fail"
-    cache.add_entry(ip1, mac1_primary); // Now it's REACHABLE
-    cache.add_backup_mac(ip1, mac2_backup);
+    // 2. Simulate subsequent probes via age_entries.
+    //    The entry for ip1 is now INCOMPLETE. ARPCache::MAX_PROBES is the total number of probes.
+    //    One probe was already sent by the initial lookup.
+    //    So, expect (ARPCache::MAX_PROBES - 1) more calls to send_arp_request via age_entries.
+    int remaining_probes = ARPCache::MAX_PROBES - 1;
+    if (remaining_probes < 0) remaining_probes = 0;
 
-    // Force it to STALE then INCOMPLETE for probing (conceptual without state setters)
-    // Forcing to STALE: (Assume we can wait for ARPCache::REACHABLE_TIME)
-    // Then, a lookup would make it INCOMPLETE if no backups were used by lookup's own failover.
-    // To simplify and focus on age_entries:
-    // We need to manually simulate it being INCOMPLETE and having sent some probes.
-    // This is where test helper functions in ARPCache would be invaluable.
-    // e.g. cache.force_set_state_and_probes(ip1, ARPState::INCOMPLETE, 0);
-
-    // Simulate repeated probe failures:
-    // Expect MAX_PROBES send_arp_request calls for the failing mac1_primary.
-    // The current `age_entries` has age_duration check for retransmission.
-    // We call age_entries multiple times to simulate timeouts and re-probes.
-    EXPECT_CALL(cache, send_arp_request(ip1)).Times(ARPCache::MAX_PROBES);
-    for (int i = 0; i < ARPCache::MAX_PROBES; ++i) {
-        // To ensure the age_duration condition is met for re-probe:
-        // We would need to advance mock time if we had a time framework.
-        // Or, call age_entries, then wait 1s, then call again.
-        // For now, we assume each call to age_entries with an INCOMPLETE entry
-        // that has timed out will increment probe_count and resend.
-        // This requires the entry to be made INCOMPLETE first.
-        // Let's assume lookup after a "long time" makes it INCOMPLETE.
-        if (i == 0) { // After first add_entry, it's REACHABLE.
-                      // A lookup should not send ARP. To make it probe, it must be STALE first.
-                      // This test setup is still problematic for full end-to-end MAX_PROBES failure.
-        }
-        // To make it fail, the state must be INCOMPLETE or PROBE.
-        // The provided age_entries logic might need refinement for this test.
-        // The original test for this in ARPCache was:
-        // cache.force_set_state(ip1, ARPState::INCOMPLETE);
-        // cache.force_set_probe_count(ip1, MAX_PROBES);
-        // cache.age_entries(); // This should trigger failover
-        // ASSERT_TRUE(cache.lookup(ip1, mac_out));
-        // ASSERT_EQ(mac_out, mac2_backup);
+    if (remaining_probes > 0) {
+        EXPECT_CALL(cache, send_arp_request(ip1)).Times(remaining_probes);
     }
-    // cache.age_entries(); // The call that would exceed MAX_PROBES and trigger failover
+    // else if MAX_PROBES is 1, no more calls from age_entries before failover/erase.
 
-    GTEST_LOG_(INFO) << "FailoverInAgeEntries test is highly conceptual and needs ARPCache testability features (state setters, time control) to robustly verify MAX_PROBES failover.";
+    for (int i = 0; i < remaining_probes; ++i) {
+        // This loop assumes that each call to age_entries where the entry is INCOMPLETE
+        // and its internal timer would have expired (age > 1s in current ARPCache logic)
+        // will trigger one send_arp_request. This is an approximation without mock time.
+        cache.age_entries();
+    }
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    // 3. The next call to age_entries.
+    //    At this stage, probe_count should be ARPCache::MAX_PROBES (1 from lookup + MAX_PROBES-1 from loop).
+    //    This call to age_entries, finding the entry INCOMPLETE and probe_count at MAX_PROBES (or having just exceeded it),
+    //    should trigger the failover logic because a backup MAC exists.
+    //    No more send_arp_request calls for ip1's original (non-existent/failed) primary MAC are expected.
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    // The INFO log for failover is directly in ARPCache::age_entries via fprintf.
+    // If it were via a virtual log_failover method, we could mock and expect it.
+    // std::cerr << "GTEST_NOTE: Expecting an INFO log for failover (ARP age_entries) on next age_entries() call." << std::endl;
+    cache.age_entries();
+    testing::Mock::VerifyAndClearExpectations(&cache);
+
+    // 4. Verify failover: Looking up ip1 should now yield the backup MAC and be REACHABLE.
+    //    The lookup itself should not trigger send_arp_request now.
+    EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
+    ASSERT_TRUE(cache.lookup(ip1, mac_out)) << "Lookup failed after expected failover.";
+    ASSERT_EQ(mac_out, mac1_backup) << "MAC address did not match backup MAC after failover.";
+
+    // Optional: Verify the state is REACHABLE (needs a getter or friend class for ARPEntry state)
+    // EXPECT_EQ(get_arp_entry_state_for_test(cache, ip1), ARPCache::ARPState::REACHABLE);
+    testing::Mock::VerifyAndClearExpectations(&cache);
 }
 
 // Note: Some tests above are marked as conceptual or requiring ARPCache modifications

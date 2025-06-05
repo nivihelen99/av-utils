@@ -48,8 +48,7 @@ private:
     };
     std::vector<ProxySubnet> proxy_subnets_; /**< List of subnets for which Proxy ARP is enabled. */
 
-    static constexpr int MAX_PROBES = 3; /**< Max number of ARP probes before considering a primary MAC failed. */
-    static constexpr std::chrono::seconds REACHABLE_TIME{300}; /**< Time an entry remains REACHABLE before becoming STALE. */
+    // Note: MAX_PROBES and REACHABLE_TIME moved to public section for external access (e.g., tests)
 
 protected: // Changed to protected for testability
     /**
@@ -84,6 +83,13 @@ public:
      * @param dev_mac The MAC address of the device this cache is running on.
      */
     explicit ARPCache(const mac_addr_t& dev_mac) : device_mac_(dev_mac) {}
+
+    // Publicly accessible constants
+    static constexpr int MAX_PROBES = 3; /**< Max number of ARP probes before considering a primary MAC failed. */
+    static constexpr std::chrono::seconds REACHABLE_TIME{300}; /**< Time an entry remains REACHABLE before becoming STALE. */
+    // Example if a probe timeout constant was needed publicly:
+    // static constexpr std::chrono::seconds PROBE_RETRANSMIT_TIMEOUT{1};
+
 
     /**
      * @brief Adds a subnet configuration for Proxy ARP.

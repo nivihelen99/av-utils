@@ -30,7 +30,9 @@ add_executable(run_tests
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
 # Link GTest to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+# GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
+# GTest::gmock should provide the necessary gmock functionalities.
 
 # Discover and add tests to CTest
 include(GoogleTest)

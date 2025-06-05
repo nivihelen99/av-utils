@@ -38,25 +38,44 @@ ipv6_addr_t generate_ll_from_mac_for_test(const mac_addr_t& mac) {
 TEST(NDCacheTest, LinkLocalAndDAD) {
     mac_addr_t device_mac = {0x00, 0x00, 0x00, 0x11, 0x22, 0x33};
     MockNDCache cache(device_mac);
+    ipv6_addr_t link_local_addr = cache.get_link_local_address();
 
-    EXPECT_CALL(cache, send_neighbor_solicitation(testing::_, testing::_, nullptr, true))
-        .Times(testing::AtLeast(1)); // DAD NS for link-local
-    cache.age_entries();
+    // The constructor calls initiate_link_local_dad -> start_dad.
+    // DAD logic in age_entries sends NS if now >= next_probe_time.
+    // start_dad initializes next_probe_time to std::chrono::steady_clock::now().
 
-    // Simulate DAD success
-    // Expect further DAD NS up to MAX_MULTICAST_SOLICIT times.
-    // The first one is caught above, so AtLeast(0) for the loop, or more specific count if needed.
-    EXPECT_CALL(cache, send_neighbor_solicitation(testing::_, testing::_, nullptr, true))
-        .Times(testing::AtMost(NDCache::MAX_MULTICAST_SOLICIT -1)); // Remaining probes
+    auto test_time = std::chrono::steady_clock::now();
+
+    // Expect MAX_MULTICAST_SOLICIT calls for DAD NS in total.
+    // The source IP for DAD NS should be the unspecified address.
+    ipv6_addr_t unspecified_addr;
+    unspecified_addr.fill(0);
+
+    EXPECT_CALL(cache, send_neighbor_solicitation(link_local_addr, unspecified_addr, nullptr, true))
+        .Times(NDCache::MAX_MULTICAST_SOLICIT);
+
     for (int i = 0; i < NDCache::MAX_MULTICAST_SOLICIT; ++i) {
-        cache.age_entries();
-        if(cache.is_link_local_dad_completed()) break; // Exit if DAD completes early (e.g., if timeout logic is very fast in test)
+        // Ensure test_time is at or after the expected next_probe_time for DAD logic.
+        // The first call to age_entries should trigger the first probe immediately
+        // as next_probe_time was set to 'now' in start_dad.
+        cache.age_entries(test_time);
+        ASSERT_FALSE(cache.is_link_local_dad_completed()) << "DAD completed prematurely after probe " << i + 1;
+        // Advance time past the DAD retransmission timer for the next iteration
+        test_time += std::chrono::milliseconds(NDCache::RETRANS_TIMER) + std::chrono::milliseconds(10);
     }
-    // One more age_entries call to ensure the DAD success is processed if it timed out exactly on last probe
-    if (!cache.is_link_local_dad_completed()) {
-        cache.age_entries();
-    }
-    ASSERT_TRUE(cache.is_link_local_dad_completed());
+
+    // One more call to age_entries after all probes have been sent.
+    // This call should process the DAD success (timeout without conflict).
+    cache.age_entries(test_time);
+
+    ASSERT_TRUE(cache.is_link_local_dad_completed()) << "DAD for link-local address did not complete successfully.";
+
+    // Optional: Verify that the link-local address might have an entry in the cache,
+    // though DAD success doesn't necessarily mean it's added to the main neighbor cache
+    // unless it's used in communication. The flag is the primary outcome.
+    // mac_addr_t mac_out;
+    // bool found = cache.lookup(link_local_addr, mac_out); // This might create an INCOMPLETE entry if not there.
+
     testing::Mock::VerifyAndClearExpectations(&cache);
 }
 
