@@ -8,6 +8,30 @@
 #include <string> // Added for std::string
 #include <list>   // For MemoryPool's free list
 #include <memory> // For std::unique_ptr
+#include <iterator> // For std::forward_iterator_tag and iterator traits
+#include <cstddef>  // For std::ptrdiff_t
+#include <utility> // For std::pair
+#include <type_traits> // For std::is_same, std::decay_t, etc.
+
+// Type trait to check if a type is std::pair
+template <typename T>
+struct is_std_pair : std::false_type {};
+
+template <typename T1, typename T2>
+struct is_std_pair<std::pair<T1, T2>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_std_pair_v = is_std_pair<std::decay_t<T>>::value;
+
+// Helper to get the value to compare (key if pair, else value itself)
+template<typename U>
+constexpr decltype(auto) get_comparable_value(const U& val) {
+    if constexpr (is_std_pair_v<U>) {
+        return val.first; // Compare based on key
+    } else {
+        return val; // Compare directly
+    }
+}
 
 // Forward declarations for specializations
 // template<> class SkipListNode<int>; // Will be specialized later if needed, not strictly for finger
@@ -53,8 +77,160 @@ template<typename T>
 class SkipList {
 public: // Making thread_local_finger public for easier definition outside if needed by some compilers
         // or due to template instantiation rules. Can be private if definition is robustly handled.
+
+    // thread_local_finger serves as a thread-local hint to a recently accessed node,
+    // typically the predecessor of the last inserted, removed, or searched-for element.
+    // Its purpose is to potentially speed up subsequent operations by allowing searches
+    // to start closer to the target value, rather than always from the list header.
+    // The effectiveness of this heuristic can vary based on access patterns.
+    // Importantly, due to concurrent operations and the absence of Safe Memory
+    // Reclamation (SMR) in this implementation, the node pointed to by thread_local_finger
+    // might be deleted and its memory reused (e.g., reconstructed as a "dummy" node
+    // by the MemoryPool). Operations using the finger (insert, search, remove) must
+    // therefore be robust against such changes. They typically achieve this by
+    // re-validating the finger's state or by always being prepared to fall back to
+    // a full search from the header if the finger is not helpful or valid.
     thread_local static SkipListNode<T>* thread_local_finger;
+
+public:
+    // Forward iterator for SkipList
+    class iterator {
+    public:
+        // Iterator traits
+        using iterator_category = std::forward_iterator_tag;
+        using value_type        = T;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = T*;
+        using reference         = T&;
+
+        SkipListNode<T>* current_node; // Made public for const_iterator conversion and simplicity
+
+        explicit iterator(SkipListNode<T>* node) : current_node(node) {}
+
+        reference operator*() const {
+            return current_node->value;
+        }
+        pointer operator->() const {
+            return &(current_node->value);
+        }
+
+        // Pre-increment
+        iterator& operator++() {
+            if (current_node) {
+                current_node = current_node->forward[0].load(std::memory_order_acquire);
+            }
+            return *this;
+        }
+
+        // Post-increment
+        iterator operator++(int) {
+            iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const iterator& other) const {
+            return current_node == other.current_node;
+        }
+        bool operator!=(const iterator& other) const {
+            return current_node != other.current_node;
+        }
+    };
+
+    // Const forward iterator for SkipList
+    class const_iterator {
+    public:
+        // Iterator traits
+        using iterator_category = std::forward_iterator_tag;
+        using value_type        = const T; // Note: const T
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = const T*; // Note: const T*
+        using reference         = const T&;  // Note: const T&
+
+        SkipListNode<T>* current_node; // Made public for simplicity
+
+        explicit const_iterator(SkipListNode<T>* node) : current_node(node) {}
+
+        // Constructor from non-const iterator
+        const_iterator(const iterator& other) : current_node(other.current_node) {}
+
+        reference operator*() const {
+            return current_node->value;
+        }
+        pointer operator->() const {
+            return &(current_node->value);
+        }
+
+        // Pre-increment
+        const_iterator& operator++() {
+            if (current_node) {
+                current_node = current_node->forward[0].load(std::memory_order_acquire);
+            }
+            return *this;
+        }
+
+        // Post-increment
+        const_iterator operator++(int) {
+            const_iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        bool operator==(const const_iterator& other) const {
+            return current_node == other.current_node;
+        }
+        bool operator!=(const const_iterator& other) const {
+            return current_node != other.current_node;
+        }
+    };
+
+    iterator begin() {
+        return iterator(header->forward[0].load(std::memory_order_acquire));
+    }
+    iterator end() {
+        return iterator(nullptr);
+    }
+    const_iterator begin() const {
+        return const_iterator(header->forward[0].load(std::memory_order_acquire));
+    }
+    const_iterator end() const {
+        return const_iterator(nullptr);
+    }
+    const_iterator cbegin() const {
+        return const_iterator(header->forward[0].load(std::memory_order_acquire));
+    }
+    const_iterator cend() const {
+        return const_iterator(nullptr);
+    }
+
 private:
+    // The MemoryPool manages memory for SkipListNodes in blocks to reduce overhead
+    // of individual allocations and to enable lock-free node reuse.
+    // Overall strategy:
+    // 1. Allocation in Blocks: When new nodes are needed and the free list is empty,
+    //    the pool allocates a large block of memory that can hold multiple SkipListNodes.
+    //    These raw memory slots are then prepared and added to a global lock-free stack.
+    // 2. Lock-Free Stack for Freed Nodes: Freed nodes are returned to `atomic_free_list_head_`,
+    //    which acts as a global lock-free stack. This allows threads to deallocate and
+    //    allocate nodes with minimal contention.
+    // 3. Dummy Node Reconstruction: Before a node is pushed onto the free list (after its
+    //    `~SkipListNode()` is called by `deallocate`), it is reconstructed via placement new
+    //    as a "dummy" node. This dummy node is typically initialized with a default T value
+    //    and always at level 0. This crucial step ensures that its `forward[0]` pointer
+    //    is valid and can be safely used by the lock-free stack mechanism to link free nodes.
+    // 4. Allocation from Pool: When a node is requested via `allocate()`:
+    //    a. It first tries a thread-local cache (if implemented, currently a placeholder).
+    //    b. Then, it attempts to pop a node from the global `atomic_free_list_head_`.
+    //    c. If a node is obtained (which was a "dummy" node), its destructor (`~SkipListNode()`)
+    //       is called to clean up the dummy state (e.g., its minimal forward array).
+    //    d. Then, placement new is used again to construct the actual `SkipListNode` with the
+    //       user-specified value and level onto that same memory location.
+    // 5. SMR Implication: This strategy of immediate reuse and altering the node's structure
+    //    (value, level, forward pointers) is highly efficient but is the primary reason why
+    //    a Safe Memory Reclamation (SMR) mechanism (like Hazard Pointers or Epoch-Based
+    //    Reclamation) is critical for the main skip list operations (insert, remove, search).
+    //    Without SMR, other threads might access a node that has been deallocated and
+    //    repurposed, leading to use-after-free errors or data corruption.
     class MemoryPool {
     private:
         // Helper to access thread-local cache
@@ -435,6 +611,7 @@ private:
             SkipListNode<T>* block_start_ptr = blocks_.back().get();
             for (size_t i = 0; i < BLOCK_SIZE; ++i) {
                 SkipListNode<T>* node_in_block = &block_start_ptr[i];
+                // Note: If T is std::pair<const Key, Value>, T{} implies Key and Value must be default-constructible.
                 new (node_in_block) SkipListNode<T>(T{}, 0); // Placement new with level 0 (dummy node)
                 // Now push this dummy node to atomic_free_list_head_
                 // Its forward[0] is used as the 'next' pointer in the free list stack.
@@ -467,9 +644,16 @@ private:
 
             node->~SkipListNode<T>(); // Call destructor for the actual SkipListNode object, freeing its forward array.
 
-            // Re-construct as a "dummy" node (level 0) before adding to free list.
+            // Re-construct as a "dummy" node (level 0, default T value) before adding to the lock-free list.
+            // This strategy prepares the node for the free list by ensuring its `forward[0]` can be
+            // reliably used as a 'next' pointer for the stack-like free list.
+            // However, this immediate reuse and alteration of the node's state (level, value, forward array structure)
+            // is precisely what necessitates a Safe Memory Reclamation (SMR) mechanism for the main skip list
+            // operations (insert, remove, search). Without SMR, other threads might still be trying to access
+            // the node based on its old state, leading to use-after-free or data corruption.
             // This ensures it has a valid (minimal) forward array for the free list's next pointer.
             try {
+                // Note: If T is std::pair<const Key, Value>, T{} implies Key and Value must be default-constructible.
                 new (node) SkipListNode<T>(T{}, 0); // Placement new: construct dummy node for free list
             } catch (const std::bad_alloc& e) {
                 // If construction of dummy node fails (e.g., allocation of its minimal forward array),
@@ -496,13 +680,10 @@ private:
     static const int MAX_LEVEL = 16; // Max level for skip list
     SkipListNode<T>* header;
     std::atomic<int> currentLevel; // Made currentLevel atomic
-    std::mt19937 rng;
-    std::uniform_real_distribution<double> dist;
-    std::mutex random_mutex; // Mutex for protecting random number generation
     MemoryPool memory_pool_; // Added memory pool instance
 
 public:
-    SkipList() : currentLevel(0), rng(std::random_device{}()), dist(0.0, 1.0) {
+    SkipList() : currentLevel(0) {
         // Header node is allocated directly, not from the pool,
         // as its lifetime is tied to SkipList and it's special.
         header = new SkipListNode<T>(T{}, MAX_LEVEL);
@@ -522,8 +703,30 @@ public:
 
     // Generate random level for new node (geometric distribution)
     int randomLevel() {
-        std::lock_guard<std::mutex> lock(random_mutex); // Protect RNG usage
+        // Uses thread-local static random number generator and distribution.
+        // No mutex needed as each thread has its own RNG state.
         int level = 0;
+        // Initialize on first use per thread if not already.
+        // Check if rng_ and dist_ need explicit initialization here or if class-level init is enough.
+        // For thread_local static members, initialization happens before first use in a thread.
+        // If default constructor of mt19937 is not seeded, or if dist is not set, it's an issue.
+        // The prompt implies direct initialization:
+        // thread_local static std::mt19937 rng{std::random_device{}()};
+        // thread_local static std::uniform_real_distribution<double> dist{0.0, 1.0};
+        // These would need to be defined outside if not C++17 inline, or as function-local statics.
+        // Let's try defining them as requested, assuming compiler support.
+        // If they are declared as above (rng_tls_generator_, dist_tls_distribution_),
+        // they need to be defined outside the class.
+
+        // Re-evaluating based on prompt: "replace ... with:"
+        // This means the definitions should be directly where the old ones were, or similar scope.
+        // The prompt showed them as if they are *inside the method*.
+        // Let's try that approach first, as function-local static thread_local.
+        // This is the most common and robust pattern for thread-local RNGs.
+
+        thread_local static std::mt19937 rng{std::random_device{}()};
+        thread_local static std::uniform_real_distribution<double> dist{0.0, 1.0};
+
         while (dist(rng) < 0.5 && level < MAX_LEVEL) {
             level++;
         }
@@ -552,19 +755,19 @@ public:
         // might therefore read from this dummy node. This is safe from crashes (no dangling pointers)
         // but means the heuristic might use T{} or level 0 for its decision.
         // The subsequent traversal logic, using atomic operations, will always find the correct path.
-        if (finger_candidate != header && finger_candidate->value < value) {
+        if (finger_candidate != header && get_comparable_value(finger_candidate->value) < get_comparable_value(value)) {
             // Finger is valid, not header, and its value is less than the target: potential start from finger.
             current_node = finger_candidate;
             // Start search from the finger's level, capped by the list's current max level.
             search_start_level = std::min(localCurrentLevel, finger_candidate->node_level);
         } else if (finger_candidate != header &&
-                   (!(finger_candidate->value < value) && !(finger_candidate->value == value))) { // i.e., finger_candidate->value > value
+                   get_comparable_value(finger_candidate->value) > get_comparable_value(value)) { // Simplified from (!(A<B) && !(A==B))
             // Finger is valid, but its value is greater than the target: finger is not useful. Start from header.
             // Optionally, one could reset thread_local_finger = header; here if this case indicates a significant search jump.
             current_node = header;
             search_start_level = localCurrentLevel;
         } else {
-            // Finger is header, or finger's value is equal to target (in which case starting from header is fine for insert),
+            // Finger is header, or finger's value is equal to target (checked with get_comparable_value implicitly by falling through),
             // or some other edge case: default to starting from header.
             current_node = header;
             search_start_level = localCurrentLevel;
@@ -574,7 +777,7 @@ public:
         // Traverse from search_start_level down to 0
         for (int i = search_start_level; i >= 0; i--) {
             SkipListNode<T>* next_node = current_node->forward[i].load(std::memory_order_acquire);
-            while (next_node != nullptr && next_node->value < value) {
+            while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(value)) {
                 current_node = next_node;
                 next_node = current_node->forward[i].load(std::memory_order_acquire);
             }
@@ -591,7 +794,7 @@ public:
                  // Only fill if not already better populated by finger path (unlikely for higher levels)
                 if (update[i] == nullptr || update[i] == finger_candidate ) {
                     SkipListNode<T>* next_node = current_header_scan->forward[i].load(std::memory_order_acquire);
-                    while (next_node != nullptr && next_node->value < value) {
+                    while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(value)) {
                         current_header_scan = next_node;
                         next_node = current_header_scan->forward[i].load(std::memory_order_acquire);
                     }
@@ -610,7 +813,7 @@ public:
         SkipListNode<T>* current_val_check_node = update[0]->forward[0].load(std::memory_order_acquire);
 
         // If value doesn't exist, insert it
-        if (current_val_check_node == nullptr || current_val_check_node->value != value) {
+        if (current_val_check_node == nullptr || get_comparable_value(current_val_check_node->value) != get_comparable_value(value)) {
             int newLevel = randomLevel(); // This now uses the mutex
 
             if (newLevel > localCurrentLevel) {
@@ -681,17 +884,17 @@ public:
 
         // Finger usage notes from insert() apply here too regarding concurrent deletion
         // and reading from a "dummy" node.
-        if (finger_candidate != header && finger_candidate->value < value) {
+        if (finger_candidate != header && get_comparable_value(finger_candidate->value) < get_comparable_value(value)) {
             current_search_node = finger_candidate;
             start_level = std::min(localCurrentLevel, finger_candidate->node_level);
         } else if (finger_candidate != header &&
-                   (!(finger_candidate->value < value) && !(finger_candidate->value == value))) { // finger_candidate->value > value
+                   get_comparable_value(finger_candidate->value) > get_comparable_value(value)) { // Simplified from (!(A<B) && !(A==B))
             // Value is less than finger's value, finger not useful. Reset finger and start from header.
             SkipList<T>::thread_local_finger = header; // Resetting finger as it's significantly off.
             current_search_node = header;
             start_level = localCurrentLevel;
         } else {
-            // Finger is header, or finger_candidate->value == value. Start from header.
+            // Finger is header, or finger's value is equal to target. Start from header.
             current_search_node = header;
             start_level = localCurrentLevel;
         }
@@ -701,7 +904,7 @@ public:
         // Start from determined start_level and go down
         for (int i = start_level; i >= 0; i--) {
             SkipListNode<T>* next_node = current_search_node->forward[i].load(std::memory_order_acquire);
-            while (next_node != nullptr && next_node->value < value) {
+            while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(value)) {
                 current_search_node = next_node;
                 next_node = current_search_node->forward[i].load(std::memory_order_acquire);
             }
@@ -721,7 +924,7 @@ public:
         // Update finger to the predecessor found at level 0 from the search path.
         SkipList<T>::thread_local_finger = predecessor_at_level0;
 
-        return (found_node != nullptr && found_node->value == value);
+        return (found_node != nullptr && get_comparable_value(found_node->value) == get_comparable_value(value));
     }
 
     // Delete a value from the skip list
@@ -738,11 +941,11 @@ public:
         SkipListNode<T>* finger_candidate = thread_local_finger;
         // Finger usage notes from insert() apply here too regarding concurrent deletion
         // and reading from a "dummy" node.
-        if (finger_candidate != header && finger_candidate->value < value) {
+        if (finger_candidate != header && get_comparable_value(finger_candidate->value) < get_comparable_value(value)) {
             current_node = finger_candidate;
             search_start_level = std::min(localCurrentLevel, finger_candidate->node_level);
         } else if (finger_candidate != header &&
-                   (!(finger_candidate->value < value) && !(finger_candidate->value == value))) { // finger_candidate->value > value
+                   get_comparable_value(finger_candidate->value) > get_comparable_value(value)) { // Simplified from (!(A<B) && !(A==B))
             // Value is less than finger's value, finger is not useful. Start from header.
             // Optionally, one could reset thread_local_finger = header;
             current_node = header;
@@ -756,7 +959,7 @@ public:
         // Phase 1: Populate 'update' array using finger or header
         for (int i = search_start_level; i >= 0; i--) {
             SkipListNode<T>* next_node = current_node->forward[i].load(std::memory_order_acquire);
-            while (next_node != nullptr && next_node->value < value) {
+            while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(value)) {
                 current_node = next_node;
                 next_node = current_node->forward[i].load(std::memory_order_acquire);
             }
@@ -769,7 +972,7 @@ public:
             for (int i = localCurrentLevel; i > search_start_level; --i) {
                 if (update[i] == nullptr || update[i] == finger_candidate) {
                     SkipListNode<T>* next_node = current_header_scan->forward[i].load(std::memory_order_acquire);
-                    while (next_node != nullptr && next_node->value < value) {
+                    while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(value)) {
                         current_header_scan = next_node;
                         next_node = current_header_scan->forward[i].load(std::memory_order_acquire);
                     }
@@ -786,7 +989,7 @@ public:
         SkipListNode<T>* target_node = update[0]->forward[0].load(std::memory_order_acquire);
 
         // If found, attempt to delete it
-        if (target_node != nullptr && target_node->value == value) {
+        if (target_node != nullptr && get_comparable_value(target_node->value) == get_comparable_value(value)) {
             // Attempt to unlink the node from all levels
             for (int i = 0; i <= target_node->node_level; ++i) { // Iterate up to the target_node's actual level
                 SkipListNode<T>* pred = update[i];
@@ -880,7 +1083,9 @@ public:
             SkipListNode<T>* node = header->forward[i].load(std::memory_order_acquire);
             
             while (node != nullptr) {
-                if constexpr (std::is_same_v<T, std::string>) {
+                if constexpr (is_std_pair_v<T>) {
+                    std::cout << "<" << node->value.first << ":" << node->value.second << "> -> ";
+                } else if constexpr (std::is_same_v<T, std::string>) {
                     std::cout << "\"" << node->value << "\"" << " -> ";
                 } else {
                     std::cout << std::setw(4) << node->value << " -> ";
@@ -898,7 +1103,9 @@ public:
         SkipListNode<T>* node = header->forward[0].load(std::memory_order_acquire);
         
         while (node != nullptr) {
-            if constexpr (std::is_same_v<T, std::string>) {
+            if constexpr (is_std_pair_v<T>) {
+                std::cout << "<" << node->value.first << ":" << node->value.second << "> ";
+            } else if constexpr (std::is_same_v<T, std::string>) {
                 std::cout << "\"" << node->value << "\"" << " ";
             } else {
                 std::cout << node->value << " ";
@@ -948,7 +1155,7 @@ public:
         // Find the starting position
         for (int i = localCurrentLevel; i >= 0; i--) {
             SkipListNode<T>* next_node = current_node->forward[i].load(std::memory_order_acquire);
-            while (next_node != nullptr && next_node->value < minVal) {
+            while (next_node != nullptr && get_comparable_value(next_node->value) < get_comparable_value(minVal)) {
                 current_node = next_node;
                 next_node = current_node->forward[i].load(std::memory_order_acquire);
             }
@@ -957,8 +1164,8 @@ public:
         current_node = current_node->forward[0].load(std::memory_order_acquire);
         
         // Collect values in range
-        while (current_node != nullptr && current_node->value <= maxVal) {
-            if (current_node->value >= minVal) {
+        while (current_node != nullptr && get_comparable_value(current_node->value) <= get_comparable_value(maxVal)) {
+            if (get_comparable_value(current_node->value) >= get_comparable_value(minVal)) {
                 result.push_back(current_node->value);
             }
             current_node = current_node->forward[0].load(std::memory_order_acquire);
@@ -971,6 +1178,9 @@ public:
     // This operation is not atomic. It inserts elements one by one.
     // If concurrent operations are happening, the final state of the skip list
     // will be as if these individual insertions happened in some sequence.
+    // True atomic bulk insertion would typically require more complex mechanisms
+    // like multi-key locking protocols or transactional semantics, which are
+    // beyond the current scope of this implementation.
     void insert_bulk(const std::vector<T>& values) {
         if (values.empty()) {
             return;
@@ -989,7 +1199,11 @@ public:
     // Bulk remove operation
     // This operation is not atomic. It removes elements one by one.
     // Returns the count of elements successfully removed.
-    // Inherits all concurrency caveats of single remove(), especially regarding SMR.
+    // As with insert_bulk, this operation is not atomic for the entire set of values;
+    // concurrent operations can interleave. It also inherits all concurrency
+    // caveats of the single remove() operation, especially the lack of Safe Memory
+    // Reclamation (SMR), which can lead to issues if nodes are accessed by one
+    // thread while being deallocated and reused by another.
     size_t remove_bulk(const std::vector<T>& values) {
         if (values.empty()) {
             return 0;
