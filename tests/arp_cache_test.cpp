@@ -150,24 +150,25 @@ TEST(ARPCacheTest, FailoverInAgeEntriesAfterMaxProbes) {
     }
     // else if MAX_PROBES is 1, no more calls from age_entries before failover/erase.
 
+    auto test_time = std::chrono::steady_clock::now();
+    // Advance time slightly to ensure the first age_entries call processes the INCOMPLETE entry
+    // if its timestamp was set to 'now' by the preceding lookup.
+    test_time += ARPCache::PROBE_RETRANSMIT_INTERVAL + std::chrono::milliseconds(10);
+
     for (int i = 0; i < remaining_probes; ++i) {
-        // This loop assumes that each call to age_entries where the entry is INCOMPLETE
-        // and its internal timer would have expired (age > 1s in current ARPCache logic)
-        // will trigger one send_arp_request. This is an approximation without mock time.
-        cache.age_entries();
+        cache.age_entries(test_time); // Use parameterized version
+        // Advance time for the next probe interval
+        test_time += ARPCache::PROBE_RETRANSMIT_INTERVAL + std::chrono::milliseconds(10);
     }
     testing::Mock::VerifyAndClearExpectations(&cache);
 
     // 3. The next call to age_entries.
-    //    At this stage, probe_count should be ARPCache::MAX_PROBES (1 from lookup + MAX_PROBES-1 from loop).
-    //    This call to age_entries, finding the entry INCOMPLETE and probe_count at MAX_PROBES (or having just exceeded it),
-    //    should trigger the failover logic because a backup MAC exists.
-    //    No more send_arp_request calls for ip1's original (non-existent/failed) primary MAC are expected.
+    //    At this stage, probe_count should be ARPCache::MAX_PROBES.
+    //    This call to age_entries, using the advanced test_time, should find the entry
+    //    INCOMPLETE, timed out, and with probe_count at MAX_PROBES, triggering failover.
     EXPECT_CALL(cache, send_arp_request(ip1)).Times(0);
-    // The INFO log for failover is directly in ARPCache::age_entries via fprintf.
-    // If it were via a virtual log_failover method, we could mock and expect it.
-    // std::cerr << "GTEST_NOTE: Expecting an INFO log for failover (ARP age_entries) on next age_entries() call." << std::endl;
-    cache.age_entries();
+    // std::cerr << "GTEST_NOTE: Expecting an INFO log for failover (ARP age_entries) on next age_entries(" << test_time.time_since_epoch().count() << ") call." << std::endl;
+    cache.age_entries(test_time); // Use parameterized version for the failover-triggering call
     testing::Mock::VerifyAndClearExpectations(&cache);
 
     // 4. Verify failover: Looking up ip1 should now yield the backup MAC and be REACHABLE.
