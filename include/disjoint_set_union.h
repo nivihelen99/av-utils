@@ -8,6 +8,12 @@
 #include <cassert>
 #include <functional>
 
+// Define UnionStrategy enum globally or within a suitable namespace
+enum class UnionStrategy {
+    BY_RANK,
+    BY_SIZE
+};
+
 /**
  * @brief Disjoint Set Union (Union-Find) data structure.
  * 
@@ -15,23 +21,26 @@
  * and finding the representative of a set.
  * This implementation uses path compression and union by rank for optimization.
  * 
- * @tparam T The type of elements. Must be hashable (for std::unordered_map)
- *           and equality comparable.
+ * @tparam T The type of elements.
+ * @tparam Hash The hash functor for T. Defaults to std::hash<T>.
+ * @tparam KeyEqual The equality comparison functor for T. Defaults to std::equal_to<T>.
  */
-template<typename T = int>
+template<typename T, typename Hash = std::hash<T>, typename KeyEqual = std::equal_to<T>>
 class DisjointSetUnion {
 private:
-    std::unordered_map<T, T> parent;        // parent[x] = parent of x
-    std::unordered_map<T, int> rank;        // rank[x] = approximate depth of tree rooted at x
-    std::unordered_map<T, int> setSize;     // setSize[x] = size of set rooted at x (only valid for roots)
+    std::unordered_map<T, T, Hash, KeyEqual> parent;        // parent[x] = parent of x
+    std::unordered_map<T, int, Hash, KeyEqual> rank;        // rank[x] = approximate depth of tree rooted at x
+    std::unordered_map<T, int, Hash, KeyEqual> setSize;     // setSize[x] = size of set rooted at x (only valid for roots)
     int numSets;                            // total number of disjoint sets
+    UnionStrategy strategy;                 // Strategy for union operations
     
 public:
     /**
      * @brief Constructs an empty DisjointSetUnion structure.
-     * Initializes the number of sets to 0.
+     * Initializes the number of sets to 0 and sets the union strategy.
+     * @param strategy The union strategy to use (default: BY_RANK).
      */
-    DisjointSetUnion() : numSets(0) {}
+    DisjointSetUnion(UnionStrategy strategy = UnionStrategy::BY_RANK) : numSets(0), strategy(strategy) {}
     
     /**
      * @brief Creates a new set containing only the element x.
@@ -90,17 +99,37 @@ public:
             return false; // Already in same set
         }
         
-        // Union by rank
-        if (rank[rootX] < rank[rootY]) {
-            parent[rootX] = rootY;
-            setSize[rootY] += setSize[rootX];
-        } else if (rank[rootX] > rank[rootY]) {
-            parent[rootY] = rootX;
-            setSize[rootX] += setSize[rootY];
-        } else {
-            parent[rootX] = rootY;
-            setSize[rootY] += setSize[rootX];
-            rank[rootY]++;
+        if (strategy == UnionStrategy::BY_RANK) {
+            // Union by rank
+            if (rank[rootX] < rank[rootY]) {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+            } else if (rank[rootX] > rank[rootY]) {
+                parent[rootY] = rootX;
+                setSize[rootX] += setSize[rootY];
+            } else {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+                rank[rootY]++;
+            }
+        } else { // UnionStrategy::BY_SIZE
+            if (setSize[rootX] < setSize[rootY]) {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+            } else if (setSize[rootX] > setSize[rootY]) {
+                parent[rootY] = rootX;
+                setSize[rootX] += setSize[rootY];
+            } else {
+                // If sizes are equal, attach rootX to rootY.
+                // Rank is only incremented if using BY_RANK strategy and ranks were equal.
+                // For BY_SIZE, rank is not the primary factor.
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+                // If ranks were equal and strategy was BY_RANK, rank[rootY] would have been incremented.
+                // We don't strictly need to update rank here for BY_SIZE, but if we were to,
+                // it would be: if (rank[rootX] == rank[rootY]) rank[rootY]++;
+                // For now, we only update rank if strategy is BY_RANK.
+            }
         }
         
         numSets--;
@@ -195,7 +224,7 @@ public:
      *       due to iterating all elements and calling `find` for each.
      */
     std::vector<std::vector<T>> getAllSets() {
-        std::unordered_map<T, std::vector<T>> setMap;
+        std::unordered_map<T, std::vector<T>, Hash, KeyEqual> setMap;
         if (parent.empty()) return {};
 
         for (const auto& pair : parent) {
@@ -266,13 +295,27 @@ public:
         if (parent.empty()) return;
         for (const auto& pair_outer : parent) { // Iterate to get all known elements
             T element = pair_outer.first;
-            T root = const_cast<DisjointSetUnion<T>*>(this)->find(element); // find is not const
+            // find is not const, so we need a const_cast here for a const method.
+            // However, printStructure is typically a debug utility where some const-correctness
+            // might be relaxed for ease of inspection if find() must be called.
+            // For truly const behavior, one might need a separate const_find or avoid calling find.
+            T root = const_cast<DisjointSetUnion<T, Hash, KeyEqual>*>(this)->find(element);
             std::cout << element << ": root=" << root 
                       << ", rank=" << rank.at(root) // Rank of the root
                       << ", set_size=" << setSize.at(root) // Size of the set identified by root
                       << " (direct parent in map: " << parent.at(element) << ")"
                       << std::endl;
         }
+    }
+
+    // FOR TESTING PURPOSES ONLY
+    T getDirectParent_Test(const T& x) const {
+        auto it = parent.find(x);
+        if (it == parent.end()) {
+             // Element not found in parent map.
+             throw std::out_of_range("Element not found in parent map for getDirectParent_Test");
+        }
+        return it->second;
     }
 };
 
@@ -291,6 +334,7 @@ private:
     std::vector<int> parent; // parent[i] = parent of element i
     std::vector<int> rank;   // rank[i] = rank of the tree rooted at i (if i is a root)
     std::vector<int> setSize;// setSize[i] = size of the set rooted at i (if i is a root)
+    UnionStrategy strategy;  // Strategy for union operations
     int numSets;             // Total number of disjoint sets
     int maxElement;          // The maximum number of elements (N, elements are 0 to N-1)
     
@@ -299,9 +343,11 @@ public:
      * @brief Constructs a FastDSU structure for a fixed number of elements.
      * Initializes `n` elements (0 to n-1), each in its own set.
      * @param n The total number of elements. Must be non-negative.
+     * @param strategy The union strategy to use (default: BY_RANK).
      * @note Time Complexity: O(N) where N is the number of elements.
      */
-    explicit FastDSU(int n) : parent(n), rank(n, 0), setSize(n, 1), numSets(n), maxElement(n) {
+    explicit FastDSU(int n, UnionStrategy strategy = UnionStrategy::BY_RANK)
+        : parent(n), rank(n, 0), setSize(n, 1), strategy(strategy), numSets(n), maxElement(n) {
         assert(n >= 0);
         for (int i = 0; i < n; i++) {
             parent[i] = i;
@@ -339,17 +385,36 @@ public:
         
         if (rootX == rootY) return false;
         
-        // Union by rank
-        if (rank[rootX] < rank[rootY]) {
-            parent[rootX] = rootY;
-            setSize[rootY] += setSize[rootX];
-        } else if (rank[rootX] > rank[rootY]) {
-            parent[rootY] = rootX;
-            setSize[rootX] += setSize[rootY];
-        } else {
-            parent[rootX] = rootY;
-            setSize[rootY] += setSize[rootX];
-            rank[rootY]++;
+        if (strategy == UnionStrategy::BY_RANK) {
+            // Union by rank
+            if (rank[rootX] < rank[rootY]) {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+            } else if (rank[rootX] > rank[rootY]) {
+                parent[rootY] = rootX;
+                setSize[rootX] += setSize[rootY];
+            } else {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+                rank[rootY]++;
+            }
+        } else { // UnionStrategy::BY_SIZE
+            if (setSize[rootX] < setSize[rootY]) {
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+            } else if (setSize[rootX] > setSize[rootY]) {
+                parent[rootY] = rootX;
+                setSize[rootX] += setSize[rootY];
+            } else {
+                // If sizes are equal, attach rootX to rootY.
+                // Rank is only incremented if using BY_RANK strategy and ranks were equal.
+                parent[rootX] = rootY;
+                setSize[rootY] += setSize[rootX];
+                // if (strategy == UnionStrategy::BY_RANK && rank[rootX] == rank[rootY]) {
+                // This condition is only for BY_RANK, handled above.
+                // For BY_SIZE, rank update isn't the primary mechanism.
+                // if (rank[rootX] == rank[rootY]) rank[rootY]++; // Only if also tie-breaking by rank for BY_SIZE
+            }
         }
         
         numSets--;
@@ -486,6 +551,12 @@ public:
                       << std::endl;
         }
     }
+
+    // FOR TESTING PURPOSES ONLY
+    int getDirectParent_Test(int x) const {
+        assert(x >= 0 && x < maxElement); // This assert is correct here
+        return parent[x];
+    }
 };
 
 // Example applications and testing
@@ -509,7 +580,7 @@ namespace DSUApplications {
         for (const Edge& e : edges) {
             if (dsu.unionSets(e.u, e.v)) {
                 mst.push_back(e);
-                if (mst.size() == n - 1) break; // MST has V-1 edges
+                if (mst.size() == static_cast<typename std::vector<Edge>::size_type>(n - 1)) break; // MST has V-1 edges
             }
         }
         return mst;
