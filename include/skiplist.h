@@ -768,7 +768,20 @@ public:
             // We assume that if T is std::pair<const K, V>, only V should be mutable.
             // If T is a struct, its members might be updated.
             // The simplest approach here is direct assignment. Users must be aware of potential races on the value part.
-            node_to_check->value = value_to_insert_or_assign; // Assign the whole T
+            // node_to_check->value = value_to_insert_or_assign; // Assign the whole T
+            if constexpr (is_std_pair_v<T>) {
+                // If T is a pair, assume its first element is the const key and should not be assigned.
+                // Assign only the second element (the value).
+                // This relies on value_to_insert_or_assign also being a pair.
+                // And KeyType_t<T> being T::first_type.
+                // And the key (first part) of value_to_insert_or_assign matching the key of node_to_check->value.
+                // This is guaranteed by the preceding search condition.
+                node_to_check->value.second = value_to_insert_or_assign.second;
+            } else {
+                // If T is not a pair, assign the whole value directly.
+                // This assumes T is assignable.
+                node_to_check->value = value_to_insert_or_assign;
+            }
 
             if (update[0] != nullptr) {
                 thread_local_finger = update[0];
