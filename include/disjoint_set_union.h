@@ -10,11 +10,11 @@
 
 /**
  * @brief Disjoint Set Union (Union-Find) data structure.
- *
+ * 
  * Manages a collection of disjoint sets. It supports efficient union of sets
  * and finding the representative of a set.
  * This implementation uses path compression and union by rank for optimization.
- *
+ * 
  * @tparam T The type of elements. Must be hashable (for std::unordered_map)
  *           and equality comparable.
  */
@@ -145,7 +145,7 @@ public:
      * @note Time Complexity: O(1).
      */
     bool isEmpty() const {
-        return numSets == 0;
+        return numSets == 0; 
     }
     
     /**
@@ -267,7 +267,7 @@ public:
         for (const auto& pair_outer : parent) { // Iterate to get all known elements
             T element = pair_outer.first;
             T root = const_cast<DisjointSetUnion<T>*>(this)->find(element); // find is not const
-            std::cout << element << ": root=" << root
+            std::cout << element << ": root=" << root 
                       << ", rank=" << rank.at(root) // Rank of the root
                       << ", set_size=" << setSize.at(root) // Size of the set identified by root
                       << " (direct parent in map: " << parent.at(element) << ")"
@@ -278,7 +278,7 @@ public:
 
 /**
  * @brief A specialized Disjoint Set Union (DSU) optimized for contiguous integers (0 to N-1).
- *
+ * 
  * Manages a collection of disjoint sets for elements in a fixed integer range.
  * It is initialized with a maximum number of elements (N) and all elements from 0 to N-1
  * are initially in their own sets.
@@ -440,7 +440,7 @@ public:
      */
     void compress() {
         for (int i = 0; i < maxElement; ++i) {
-            find(i);
+            find(i); 
         }
     }
 
@@ -455,9 +455,9 @@ public:
         for (int i = 0; i < maxElement; ++i) {
             setMap[find(i)].push_back(i);
         }
-
+        
         std::vector<std::vector<int>> result;
-        result.reserve(numSets);
+        result.reserve(numSets); 
         for (const auto& pair : setMap) {
             result.push_back(pair.second);
         }
@@ -480,7 +480,7 @@ public:
             // This version provides more insight but technically find is not const.
             int root = const_cast<FastDSU*>(this)->find(i);
              std::cout << i << ": root=" << root
-                      << ", rank=" << rank[root]
+                      << ", rank=" << rank[root] 
                       << ", set_size=" << setSize[root]
                       << " (direct parent in vector: " << parent[i] << ")"
                       << std::endl;
