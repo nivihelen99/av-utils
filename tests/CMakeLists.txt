@@ -21,6 +21,7 @@ add_executable(run_tests
   tcam_test.cpp
   arp_cache_test.cpp
   nd_cache_test.cpp
+  dsu_test.cpp # Added new DSU test file
 )
 
 # Important: The header files for the code being tested are in the 'include' directory
