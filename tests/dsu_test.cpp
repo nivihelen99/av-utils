@@ -23,6 +23,11 @@ struct CustomData {
         }
         return name < other.name;
     }
+
+    // Inequality operator
+    bool operator!=(const CustomData& other) const {
+        return !(*this == other);
+    }
 };
 
 // Hash function for CustomData for DisjointSetUnion<CustomData>
@@ -32,15 +37,9 @@ namespace std {
         size_t operator()(const CustomData& cd) const {
             size_t h1 = hash<int>()(cd.id);
             size_t h2 = hash<string>()(cd.name);
-            return h1 ^ (h2 << 1);
+            return h1 ^ (h2 << 1); 
         }
     };
-}
-
-// Helper function to convert vector to set for easier comparison of contents (ignoring order)
-template<typename T>
-std::set<T> toSet(const std::vector<T>& vec) {
-    return std::set<T>(vec.begin(), vec.end());
 }
 
 // Test fixture for DisjointSetUnion<T>
@@ -49,22 +48,33 @@ class DSTest : public ::testing::Test {
 protected:
     DisjointSetUnion<T> dsu;
 
-    TypeParam CreateVal(int unique_id, const std::string& name_prefix = "name") {
-        if constexpr (std::is_same_v<TypeParam, int>) {
+public: // Made public static for use in TYPED_TEST macros
+    static T CreateVal(int unique_id, const std::string& name_prefix = "name") {
+        if constexpr (std::is_same_v<T, int>) {
             return unique_id;
-        } else if constexpr (std::is_same_v<TypeParam, std::string>) {
+        } else if constexpr (std::is_same_v<T, std::string>) {
             return name_prefix + std::to_string(unique_id);
-        } else if constexpr (std::is_same_v<TypeParam, CustomData>) {
+        } else if constexpr (std::is_same_v<T, CustomData>) {
             return {unique_id, name_prefix + std::to_string(unique_id)};
         }
-        return TypeParam();
+        // Should not happen with MyTypes restriction but as a fallback:
+        return T(); 
+    }
+    
+    // Helper function to convert vector to set for easier comparison of contents (ignoring order)
+    // Made static as it doesn't depend on fixture instance members and is used by normalizeSets.
+    static std::set<T> toSet(const std::vector<T>& vec) {
+        return std::set<T>(vec.begin(), vec.end());
     }
 
     // Helper to convert vector of vectors to a comparable form (set of sets)
-    std::set<std::set<TypeParam>> normalizeSets(const std::vector<std::vector<TypeParam>>& setsVec) {
-        std::set<std::set<TypeParam>> normalized;
-        for (const auto& setVec : setsVec) {
-            normalized.insert(toSet(setVec));
+    // Made static as it uses static toSet and doesn't depend on instance members.
+    static std::set<std::set<T>> normalizeSets(const std::vector<std::vector<T>>& setsVec) {
+        std::set<std::set<T>> normalized;
+        for (const auto& setVec_inner : setsVec) {
+            // Use DSTest<T>::toSet if TypeParam is needed, but T is template param of class
+            // so it's fine as is. For clarity, could use DSTest<T>::toSet or self::toSet
+            normalized.insert(toSet(setVec_inner)); 
         }
         return normalized;
     }
@@ -80,7 +90,7 @@ TYPED_TEST(DSTest, InitialState) {
 }
 
 TYPED_TEST(DSTest, MakeSet) {
-    TypeParam val1 = this->CreateVal(1, "Alice");
+    TypeParam val1 = DSTest<TypeParam>::CreateVal(1, "Alice");
     this->dsu.makeSet(val1);
     EXPECT_EQ(this->dsu.countSets(), 1);
     EXPECT_EQ(this->dsu.totalElements(), 1);
@@ -93,7 +103,7 @@ TYPED_TEST(DSTest, MakeSet) {
     EXPECT_EQ(this->dsu.countSets(), 1);
     EXPECT_EQ(this->dsu.totalElements(), 1);
 
-    TypeParam val2 = this->CreateVal(2, "Bob");
+    TypeParam val2 = DSTest<TypeParam>::CreateVal(2, "Bob");
     this->dsu.makeSet(val2);
     EXPECT_EQ(this->dsu.countSets(), 2);
     EXPECT_EQ(this->dsu.totalElements(), 2);
@@ -102,14 +112,14 @@ TYPED_TEST(DSTest, MakeSet) {
 }
 
 TYPED_TEST(DSTest, FindOperationAutoCreates) {
-    TypeParam val1 = this->CreateVal(10, "FindTest1");
+    TypeParam val1 = DSTest<TypeParam>::CreateVal(10, "FindTest1");
     EXPECT_EQ(this->dsu.find(val1), val1); // Auto-creates
     EXPECT_EQ(this->dsu.countSets(), 1);
     EXPECT_EQ(this->dsu.totalElements(), 1);
     EXPECT_TRUE(this->dsu.contains(val1));
     EXPECT_EQ(this->dsu.size(val1), 1);
 
-    TypeParam val2 = this->CreateVal(20, "FindTest2");
+    TypeParam val2 = DSTest<TypeParam>::CreateVal(20, "FindTest2");
     EXPECT_EQ(this->dsu.find(val2), val2); // Auto-creates another
     EXPECT_EQ(this->dsu.countSets(), 2);
     EXPECT_EQ(this->dsu.totalElements(), 2);
@@ -117,9 +127,9 @@ TYPED_TEST(DSTest, FindOperationAutoCreates) {
 }
 
 TYPED_TEST(DSTest, UnionSetsSimple) {
-    TypeParam val1 = this->CreateVal(1, "UAlice");
-    TypeParam val2 = this->CreateVal(2, "UBob");
-    TypeParam val3 = this->CreateVal(3, "UCharlie");
+    TypeParam val1 = DSTest<TypeParam>::CreateVal(1, "UAlice");
+    TypeParam val2 = DSTest<TypeParam>::CreateVal(2, "UBob");
+    TypeParam val3 = DSTest<TypeParam>::CreateVal(3, "UCharlie");
     this->dsu.makeSet(val1); this->dsu.makeSet(val2); this->dsu.makeSet(val3);
     EXPECT_EQ(this->dsu.countSets(), 3);
 
@@ -147,39 +157,39 @@ TYPED_TEST(DSTest, UnionSetsSimple) {
 TYPED_TEST(DSTest, GetAllSets) {
     EXPECT_TRUE(this->dsu.getAllSets().empty()); // Empty DSU
 
-    TypeParam v1 = this->CreateVal(1, "S1");
-    TypeParam v2 = this->CreateVal(2, "S2");
-    TypeParam v3 = this->CreateVal(3, "S3");
-    TypeParam v4 = this->CreateVal(4, "S4");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "S1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "S2");
+    TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "S3");
+    TypeParam v4 = DSTest<TypeParam>::CreateVal(4, "S4");
 
     this->dsu.makeSet(v1);
     this->dsu.makeSet(v2);
     this->dsu.makeSet(v3);
     this->dsu.makeSet(v4);
 
-    auto sets1_expected = this->normalizeSets({{v1}, {v2}, {v3}, {v4}});
-    EXPECT_EQ(this->normalizeSets(this->dsu.getAllSets()), sets1_expected);
+    auto sets1_expected = DSTest<TypeParam>::normalizeSets({{v1}, {v2}, {v3}, {v4}});
+    EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets1_expected);
 
     this->dsu.unionSets(v1, v2);
-    auto sets2_expected = this->normalizeSets({{v1, v2}, {v3}, {v4}});
-    EXPECT_EQ(this->normalizeSets(this->dsu.getAllSets()), sets2_expected);
-
+    auto sets2_expected = DSTest<TypeParam>::normalizeSets({{v1, v2}, {v3}, {v4}});
+    EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets2_expected);
+    
     this->dsu.unionSets(v3, v4);
-    auto sets3_expected = this->normalizeSets({{v1, v2}, {v3, v4}});
-    EXPECT_EQ(this->normalizeSets(this->dsu.getAllSets()), sets3_expected);
+    auto sets3_expected = DSTest<TypeParam>::normalizeSets({{v1, v2}, {v3, v4}});
+    EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets3_expected);
 
-    this->dsu.unionSets(v1, v4);
-    auto sets4_expected = this->normalizeSets({{v1, v2, v3, v4}});
-    EXPECT_EQ(this->normalizeSets(this->dsu.getAllSets()), sets4_expected);
-
+    this->dsu.unionSets(v1, v4); 
+    auto sets4_expected = DSTest<TypeParam>::normalizeSets({{v1, v2, v3, v4}});
+    EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets4_expected);
+    
     this->dsu.clear();
-    EXPECT_TRUE(this->dsu.getAllSets().empty());
+    EXPECT_TRUE(this->dsu.getAllSets().empty()); 
 }
 
 TYPED_TEST(DSTest, ResetOperation) {
-    TypeParam v1 = this->CreateVal(1, "R1");
-    TypeParam v2 = this->CreateVal(2, "R2");
-    TypeParam v3 = this->CreateVal(3, "R3");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "R1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "R2");
+    TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "R3");
     this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
     this->dsu.unionSets(v1, v2);
     ASSERT_EQ(this->dsu.countSets(), 2);
@@ -187,7 +197,7 @@ TYPED_TEST(DSTest, ResetOperation) {
 
     this->dsu.reset();
     EXPECT_EQ(this->dsu.countSets(), 3);
-    EXPECT_EQ(this->dsu.totalElements(), 3);
+    EXPECT_EQ(this->dsu.totalElements(), 3); 
     EXPECT_FALSE(this->dsu.isEmpty());
 
     EXPECT_EQ(this->dsu.find(v1), v1);
@@ -197,47 +207,47 @@ TYPED_TEST(DSTest, ResetOperation) {
     EXPECT_EQ(this->dsu.size(v2), 1);
     EXPECT_EQ(this->dsu.size(v3), 1);
     EXPECT_FALSE(this->dsu.connected(v1, v2));
-    EXPECT_TRUE(this->dsu.contains(v1));
+    EXPECT_TRUE(this->dsu.contains(v1)); 
 }
 
 TYPED_TEST(DSTest, CompressOperation) {
-    TypeParam v1 = this->CreateVal(1, "C1");
-    TypeParam v2 = this->CreateVal(2, "C2");
-    TypeParam v3 = this->CreateVal(3, "C3");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "C1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "C2");
+    TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "C3");
     this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
     this->dsu.unionSets(v1, v2);
-    this->dsu.unionSets(v2, v3);
+    this->dsu.unionSets(v2, v3); 
 
     this->dsu.compress();
-
-    TypeParam root = this->dsu.find(v3);
-    EXPECT_EQ(this->dsu.find(v1), root);
-    EXPECT_EQ(this->dsu.find(v2), root);
+    
+    TypeParam root = this->dsu.find(v3); 
+    EXPECT_EQ(this->dsu.find(v1), root); 
+    EXPECT_EQ(this->dsu.find(v2), root); 
     EXPECT_TRUE(this->dsu.connected(v1, v3));
     EXPECT_EQ(this->dsu.size(v1), 3);
 }
 
 TYPED_TEST(DSTest, IsEmptyAdvanced) {
     EXPECT_TRUE(this->dsu.isEmpty());
-    TypeParam v1 = this->CreateVal(1, "E1");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "E1");
     this->dsu.makeSet(v1);
     EXPECT_FALSE(this->dsu.isEmpty());
-    this->dsu.reset();
+    this->dsu.reset(); 
     EXPECT_FALSE(this->dsu.isEmpty());
     this->dsu.clear();
     EXPECT_TRUE(this->dsu.isEmpty());
 }
 
 TYPED_TEST(DSTest, ContainsAdvanced) {
-    TypeParam v1 = this->CreateVal(1, "CA1");
-    TypeParam v_non_existent = this->CreateVal(99, "NonExistent");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "CA1");
+    TypeParam v_non_existent = DSTest<TypeParam>::CreateVal(99, "NonExistent");
     EXPECT_FALSE(this->dsu.contains(v1));
     this->dsu.makeSet(v1);
     EXPECT_TRUE(this->dsu.contains(v1));
     EXPECT_FALSE(this->dsu.contains(v_non_existent));
 
     this->dsu.reset();
-    EXPECT_TRUE(this->dsu.contains(v1));
+    EXPECT_TRUE(this->dsu.contains(v1)); 
 
     this->dsu.clear();
     EXPECT_FALSE(this->dsu.contains(v1));
@@ -245,8 +255,8 @@ TYPED_TEST(DSTest, ContainsAdvanced) {
 }
 
 TYPED_TEST(DSTest, ClearOperation) {
-    TypeParam v1 = this->CreateVal(1, "CL1");
-    TypeParam v2 = this->CreateVal(2, "CL2");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "CL1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "CL2");
     this->dsu.makeSet(v1); this->dsu.makeSet(v2);
     this->dsu.unionSets(v1, v2);
     ASSERT_EQ(this->dsu.countSets(), 1);
@@ -265,46 +275,46 @@ TYPED_TEST(DSTest, ClearOperation) {
 }
 
 TYPED_TEST(DSTest, GetSetMembers) {
-    TypeParam v1 = this->CreateVal(1, "M1");
-    TypeParam v2 = this->CreateVal(2, "M2");
-    TypeParam v3 = this->CreateVal(3, "M3");
-    TypeParam v4 = this->CreateVal(4, "M4_Auto");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "M1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "M2");
+    TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "M3");
+    TypeParam v4 = DSTest<TypeParam>::CreateVal(4, "M4_Auto");
 
     this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
     this->dsu.unionSets(v1, v2);
 
     std::set<TypeParam> set1_members_expected = {v1, v2};
-    EXPECT_EQ(toSet(this->dsu.getSetMembers(v1)), set1_members_expected);
-    EXPECT_EQ(toSet(this->dsu.getSetMembers(v2)), set1_members_expected);
+    EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v1)), set1_members_expected);
+    EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v2)), set1_members_expected);
 
     std::set<TypeParam> set3_members_expected = {v3};
-    EXPECT_EQ(toSet(this->dsu.getSetMembers(v3)), set3_members_expected);
-
+    EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v3)), set3_members_expected);
+    
     std::set<TypeParam> set4_members_expected = {v4};
-    EXPECT_EQ(toSet(this->dsu.getSetMembers(v4)), set4_members_expected); // Auto-creates
+    EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v4)), set4_members_expected); // Auto-creates
     EXPECT_TRUE(this->dsu.contains(v4));
-    EXPECT_EQ(this->dsu.countSets(), 3);
+    EXPECT_EQ(this->dsu.countSets(), 3); 
 }
 
 TYPED_TEST(DSTest, PathCompressionChain) {
-    TypeParam v1 = this->CreateVal(1, "PC1");
-    TypeParam v2 = this->CreateVal(2, "PC2");
-    TypeParam v3 = this->CreateVal(3, "PC3");
-    TypeParam v4 = this->CreateVal(4, "PC4");
-    TypeParam v5 = this->CreateVal(5, "PC5");
+    TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "PC1");
+    TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "PC2");
+    TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "PC3");
+    TypeParam v4 = DSTest<TypeParam>::CreateVal(4, "PC4");
+    TypeParam v5 = DSTest<TypeParam>::CreateVal(5, "PC5");
 
     this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
     this->dsu.makeSet(v4); this->dsu.makeSet(v5);
 
     this->dsu.unionSets(v1,v2); this->dsu.unionSets(v2,v3);
-    this->dsu.unionSets(v3,v4); this->dsu.unionSets(v4,v5);
+    this->dsu.unionSets(v3,v4); this->dsu.unionSets(v4,v5); 
 
-    TypeParam root = this->dsu.find(v5);
+    TypeParam root = this->dsu.find(v5); 
     EXPECT_EQ(this->dsu.find(v1), root);
     EXPECT_EQ(this->dsu.find(v2), root);
     EXPECT_EQ(this->dsu.find(v3), root);
     EXPECT_EQ(this->dsu.find(v4), root);
-
+    
     EXPECT_TRUE(this->dsu.connected(v1,v5));
     EXPECT_EQ(this->dsu.size(v1), 5);
 }
@@ -328,7 +338,8 @@ class FastDSUTest : public ::testing::Test {
 protected:
     // Helper to convert vector of vectors to a comparable form (set of sets)
     // For FastDSU, elements are always int.
-    std::set<std::set<int>> normalizeFastDSUSets(const std::vector<std::vector<int>>& setsVec) {
+    // This can be static as it doesn't depend on FastDSUTest instance members.
+    static std::set<std::set<int>> normalizeFastDSUSets(const std::vector<std::vector<int>>& setsVec) {
         std::set<std::set<int>> normalized;
         for (const auto& setVec : setsVec) {
             normalized.insert(std::set<int>(setVec.begin(), setVec.end()));
@@ -346,8 +357,8 @@ TEST_F(FastDSUTest, InitialState) {
         EXPECT_EQ(dsu_10.find(i), i);
         EXPECT_EQ(dsu_10.size(i), 1);
     }
-    EXPECT_FALSE(dsu_10.contains(10));
-    EXPECT_FALSE(dsu_10.contains(-1));
+    EXPECT_FALSE(dsu_10.contains(10)); 
+    EXPECT_FALSE(dsu_10.contains(-1));  
 
     FastDSU dsu_0(0);
     EXPECT_EQ(dsu_0.countSets(), 0);
@@ -357,9 +368,9 @@ TEST_F(FastDSUTest, InitialState) {
 
 TEST_F(FastDSUTest, MakeSetNoOp) {
     FastDSU dsu_5(5);
-    dsu_5.makeSet(0);
+    dsu_5.makeSet(0); 
     dsu_5.makeSet(4);
-    EXPECT_EQ(dsu_5.countSets(), 5);
+    EXPECT_EQ(dsu_5.countSets(), 5); 
     EXPECT_EQ(dsu_5.find(0), 0);
     EXPECT_EQ(dsu_5.size(0), 1);
 }
@@ -376,10 +387,10 @@ TEST_F(FastDSUTest, UnionSetsSimple) {
     EXPECT_EQ(dsu_5.size(1), 2);
     EXPECT_EQ(dsu_5.find(0), dsu_5.find(1));
 
-    EXPECT_FALSE(dsu_5.unionSets(0, 1));
+    EXPECT_FALSE(dsu_5.unionSets(0, 1)); 
     EXPECT_EQ(dsu_5.countSets(), 4);
 
-    EXPECT_TRUE(dsu_5.unionSets(0, 2));
+    EXPECT_TRUE(dsu_5.unionSets(0, 2)); 
     EXPECT_EQ(dsu_5.countSets(), 3);
     EXPECT_TRUE(dsu_5.connected(0, 2));
     EXPECT_TRUE(dsu_5.connected(1, 2));
@@ -396,26 +407,26 @@ TEST_F(FastDSUTest, GetAllSets) {
     EXPECT_TRUE(dsu_0.getAllSets().empty());
 
     FastDSU dsu_4(4);
-    auto sets1_expected = normalizeFastDSUSets({{0}, {1}, {2}, {3}});
-    EXPECT_EQ(normalizeFastDSUSets(dsu_4.getAllSets()), sets1_expected);
+    auto sets1_expected = FastDSUTest::normalizeFastDSUSets({{0}, {1}, {2}, {3}});
+    EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets1_expected);
 
     dsu_4.unionSets(0, 1);
-    auto sets2_expected = normalizeFastDSUSets({{0, 1}, {2}, {3}});
-    EXPECT_EQ(normalizeFastDSUSets(dsu_4.getAllSets()), sets2_expected);
-
+    auto sets2_expected = FastDSUTest::normalizeFastDSUSets({{0, 1}, {2}, {3}});
+    EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets2_expected);
+    
     dsu_4.unionSets(2, 3);
-    auto sets3_expected = normalizeFastDSUSets({{0, 1}, {2, 3}});
-    EXPECT_EQ(normalizeFastDSUSets(dsu_4.getAllSets()), sets3_expected);
+    auto sets3_expected = FastDSUTest::normalizeFastDSUSets({{0, 1}, {2, 3}});
+    EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets3_expected);
 
-    dsu_4.unionSets(0, 3);
-    auto sets4_expected = normalizeFastDSUSets({{0, 1, 2, 3}});
-    EXPECT_EQ(normalizeFastDSUSets(dsu_4.getAllSets()), sets4_expected);
+    dsu_4.unionSets(0, 3); 
+    auto sets4_expected = FastDSUTest::normalizeFastDSUSets({{0, 1, 2, 3}});
+    EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets4_expected);
 }
 
 TEST_F(FastDSUTest, ResetOperation) {
     FastDSU dsu_3(3);
     dsu_3.unionSets(0,1);
-    dsu_3.unionSets(1,2);
+    dsu_3.unionSets(1,2); 
     ASSERT_EQ(dsu_3.countSets(), 1);
 
     dsu_3.reset();
@@ -424,20 +435,20 @@ TEST_F(FastDSUTest, ResetOperation) {
     for (int i=0; i<3; ++i) {
         EXPECT_EQ(dsu_3.find(i), i);
         EXPECT_EQ(dsu_3.size(i), 1);
-        EXPECT_FALSE(dsu_3.connected(i, (i+1)%3));
+        EXPECT_FALSE(dsu_3.connected(i, (i+1)%3)); 
         EXPECT_TRUE(dsu_3.contains(i));
     }
 }
-
+    
 TEST_F(FastDSUTest, CompressOperation) {
     FastDSU dsu_3(3);
     dsu_3.unionSets(0,1);
-    dsu_3.unionSets(1,2);
-
-    dsu_3.compress();
+    dsu_3.unionSets(1,2); 
+    
+    dsu_3.compress(); 
     int root = dsu_3.find(2);
-    EXPECT_EQ(dsu_3.find(0), root);
-    EXPECT_EQ(dsu_3.find(1), root);
+    EXPECT_EQ(dsu_3.find(0), root); 
+    EXPECT_EQ(dsu_3.find(1), root); 
     EXPECT_TRUE(dsu_3.connected(0,2));
     EXPECT_EQ(dsu_3.size(0), 3);
 }
@@ -448,8 +459,8 @@ TEST_F(FastDSUTest, IsEmptyAdvanced) {
 
     FastDSU dsu_5(5);
     EXPECT_FALSE(dsu_5.isEmpty());
-    dsu_5.reset();
-    EXPECT_FALSE(dsu_5.isEmpty());
+    dsu_5.reset(); 
+    EXPECT_FALSE(dsu_5.isEmpty()); 
 }
 
 TEST_F(FastDSUTest, ContainsAdvanced) {
@@ -457,48 +468,48 @@ TEST_F(FastDSUTest, ContainsAdvanced) {
     EXPECT_TRUE(dsu_3.contains(0));
     EXPECT_TRUE(dsu_3.contains(1));
     EXPECT_TRUE(dsu_3.contains(2));
-    EXPECT_FALSE(dsu_3.contains(3));
-    EXPECT_FALSE(dsu_3.contains(-1));
+    EXPECT_FALSE(dsu_3.contains(3));   
+    EXPECT_FALSE(dsu_3.contains(-1));  
 
     FastDSU dsu_0(0);
-    EXPECT_FALSE(dsu_0.contains(0));
+    EXPECT_FALSE(dsu_0.contains(0)); 
 }
 
 TEST_F(FastDSUTest, PathCompressionChain) {
-    FastDSU dsu_5(5);
+    FastDSU dsu_5(5); 
     dsu_5.unionSets(0,1);
     dsu_5.unionSets(1,2);
     dsu_5.unionSets(2,3);
-    dsu_5.unionSets(3,4);
+    dsu_5.unionSets(3,4); 
 
-    int root = dsu_5.find(4);
-
-    EXPECT_EQ(dsu_5.find(0), root);
+    int root = dsu_5.find(4); 
+    
+    EXPECT_EQ(dsu_5.find(0), root); 
     EXPECT_EQ(dsu_5.find(1), root);
     EXPECT_EQ(dsu_5.find(2), root);
     EXPECT_EQ(dsu_5.find(3), root);
-
+    
     EXPECT_TRUE(dsu_5.connected(0,4));
     EXPECT_EQ(dsu_5.size(0), 5);
     EXPECT_EQ(dsu_5.size(4), 5);
 }
 
 TEST_F(FastDSUTest, BoundaryConditions) {
-    FastDSU dsu_10(10);
-    EXPECT_TRUE(dsu_10.unionSets(0, 9));
+    FastDSU dsu_10(10); 
+    EXPECT_TRUE(dsu_10.unionSets(0, 9)); 
     EXPECT_EQ(dsu_10.countSets(), 9);
     EXPECT_TRUE(dsu_10.connected(0,9));
     EXPECT_EQ(dsu_10.size(0), 2);
     EXPECT_EQ(dsu_10.size(9), 2);
 
-    EXPECT_TRUE(dsu_10.unionSets(5,0));
+    EXPECT_TRUE(dsu_10.unionSets(5,0)); 
     EXPECT_EQ(dsu_10.countSets(), 8);
-    EXPECT_TRUE(dsu_10.connected(5,9));
-    EXPECT_EQ(dsu_10.size(0), 3);
+    EXPECT_TRUE(dsu_10.connected(5,9)); 
+    EXPECT_EQ(dsu_10.size(0), 3); 
     EXPECT_EQ(dsu_10.size(5), 3);
     EXPECT_EQ(dsu_10.size(9), 3);
 
-    FastDSU dsu_2(2);
+    FastDSU dsu_2(2); 
     EXPECT_TRUE(dsu_2.unionSets(1,0));
     EXPECT_EQ(dsu_2.countSets(),1);
     EXPECT_EQ(dsu_2.size(0),2);
@@ -510,7 +521,7 @@ TEST_F(FastDSUTest, BoundaryConditions) {
 
 TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     DisjointSetUnion<int> dsu;
-    const int num_elements = 100000;
+    const int num_elements = 100000; 
     const int num_unions = 50000;
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -520,11 +531,9 @@ TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     }
 
     for (int i = 0; i < num_unions; ++i) {
-        // Create unions. Using modulo to ensure elements are within bounds.
-        // A simple scheme to get some variance in unions.
         dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
     }
-
+    
     for (int i = 0; i < num_elements; ++i) {
         dsu.find(i % num_elements);
     }
@@ -532,28 +541,27 @@ TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-    // Using std::cout for GTest, as it captures stdout for INFO messages.
     std::cout << "[ INFO     ] GenericDSU " << num_elements << " elements, "
               << num_unions << " unions, " << num_elements << " finds took: "
               << duration.count() << " ms." << std::endl;
-    SUCCEED();
+    SUCCEED(); 
 }
 
 TEST(DSUPerformance, FastDSULargeScaleOperations) {
     const int num_elements = 100000;
     const int num_unions = 50000;
-    FastDSU dsu(num_elements); // Elements 0 to num_elements-1 are pre-made
+    FastDSU dsu(num_elements); 
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < num_unions; ++i) {
         dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
     }
-
+    
     for (int i = 0; i < num_elements; ++i) {
         dsu.find(i % num_elements);
     }
-
+    
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
