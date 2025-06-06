@@ -496,7 +496,14 @@ public:
      * @param mac_out Output parameter for the MAC address if found.
      * @return True if a static entry exists for the IP, false otherwise.
      */
-    bool get_static_arp_entry(uint32_t ip, mac_addr_t& mac_out) const;
+    bool get_static_arp_entry(uint32_t ip, mac_addr_t& mac_out) const {
+        auto it = static_arp_entries_.find(ip);
+        if (it != static_arp_entries_.end()) {
+            mac_out = it->second;
+            return true;
+        }
+        return false;
+    }
 
     // --- Configuration Setters ---
 
@@ -541,7 +548,19 @@ public:
      * @param mac The MAC address to check.
      * @return True if the MAC is known on the interface, false otherwise.
      */
-    bool is_mac_known_on_interface(uint32_t interface_id, const mac_addr_t& mac) const;
+    bool is_mac_known_on_interface(uint32_t interface_id, const mac_addr_t& mac) const {
+        auto it = known_macs_per_interface_.find(interface_id);
+        if (it != known_macs_per_interface_.end()) {
+            return it->second.count(mac) > 0;
+        }
+        // If the interface_id is not in known_macs_per_interface_,
+        // it means no MACs are specifically "known" (or "restricted") for this interface.
+        // Depending on desired default behavior:
+        // - return false: (strictest) if interface isn't configured, no MACs are considered known.
+        // - return true: (permissive) if interface isn't configured for known MACs, all MACs are treated as if known (i.e., check passes).
+        // Given the context of "is known", `false` seems more appropriate if the interface itself isn't configured.
+        return false;
+    }
 
     /**
      * @brief Enables or disables source MAC validation (known MAC list) for a given interface.
@@ -558,7 +577,13 @@ public:
      * @return True if enforcement is enabled for the interface, false otherwise.
      *         Returns the default enforcement policy if not explicitly set for the interface.
      */
-    bool get_enforce_known_macs_on_interface(uint32_t interface_id) const;
+    bool get_enforce_known_macs_on_interface(uint32_t interface_id) const {
+        auto it = enforce_known_macs_status_.find(interface_id);
+        if (it != enforce_known_macs_status_.end()) {
+            return it->second;
+        }
+        return default_enforce_known_macs_;
+    }
 
     /**
      * @brief Sets the policy for handling IP address conflicts.
@@ -645,7 +670,13 @@ public:
      * @return True if the interface is trusted, false if untrusted.
      *         Returns the default trust status if not explicitly set for the interface.
      */
-    bool get_interface_trust_status(uint32_t interface_id) const;
+    bool get_interface_trust_status(uint32_t interface_id) const {
+        auto it = interface_trust_status_.find(interface_id);
+        if (it != interface_trust_status_.end()) {
+            return it->second;
+        }
+        return default_interface_trust_status_;
+    }
 
     /**
      * @brief Sets the MAC address for a specific interface.
