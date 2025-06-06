@@ -6,6 +6,70 @@
 #include <utility>   // For std::pair
 #include <random>    // For StressTest (if enabled)
 
+// --- MyData Struct and Utilities ---
+#include <string>    // For std::string
+#include <utility>   // For std::move (in constructor)
+#include <vector>    // For tests
+#include <algorithm> // For std::sort in tests
+#include <functional>// For std::less in tests
+#include <iomanip>   // For std::fixed, std::setprecision
+#include <cmath>     // For std::abs (double comparison)
+#include <sstream>   // For std::ostringstream in value_to_log_string
+
+struct MyData; // Forward declare MyData
+template<> std::string value_to_log_string<MyData>(const MyData& val); // Forward declare specialization
+
+struct MyData {
+    int id;
+    std::string name;
+    double score;
+    bool is_active;
+
+    MyData(int i = 0, std::string n = "", double s = 0.0, bool active = false)
+        : id(i), name(std::move(n)), score(s), is_active(active) {}
+
+    bool operator==(const MyData& other) const {
+        return id == other.id &&
+               name == other.name &&
+               (std::abs(score - other.score) < 1e-9) &&
+               is_active == other.is_active;
+    }
+
+    bool operator!=(const MyData& other) const {
+        return !(*this == other);
+    }
+
+    bool operator<(const MyData& other) const {
+        if (id != other.id) return id < other.id;
+        if (name != other.name) return name < other.name;
+        if (std::abs(score - other.score) >= 1e-9) { // If scores are significantly different
+            return score < other.score;
+        }
+        // If scores are "equal" or very close, compare by is_active
+        return is_active < other.is_active;
+    }
+};
+
+template<>
+std::string value_to_log_string<MyData>(const MyData& val) {
+    std::ostringstream oss;
+    oss << "MyData(id=" << val.id
+        << ", name=\"" << val.name << "\""
+        << ", score=" << std::fixed << std::setprecision(2) << val.score
+        << ", active=" << (val.is_active ? "true" : "false") << ")";
+    return oss.str();
+}
+
+namespace std {
+    template<>
+    struct less<MyData> {
+        bool operator()(const MyData& lhs, const MyData& rhs) const {
+            return lhs < rhs;
+        }
+    };
+}
+// --- End of MyData Struct and Utilities ---
+
 // Helper to compare vector contents ignoring order
 template<typename T>
 void ExpectVectorsEqualUnordered(std::vector<T> vec1, std::vector<T> vec2) {
@@ -267,3 +331,86 @@ TEST(SkipListTest, StressTest) {
     EXPECT_EQ(list_elements, inserted_elements);
 }
 */
+
+TEST(SkipListTest, CustomStructOperations) {
+    SkipList<std::pair<const int, MyData>> sl;
+
+    MyData d1_orig(1, "Alice", 95.01, true);
+    MyData d2_orig(2, "Bob", 88.02, false);
+    MyData d3_orig(3, "Charlie", 92.53, true);
+
+    sl.insert({d1_orig.id, d1_orig});
+    sl.insert({d2_orig.id, d2_orig});
+    EXPECT_EQ(sl.size(), 2);
+    sl.insert({d3_orig.id, d3_orig});
+    EXPECT_EQ(sl.size(), 3);
+
+    EXPECT_TRUE(sl.search({d1_orig.id, MyData()}));
+    EXPECT_FALSE(sl.search({100, MyData()}));
+
+    auto it_d1 = sl.find(d1_orig.id);
+    ASSERT_NE(it_d1, sl.end());
+    EXPECT_EQ(it_d1->first, d1_orig.id);
+    EXPECT_EQ(it_d1->second, d1_orig);
+
+    MyData d1_modified = d1_orig;
+    d1_modified.name = "Alicia";
+    d1_modified.score = 96.04;
+    it_d1->second = d1_modified;
+
+    auto it_d1_check = sl.find(d1_orig.id);
+    ASSERT_NE(it_d1_check, sl.end());
+    EXPECT_EQ(it_d1_check->second, d1_modified);
+
+    MyData d2_updated(d2_orig.id, "Robert", 89.05, true);
+    auto res_assign = sl.insert_or_assign({d2_updated.id, d2_updated});
+    EXPECT_FALSE(res_assign.second);
+    ASSERT_NE(res_assign.first, sl.end());
+    EXPECT_EQ(res_assign.first->second, d2_updated);
+    EXPECT_EQ(sl.size(), 3);
+
+    MyData d4_orig(4, "David", 77.06, false);
+    auto res_insert = sl.insert_or_assign({d4_orig.id, d4_orig});
+    EXPECT_TRUE(res_insert.second);
+    ASSERT_NE(res_insert.first, sl.end());
+    EXPECT_EQ(res_insert.first->second, d4_orig);
+    EXPECT_EQ(sl.size(), 4);
+
+    auto range_res_vec = sl.rangeQuery({d1_orig.id, MyData()}, {d3_orig.id, MyData()});
+
+    std::vector<std::pair<const int, MyData>> expected_range;
+    expected_range.push_back({d1_modified.id, d1_modified});
+    expected_range.push_back({d2_updated.id, d2_updated});
+    expected_range.push_back({d3_orig.id, d3_orig});
+
+    ASSERT_EQ(range_res_vec.size(), expected_range.size());
+    for(size_t i=0; i < range_res_vec.size(); ++i) {
+        EXPECT_EQ(range_res_vec[i].first, expected_range[i].first);
+        EXPECT_EQ(range_res_vec[i].second, expected_range[i].second);
+    }
+
+    EXPECT_TRUE(sl.remove({d1_modified.id, MyData()}));
+    EXPECT_EQ(sl.size(), 3);
+    EXPECT_FALSE(sl.search({d1_modified.id, MyData()}));
+
+    std::vector<int> keys_iterated;
+    std::vector<MyData> values_iterated;
+    for (const auto& entry : sl) {
+        keys_iterated.push_back(entry.first);
+        values_iterated.push_back(entry.second);
+    }
+    std::vector<int> expected_keys = {d2_updated.id, d3_orig.id, d4_orig.id};
+    std::vector<MyData> expected_values = {d2_updated, d3_orig, d4_orig};
+
+    EXPECT_EQ(keys_iterated, expected_keys); // Relies on iteration order being key order
+    ASSERT_EQ(values_iterated.size(), expected_values.size());
+    for(size_t i=0; i < values_iterated.size(); ++i) {
+        EXPECT_EQ(values_iterated[i], expected_values[i]);
+    }
+
+    sl.clear();
+    EXPECT_EQ(sl.size(), 0);
+    EXPECT_TRUE(sl.begin() == sl.end());
+    auto it_after_clear = sl.find(d4_orig.id);
+    EXPECT_EQ(it_after_clear, sl.end());
+}
