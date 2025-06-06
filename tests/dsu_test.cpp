@@ -203,7 +203,100 @@ TYPED_TEST(DSTest, GetAllSets) {
     EXPECT_TRUE(this->dsu.getAllSets().empty()); 
 }
 
+TYPED_TEST(DSTest, UnionSetsByRankLogic) {
+    // Explicitly use BY_RANK, though it's the default for DisjointSetUnion
+    DisjointSetUnion<TypeParam> dsu(UnionStrategy::BY_RANK);
+
+    // Test Case 1: Union of sets with equal ranks.
+    // Resulting root should have its rank incremented.
+    TypeParam v1_tc1 = DSTest<TypeParam>::CreateVal(1, "Rank_TC1_V1");
+    TypeParam v2_tc1 = DSTest<TypeParam>::CreateVal(2, "Rank_TC1_V2");
+    TypeParam v3_tc1 = DSTest<TypeParam>::CreateVal(3, "Rank_TC1_V3");
+    TypeParam v4_tc1 = DSTest<TypeParam>::CreateVal(4, "Rank_TC1_V4");
+
+    dsu.makeSet(v1_tc1); dsu.makeSet(v2_tc1);
+    dsu.makeSet(v3_tc1); dsu.makeSet(v4_tc1);
+
+    // Union v1,v2. Assume v2_tc1 becomes root, rank[v2_tc1_root]=1.
+    dsu.unionSets(v1_tc1, v2_tc1);
+    TypeParam root_v1_set = dsu.find(v1_tc1);
+    ASSERT_EQ(dsu.size(v1_tc1), 2);
+    // Rank of root_v1_set is 1 (implicit)
+
+    // Union v3,v4. Assume v4_tc1 becomes root, rank[v4_tc1_root]=1.
+    dsu.unionSets(v3_tc1, v4_tc1);
+    TypeParam root_v3_set = dsu.find(v3_tc1);
+    ASSERT_EQ(dsu.size(v3_tc1), 2);
+    ASSERT_NE(root_v1_set, root_v3_set); // Ensure they are different sets for now
+    // Rank of root_v3_set is 1 (implicit)
+
+    // Union v1,v3. This unions two sets, each with a root of rank 1.
+    // The new root's rank should become 2.
+    // Let's say root_v3_set becomes the overall root.
+    dsu.unionSets(v1_tc1, v3_tc1);
+    TypeParam final_root_tc1 = dsu.find(v1_tc1);
+    EXPECT_EQ(dsu.find(v2_tc1), final_root_tc1);
+    EXPECT_EQ(dsu.find(v3_tc1), final_root_tc1);
+    EXPECT_EQ(dsu.find(v4_tc1), final_root_tc1);
+    EXPECT_EQ(dsu.size(v1_tc1), 4);
+    // Implicitly, rank[final_root_tc1] is now 2.
+
+    // Test Case 2: Union of a set with rank 0 and a set with rank 1.
+    // Lower rank (0) should attach to higher rank (1). Rank of higher rank root should remain 1.
+    DisjointSetUnion<TypeParam> dsu2(UnionStrategy::BY_RANK);
+    TypeParam v5_tc2 = DSTest<TypeParam>::CreateVal(5, "Rank_TC2_V5");
+    TypeParam v6_tc2 = DSTest<TypeParam>::CreateVal(6, "Rank_TC2_V6");
+    TypeParam v7_tc2 = DSTest<TypeParam>::CreateVal(7, "Rank_TC2_V7");
+
+    dsu2.makeSet(v5_tc2); dsu2.makeSet(v6_tc2); dsu2.makeSet(v7_tc2);
+
+    // Union v5,v6. Assume v6_tc2 becomes root, rank[v6_tc2_root]=1.
+    dsu2.unionSets(v5_tc2, v6_tc2);
+    TypeParam root_v5_set_tc2 = dsu2.find(v5_tc2); // This is root of {v5,v6}, rank 1
+    ASSERT_EQ(dsu2.size(v5_tc2), 2);
+
+    // v7_tc2 is a single element set. Its root is v7_tc2, rank[v7_tc2_root]=0.
+    TypeParam root_v7_set_tc2 = dsu2.find(v7_tc2);
+    ASSERT_EQ(dsu2.size(v7_tc2), 1);
+
+    // Union v5,v7. Root of v5 is root_v5_set_tc2 (rank 1). Root of v7 is root_v7_set_tc2 (rank 0).
+    // v7 (lower rank root) should attach to v5's root (higher rank root).
+    // Rank of root_v5_set_tc2 should remain 1.
+    dsu2.unionSets(v5_tc2, v7_tc2);
+    EXPECT_EQ(dsu2.find(v5_tc2), root_v5_set_tc2); // Root should still be the original root of {v5,v6}
+    EXPECT_EQ(dsu2.find(v6_tc2), root_v5_set_tc2);
+    EXPECT_EQ(dsu2.find(v7_tc2), root_v5_set_tc2); // v7 now part of the same set
+    EXPECT_EQ(dsu2.size(v5_tc2), 3);
+    // Implicitly, rank[root_v5_set_tc2] is still 1.
+
+    // To further (indirectly) verify rank behavior of TC1 vs TC2:
+    // Create one more element, union it with TC1's final_root_tc1 (rank 2).
+    // Then create another element, union it with TC2's root_v5_set_tc2 (rank 1).
+    // The rank update behavior should differ.
+    TypeParam v8_extra = DSTest<TypeParam>::CreateVal(8, "Extra_V8");
+    dsu.makeSet(v8_extra); // dsu is from TC1
+    TypeParam root_v8_extra = dsu.find(v8_extra); // rank 0
+    dsu.unionSets(v1_tc1, v8_extra); // Union rank 2 set with rank 0 set. Root is final_root_tc1, rank should remain 2.
+    EXPECT_EQ(dsu.size(v1_tc1), 5);
+    // If rank of final_root_tc1 was correctly 2, it remains 2.
+
+    TypeParam v9_extra = DSTest<TypeParam>::CreateVal(9, "Extra_V9");
+    dsu2.makeSet(v9_extra); // dsu2 is from TC2
+    TypeParam root_v9_extra = dsu2.find(v9_extra); // rank 0
+    dsu2.unionSets(v5_tc2, v9_extra); // Union rank 1 set with rank 0 set. Root is root_v5_set_tc2, rank should remain 1.
+    EXPECT_EQ(dsu2.size(v5_tc2), 4);
+    // If rank of root_v5_set_tc2 was correctly 1, it remains 1.
+}
+
 TYPED_TEST(DSTest, ResetOperation) {
+    // Test reset on an initially empty DSU
+    DisjointSetUnion<TypeParam> dsu_empty;
+    EXPECT_EQ(dsu_empty.countSets(), 0);
+    EXPECT_TRUE(dsu_empty.isEmpty());
+    dsu_empty.reset(); // Should be a no-op
+    EXPECT_EQ(dsu_empty.countSets(), 0);
+    EXPECT_TRUE(dsu_empty.isEmpty());
+
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "R1");
     TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "R2");
     TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "R3");
@@ -224,7 +317,15 @@ TYPED_TEST(DSTest, ResetOperation) {
     EXPECT_EQ(this->dsu.size(v2), 1);
     EXPECT_EQ(this->dsu.size(v3), 1);
     EXPECT_FALSE(this->dsu.connected(v1, v2));
-    EXPECT_TRUE(this->dsu.contains(v1)); 
+    EXPECT_TRUE(this->dsu.contains(v1));
+
+    // Test reset after clear makes DSU empty
+    this->dsu.clear();
+    ASSERT_EQ(this->dsu.countSets(), 0);
+    ASSERT_TRUE(this->dsu.isEmpty());
+    this->dsu.reset(); // Should be a no-op on an empty (cleared) DSU
+    EXPECT_EQ(this->dsu.countSets(), 0);
+    EXPECT_TRUE(this->dsu.isEmpty());
 }
 
 TYPED_TEST(DSTest, CompressOperation) {
@@ -272,6 +373,17 @@ TYPED_TEST(DSTest, ContainsAdvanced) {
 }
 
 TYPED_TEST(DSTest, ClearOperation) {
+    // Test clear on an empty DSU
+    DisjointSetUnion<TypeParam> dsu_empty;
+    EXPECT_EQ(dsu_empty.countSets(), 0);
+    EXPECT_TRUE(dsu_empty.isEmpty());
+    dsu_empty.clear(); // Should be a no-op
+    EXPECT_EQ(dsu_empty.countSets(), 0);
+    EXPECT_TRUE(dsu_empty.isEmpty());
+    dsu_empty.clear(); // Call clear again on already empty DSU
+    EXPECT_EQ(dsu_empty.countSets(), 0);
+    EXPECT_TRUE(dsu_empty.isEmpty());
+
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "CL1");
     TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "CL2");
     this->dsu.makeSet(v1); this->dsu.makeSet(v2);
@@ -285,7 +397,13 @@ TYPED_TEST(DSTest, ClearOperation) {
     EXPECT_TRUE(this->dsu.isEmpty());
     EXPECT_FALSE(this->dsu.contains(v1));
 
-    EXPECT_EQ(this->dsu.find(v1), v1); // Auto-creates
+    // Test calling clear multiple times on a DSU that became empty
+    this->dsu.clear(); // Already empty
+    EXPECT_EQ(this->dsu.countSets(), 0);
+    EXPECT_EQ(this->dsu.totalElements(), 0);
+    EXPECT_TRUE(this->dsu.isEmpty());
+
+    EXPECT_EQ(this->dsu.find(v1), v1); // Auto-creates after being cleared
     EXPECT_EQ(this->dsu.countSets(), 1);
     EXPECT_EQ(this->dsu.totalElements(), 1);
     EXPECT_TRUE(this->dsu.contains(v1));
@@ -567,7 +685,7 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
     // unionSets(child1, root_val): parent[child1]=root_val, rank[root_val]=2.
     dsu_explicit.unionSets(child1_val, root_val);
     ASSERT_EQ(dsu_explicit.getDirectParent_Test(child1_val), root_val);
-    // Path is: grandchild1_val -> child1_val -> root_val
+    // Path is now: grandchild1_val -> child1_val -> root_val
 
     // 3. Union child2 and root_val. Let root_val be root of child2.
     //    find(child2)=child2 (rank 0), find(root_val)=root_val (rank 2).
@@ -756,6 +874,117 @@ TEST_F(FastDSUTest, ResetOperation) {
         EXPECT_FALSE(dsu_3.connected(i, (i+1)%3)); 
         EXPECT_TRUE(dsu_3.contains(i));
     }
+
+    // Test reset on a DSU initialized with 0 elements
+    FastDSU dsu_0(0);
+    EXPECT_EQ(dsu_0.countSets(), 0);
+    EXPECT_TRUE(dsu_0.isEmpty());
+    dsu_0.reset(); // Should be a no-op
+    EXPECT_EQ(dsu_0.countSets(), 0);
+    EXPECT_TRUE(dsu_0.isEmpty());
+
+    // Test reset multiple times on a non-empty DSU
+    dsu_3.reset(); // Already reset, should remain in reset state
+    EXPECT_EQ(dsu_3.countSets(), 3);
+    EXPECT_FALSE(dsu_3.isEmpty());
+    for (int i=0; i<3; ++i) {
+        EXPECT_EQ(dsu_3.find(i), i);
+        EXPECT_EQ(dsu_3.size(i), 1);
+    }
+    dsu_3.unionSets(0,1);
+    ASSERT_EQ(dsu_3.countSets(), 2);
+    dsu_3.reset(); // Reset again
+    EXPECT_EQ(dsu_3.countSets(), 3);
+    for (int i=0; i<3; ++i) {
+        EXPECT_EQ(dsu_3.find(i), i);
+        EXPECT_EQ(dsu_3.size(i), 1);
+    }
+}
+
+TEST_F(FastDSUTest, UnionSetsByRankLogic) {
+    FastDSU dsu(10, UnionStrategy::BY_RANK); // Using 10 elements (0-9)
+
+    // Test Case 1: Union of sets with equal ranks.
+    // Resulting root should have its rank incremented.
+    // Elements 0,1. Union(0,1). Assume 1 is root of 0, rank[1]=1.
+    dsu.unionSets(0, 1);
+    int root_0_set = dsu.find(0);
+    ASSERT_EQ(root_0_set, dsu.find(1));
+    ASSERT_EQ(dsu.size(0), 2);
+    // Implicitly, rank of root_0_set (e.g. 1) is 1.
+    // We can check parent: if 1 is root, parent[0] should be 1.
+    if (root_0_set == 1) {
+        ASSERT_EQ(dsu.getDirectParent_Test(0), 1);
+    } else { // root_0_set == 0
+        ASSERT_EQ(dsu.getDirectParent_Test(1), 0);
+    }
+
+
+    // Elements 2,3. Union(2,3). Assume 3 is root of 2, rank[3]=1.
+    dsu.unionSets(2, 3);
+    int root_2_set = dsu.find(2);
+    ASSERT_EQ(root_2_set, dsu.find(3));
+    ASSERT_EQ(dsu.size(2), 2);
+    ASSERT_NE(root_0_set, root_2_set); // Ensure they are different sets
+    // Implicitly, rank of root_2_set (e.g. 3) is 1.
+    if (root_2_set == 3) {
+        ASSERT_EQ(dsu.getDirectParent_Test(2), 3);
+    } else { // root_2_set == 2
+        ASSERT_EQ(dsu.getDirectParent_Test(3), 2);
+    }
+
+    // Union the two sets (e.g., union 0 and 2). Their roots both have rank 1.
+    // The new overall root should have rank 2.
+    // Let's say root of set {2,3} (root_2_set) becomes the new overall root.
+    dsu.unionSets(0, 2);
+    int final_root_tc1 = dsu.find(0);
+    EXPECT_EQ(dsu.find(1), final_root_tc1);
+    EXPECT_EQ(dsu.find(2), final_root_tc1);
+    EXPECT_EQ(dsu.find(3), final_root_tc1);
+    EXPECT_EQ(dsu.size(0), 4);
+    // Implicitly, rank[final_root_tc1] is now 2.
+    // If root_0_set was original parent of its set, it should now point to final_root_tc1 (if not final_root_tc1 itself)
+    if (root_0_set != final_root_tc1) {
+      EXPECT_EQ(dsu.getDirectParent_Test(root_0_set), final_root_tc1);
+    }
+
+
+    // Test Case 2: Union of a set with rank 0 and a set with rank 1.
+    // Lower rank (0) should attach to higher rank (1). Rank of higher rank root should remain 1.
+    // Elements 4,5. Union(4,5). Assume 5 is root of 4, rank[5]=1.
+    dsu.unionSets(4, 5);
+    int root_4_set_tc2 = dsu.find(4); // This is root of {4,5}, rank 1
+    ASSERT_EQ(dsu.size(4), 2);
+    // Element 6 is a single element set. Its root is 6, rank[6]=0.
+    int root_6_set_tc2 = dsu.find(6);
+    ASSERT_EQ(dsu.size(6), 1);
+    ASSERT_EQ(root_6_set_tc2, 6); // root of 6 is 6, rank 0
+
+    // Union 4 and 6. Root of 4 is root_4_set_tc2 (rank 1). Root of 6 is 6 (rank 0).
+    // Element 6 (lower rank root) should attach to root_4_set_tc2 (higher rank root).
+    // Rank of root_4_set_tc2 should remain 1.
+    dsu.unionSets(4, 6);
+    EXPECT_EQ(dsu.find(4), root_4_set_tc2); // Root should still be the original root of {4,5}
+    EXPECT_EQ(dsu.find(5), root_4_set_tc2);
+    EXPECT_EQ(dsu.find(6), root_4_set_tc2); // 6 now part of the same set, its parent should be root_4_set_tc2
+    EXPECT_EQ(dsu.size(4), 3);
+    EXPECT_EQ(dsu.getDirectParent_Test(6), root_4_set_tc2); // Explicit parent check
+    // Implicitly, rank[root_4_set_tc2] is still 1.
+
+    // To further (indirectly) verify rank behavior of TC1 (final_root_tc1, rank 2) vs TC2 (root_4_set_tc2, rank 1):
+    // Create element 7 (rank 0). Union it with TC1's final_root_tc1 (rank 2).
+    // final_root_tc1's rank should remain 2.
+    dsu.unionSets(0, 7); // Element 7 (root 7, rank 0) unioned with set of final_root_tc1 (rank 2)
+    EXPECT_EQ(dsu.find(7), final_root_tc1);
+    EXPECT_EQ(dsu.size(0), 5); // Size of set under final_root_tc1 becomes 5
+    EXPECT_EQ(dsu.getDirectParent_Test(7), final_root_tc1);
+
+    // Create element 8 (rank 0). Union it with TC2's root_4_set_tc2 (rank 1).
+    // root_4_set_tc2's rank should remain 1.
+    dsu.unionSets(4, 8); // Element 8 (root 8, rank 0) unioned with set of root_4_set_tc2 (rank 1)
+    EXPECT_EQ(dsu.find(8), root_4_set_tc2);
+    EXPECT_EQ(dsu.size(4), 4); // Size of set under root_4_set_tc2 becomes 4
+    EXPECT_EQ(dsu.getDirectParent_Test(8), root_4_set_tc2);
 }
     
 TEST_F(FastDSUTest, CompressOperation) {
