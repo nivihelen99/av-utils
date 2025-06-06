@@ -75,7 +75,7 @@ std::string value_to_log_string(const U& val) {
 template<typename T> class SkipListNode;
 
 // Forward declaration for SkipList, necessary for defining its static member.
-template<typename T, typename Compare = std::less<KeyType_t<T>>> class SkipList;
+template<typename T, typename Compare> class SkipList; // Default argument removed
 
 template<typename T>
 class SkipListNode {
