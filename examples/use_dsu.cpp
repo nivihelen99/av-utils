@@ -1,5 +1,11 @@
-#include "disjoint_set_union.h"
+#include "../include/disjoint_set_union.h" // Assuming this path is correct
+#include <iostream>
+#include <vector>
+#include <string>
+#include <chrono> // For performance test
+#include <algorithm> // For std::sort in Kruskal's example (used by DSUApplications)
 
+// The main function extracted from disjoint_set_union.h
 int main() {
     std::cout << "=== Disjoint Set Union (Union-Find) Demo ===\n\n";
     
@@ -38,7 +44,8 @@ int main() {
     std::cout << "\n2. Fast DSU with integers (Graph algorithms):\n";
     
     // Test cycle detection
-    std::vector<std::pair<int, int>> edges1 = {{0, 1}, {1, 2}, {2, 3}, {3, 4}};
+    std::vector<std::pair<int, int>> edges1 = {{0, 1}, {1, 2}, {2, 3}, {3, 4}}; // Requires <vector> and <utility> (for std::pair)
+    // <utility> is often implicitly included but good to be aware. disjoint_set_union.h includes <vector>.
     std::cout << "Graph 1 has cycle: " << (DSUApplications::hasCycle(5, edges1) ? "Yes" : "No") << std::endl;
     
     std::vector<std::pair<int, int>> edges2 = {{0, 1}, {1, 2}, {2, 0}, {3, 4}};
@@ -52,14 +59,15 @@ int main() {
     
     // Test Kruskal's MST
     std::cout << "\n3. Minimum Spanning Tree (Kruskal's Algorithm):\n";
-    std::vector<DSUApplications::Edge> edges = {
+    std::vector<DSUApplications::Edge> edges = { // DSUApplications::Edge is defined in disjoint_set_union.h
         {0, 1, 4}, {0, 7, 8}, {1, 2, 8}, {1, 7, 11},
         {2, 3, 7}, {2, 8, 2}, {2, 5, 4}, {3, 4, 9},
         {3, 5, 14}, {4, 5, 10}, {5, 6, 2}, {6, 7, 1},
         {6, 8, 6}, {7, 8, 7}
     };
     
-    auto mst = DSUApplications::kruskalMST(9, edges);
+    auto mst = DSUApplications::kruskalMST(9, edges); // DSUApplications::kruskalMST is in disjoint_set_union.h
+                                                      // which includes <algorithm> for std::sort.
     std::cout << "MST edges:\n";
     int totalWeight = 0;
     for (const auto& edge : mst) {
@@ -70,9 +78,9 @@ int main() {
     
     // Performance test
     std::cout << "\n4. Performance test:\n";
-    FastDSU perfDSU(100000);
+    FastDSU perfDSU(100000); // FastDSU is from disjoint_set_union.h
     
-    auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now(); // Requires <chrono>
     
     // Perform many union operations
     for (int i = 0; i < 50000; i++) {
