@@ -111,6 +111,7 @@ public:
 
 private:
     Compare key_compare_;
+    int effective_max_level_;
 
 public:
     class iterator {
@@ -380,13 +381,14 @@ private:
     };
 #endif // SKIPLIST_USE_STD_ALLOC
 
-    static const int MAX_LEVEL = 16;
+    static const int DEFAULT_MAX_LEVEL = 16; // Renamed from MAX_LEVEL to avoid confusion
     SkipListNode<T>* header;
     std::atomic<int> currentLevel;
 #ifndef SKIPLIST_USE_STD_ALLOC
     MemoryPool memory_pool_;
 #endif
     // Compare key_compare_; // Moved up
+    // int effective_max_level_; // Moved up with other private members
 
 private:
     SkipListNode<T>* allocate_node(T value, int level) {
@@ -416,8 +418,13 @@ private:
     }
 
 public:
-    SkipList() : currentLevel(0), key_compare_() {
-        header = allocate_node(T{}, MAX_LEVEL);
+    explicit SkipList(int userMaxLevel = DEFAULT_MAX_LEVEL) : currentLevel(0), key_compare_(), effective_max_level_(userMaxLevel) {
+        if (effective_max_level_ < 0) {
+             // Or throw an exception, for now, cap at 0.
+            effective_max_level_ = 0;
+        }
+        // Consider adding an upper cap for effective_max_level_ if necessary, e.g. 30 or some reasonable limit.
+        header = allocate_node(T{}, effective_max_level_);
     }
 
     ~SkipList() {
@@ -437,7 +444,7 @@ public:
         int level = 0;
         thread_local static std::mt19937 rng{std::random_device{}()};
         thread_local static std::uniform_real_distribution<double> dist{0.0, 1.0};
-        while (dist(rng) < 0.5 && level < MAX_LEVEL) {
+        while (dist(rng) < 0.5 && level < effective_max_level_) { // Use instance-specific max level
             level++;
         }
 #ifdef SKIPLIST_DEBUG_LOGGING
@@ -446,7 +453,7 @@ public:
         return level;
     }
 
-    void insert(T value) {
+    bool insert(T value) {
 #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Insert] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
 #endif
@@ -454,7 +461,7 @@ public:
             thread_local_finger = header;
         }
 
-        std::vector<SkipListNode<T>*> update(MAX_LEVEL + 1, nullptr);
+        std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
         SkipListNode<T>* current_node = header;
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
@@ -501,6 +508,7 @@ public:
 
         // if (current_val_check_node == nullptr || get_comparable_value(current_val_check_node->value) != get_comparable_value(value))
         if (current_val_check_node == nullptr || (key_compare_(get_comparable_value(current_val_check_node->value), get_comparable_value(value)) || key_compare_(get_comparable_value(value), get_comparable_value(current_val_check_node->value))) ) {
+            // Element not found, insert it
             int newLevel = randomLevel();
 #ifdef SKIPLIST_DEBUG_LOGGING
             std::cout << "[Insert] New node level: " << newLevel << std::endl;
@@ -540,11 +548,20 @@ public:
                 std::cout << "[Insert] CAS successful for level " << i << std::endl;
 #endif
             }
-        }
-        if (update[0] != nullptr) {
-            thread_local_finger = update[0];
+            if (update[0] != nullptr) {
+                thread_local_finger = update[0];
+            } else {
+                thread_local_finger = header;
+            }
+            return true; // Inserted successfully
         } else {
-            thread_local_finger = header;
+            // Element already exists
+            if (update[0] != nullptr) {
+                thread_local_finger = update[0];
+            } else {
+                thread_local_finger = header;
+            }
+            return false; // Did not insert
         }
     }
 
@@ -612,7 +629,7 @@ public:
             thread_local_finger = header;
         }
 
-        std::vector<SkipListNode<T>*> update(MAX_LEVEL + 1, nullptr);
+        std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
         SkipListNode<T>* current_node = header;
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
@@ -729,7 +746,7 @@ public:
             thread_local_finger = header;
         }
 
-        std::vector<SkipListNode<T>*> update(MAX_LEVEL + 1, nullptr);
+        std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
         SkipListNode<T>* current_node = header;
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
@@ -1041,7 +1058,7 @@ public:
         }
 
         // Reset header node's forward pointers
-        for (int i = 0; i <= MAX_LEVEL; ++i) { // Iterate up to MAX_LEVEL which is the allocated size of header->forward
+        for (int i = 0; i <= effective_max_level_; ++i) { // Use instance-specific max level
             header->forward[i].store(nullptr, std::memory_order_release); // Release semantics for subsequent operations by other threads
         }
 
@@ -1085,6 +1102,20 @@ public:
             node = node->forward[0].load(std::memory_order_acquire);
         }
         std::cout << std::endl;
+    }
+
+    bool empty() const {
+        return header->forward[0].load(std::memory_order_acquire) == nullptr;
+    }
+
+    std::vector<T> toVector() const {
+        std::vector<T> vec;
+        SkipListNode<T>* node = header->forward[0].load(std::memory_order_acquire);
+        while (node != nullptr) {
+            vec.push_back(node->value);
+            node = node->forward[0].load(std::memory_order_acquire);
+        }
+        return vec;
     }
 
     int size() const {
