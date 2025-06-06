@@ -309,9 +309,13 @@ public:
     }
 
     // FOR TESTING PURPOSES ONLY
-    int getDirectParent_Test(int x) const {
-        assert(x >= 0 && x < maxElement); // Element must be valid
-        return parent[x];
+    T getDirectParent_Test(const T& x) const {
+        auto it = parent.find(x);
+        if (it == parent.end()) {
+             // Element not found in parent map.
+             throw std::out_of_range("Element not found in parent map for getDirectParent_Test");
+        }
+        return it->second;
     }
 };
 
@@ -549,18 +553,9 @@ public:
     }
 
     // FOR TESTING PURPOSES ONLY
-    T getDirectParent_Test(const T& x) const {
-        auto it = parent.find(x);
-        if (it != parent.end()) {
-            return it->second;
-        }
-        // This case should ideally not be reached in tests if x is valid and in DSU.
-        // Depending on T, throwing an exception or returning a special value might be options.
-        // For tests, ensure x is part of DSU. If T could be default-constructed to an invalid state:
-        // if constexpr (std::is_default_constructible_v<T>) { return T(); }
-        // else { throw std::runtime_error("Element not found in getDirectParent_Test"); }
-        // Given the context, returning x itself if not found (implies it's a root or not in map properly).
-        return x;
+    int getDirectParent_Test(int x) const {
+        assert(x >= 0 && x < maxElement); // This assert is correct here
+        return parent[x];
     }
 };
 
@@ -585,7 +580,7 @@ namespace DSUApplications {
         for (const Edge& e : edges) {
             if (dsu.unionSets(e.u, e.v)) {
                 mst.push_back(e);
-                if (mst.size() == n - 1) break; // MST has V-1 edges
+                if (mst.size() == static_cast<typename std::vector<Edge>::size_type>(n - 1)) break; // MST has V-1 edges
             }
         }
         return mst;

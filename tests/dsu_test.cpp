@@ -353,7 +353,8 @@ TYPED_TEST(DSTest, UnionSetsBySizeLogic) {
     EXPECT_EQ(dsu.size(v1), 2);
     EXPECT_EQ(dsu.size(v3), 1);
     TypeParam root_v1_old_tc1 = dsu.find(v1); // Root of {v1,v2}
-    TypeParam root_v3_old_tc1 = dsu.find(v3); // Root of {v3}
+    // TypeParam root_v3_old_tc1 = dsu.find(v3); // Root of {v3} - This variable was unused.
+                                               // The important part is that root_v1_old_tc1 is the root of the larger set.
 
     EXPECT_TRUE(dsu.unionSets(v1, v3)); // Unioning {v1,v2} (size 2) with {v3} (size 1)
     // Root of smaller set (v3's old root) should attach to root of larger set (v1's old root)
