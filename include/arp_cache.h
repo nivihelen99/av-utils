@@ -7,36 +7,10 @@
 #include <list> // Required for std::list
 #include <queue>
 #include <unordered_map>
-#include <unordered_set> // Required for std::unordered_set
 #include <vector>
-#include <string> // For std::to_string in potential logging helpers
-#include <functional> // Required for std::hash
 
 // Type alias for MAC addresses
 using mac_addr_t = std::array<uint8_t, 6>;
-
-// Custom hash function for mac_addr_t
-struct MacAddrHash {
-    std::size_t operator()(const mac_addr_t& mac) const {
-        std::size_t hash_value = 0;
-        std::hash<uint8_t> hasher;
-        // Simple hash combination. Could be replaced with a more robust one if needed.
-        for (uint8_t byte : mac) {
-            hash_value = hash_value ^ (hasher(byte) << 1);
-        }
-        return hash_value;
-    }
-};
-
-/**
- * @brief Defines modes for general ARP rate limiting.
- */
-enum class ArpRateLimitMode {
-    DISABLED,         /**< No rate limiting is applied. */
-    PER_SOURCE_MAC,   /**< Rate limit based on the source MAC address of ARP packets. */
-    PER_SOURCE_IP     /**< Rate limit based on the source IP address in ARP packets. */
-    // PER_SOURCE_MAC_AND_IP // Future: Could combine
-};
 
 /**
  * @brief Defines the policy for handling ARP conflicts.
@@ -70,10 +44,8 @@ enum class ARPPacketType {
 /**
  * @brief Implements an ARP (Address Resolution Protocol) cache for IPv4.
  *
- * Manages mappings from IP addresses to MAC addresses.
- * Includes features like gratuitous ARP detection, proxy ARP, fast failover with backup MACs,
- * and various ARP security mechanisms such as interface trust, static ARP entries,
- * known MAC validation, DHCP validation enforcement, and general ARP rate limiting.
+ * Manages mappings from IP addresses to MAC addresses, including features like
+ * gratuitous ARP detection, proxy ARP, and fast failover with backup MACs.
  */
 class ARPCache {
 public: // ARPState made public for test access
@@ -134,27 +106,6 @@ protected: // cache_ made protected for test access via MockARPCache
     // Per-interface Proxy ARP control
     std::unordered_map<uint32_t, bool> interface_proxy_arp_enabled_;
     std::unordered_map<uint32_t, mac_addr_t> interface_macs_;
-
-    // New data structures for trusted ports, static ARP, and rate limiting
-    std::unordered_map<uint32_t, bool> interface_trust_status_; // For trusted/untrusted ports
-    std::unordered_map<uint32_t, mac_addr_t> static_arp_entries_; /**< Static ARP entries (IP to MAC). */
-    std::unordered_map<uint64_t, std::pair<int, std::chrono::steady_clock::time_point>> arp_rate_limit_counters_; /**< Counters for general ARP rate limiting. Key can be MAC or IP. */
-
-    bool default_interface_trust_status_; /**< Default trust status for interfaces not explicitly set. */
-
-    // Data structures for known MACs enforcement
-    std::unordered_map<uint32_t, std::unordered_set<mac_addr_t, MacAddrHash>> known_macs_per_interface_; /**< List of known MACs allowed per interface, using custom hash. */
-    std::unordered_map<uint32_t, bool> enforce_known_macs_status_; /**< Per-interface enforcement status for known MACs. */
-    bool default_enforce_known_macs_; /**< Default policy for enforcing known MACs on interfaces. */
-
-    // DHCP Validation Enforcement
-    bool enforce_dhcp_validation_; /**< Global policy for enforcing DHCP validation. */
-
-    // General ARP Rate Limiting
-    ArpRateLimitMode general_arp_rate_limit_mode_; /**< Current mode for general ARP rate limiting. */
-    int general_arp_rate_limit_count_;             /**< Max packets allowed by general rate limiter in an interval. */
-    std::chrono::seconds general_arp_rate_limit_interval_; /**< Time interval for the general rate limiter. */
-
 
 protected: // promoteToMRU made protected for test access via MockARPCache
     void promoteToMRU(uint32_t ip) {
@@ -293,12 +244,6 @@ public:
      * @param conflict_pol Policy for handling ARP conflicts.
      * @param garp_pol Policy for handling gratuitous ARP packets.
      * @param gratuitous_arp_min_interval Minimum interval between gratuitous ARPs for the same IP.
-     * @param default_interface_trust_status Default trust status for interfaces.
-     * @param default_enforce_known_macs Default policy for enforcing known MACs on interfaces. If true, interfaces by default will enforce known MAC list.
-     * @param enforce_dhcp_validation Global policy for enforcing DHCP validation. If true, ARP entries failing DHCP snooping validation will be dropped.
-     * @param general_arp_rate_limit_mode Mode for general ARP rate limiting (e.g., disabled, per source MAC, per source IP).
-     * @param general_arp_rate_limit_count Maximum number of packets allowed by the general rate limiter within its interval.
-     * @param general_arp_rate_limit_interval The time interval for the general rate limiter.
      */
     explicit ARPCache(const mac_addr_t& dev_mac,
                       std::chrono::seconds reachable_time = std::chrono::seconds(300),
@@ -312,13 +257,7 @@ public:
                       size_t max_cache_size = 1024,
                       ConflictPolicy conflict_pol = ConflictPolicy::UPDATE_EXISTING,
                       GratuitousArpPolicy garp_pol = GratuitousArpPolicy::PROCESS,
-                      std::chrono::milliseconds gratuitous_arp_min_interval = std::chrono::milliseconds(1000),
-                      bool default_interface_trust_status = false,
-                      bool default_enforce_known_macs = false,
-                      bool enforce_dhcp_validation = false,
-                      ArpRateLimitMode general_arp_rate_limit_mode = ArpRateLimitMode::DISABLED,
-                      int general_arp_rate_limit_count = 5,
-                      std::chrono::seconds general_arp_rate_limit_interval = std::chrono::seconds(1))
+                      std::chrono::milliseconds gratuitous_arp_min_interval = std::chrono::milliseconds(1000))
         : device_mac_(dev_mac),
           reachable_time_sec_(reachable_time),
           stale_time_sec_(stale_time),
@@ -331,13 +270,7 @@ public:
           max_cache_size_(max_cache_size),
           conflict_policy_(conflict_pol),
           gratuitous_arp_policy_(garp_pol),
-          gratuitous_arp_min_interval_ms_(gratuitous_arp_min_interval),
-          default_interface_trust_status_(default_interface_trust_status),
-          default_enforce_known_macs_(default_enforce_known_macs),
-          enforce_dhcp_validation_(enforce_dhcp_validation),
-          general_arp_rate_limit_mode_(general_arp_rate_limit_mode),
-          general_arp_rate_limit_count_(general_arp_rate_limit_count),
-          general_arp_rate_limit_interval_(general_arp_rate_limit_interval) {}
+          gratuitous_arp_min_interval_ms_(gratuitous_arp_min_interval) {}
 
     /**
      * @brief Adds a subnet configuration for Proxy ARP.
@@ -371,16 +304,6 @@ public:
      * @return True if a usable MAC address is found, false otherwise.
      */
     bool lookup(uint32_t ip, mac_addr_t& mac_out) {
-        // Check static ARP entries first
-        if (get_static_arp_entry(ip, mac_out)) {
-            // Static entries are always considered valid and reachable.
-            // If it's also in the dynamic cache, ensure it's promoted to reflect its use.
-            if (cache_.count(ip)) {
-                promoteToMRU(ip);
-            }
-            return true;
-        }
-
         auto current_time = std::chrono::steady_clock::now();
         auto it = cache_.find(ip);
 
@@ -474,116 +397,7 @@ public:
         return false;
     }
 
-    // --- Static ARP Management ---
-    /**
-     * @brief Adds or updates a static ARP entry.
-     * These entries are permanent, take precedence over dynamic entries in lookups,
-     * and ARP packets conflicting with static entries may be dropped.
-     * @param ip The IP address for the static entry.
-     * @param mac The MAC address for the static entry.
-     */
-    void add_static_arp_entry(uint32_t ip, const mac_addr_t& mac);
-
-    /**
-     * @brief Removes a static ARP entry.
-     * @param ip The IP address of the static entry to remove.
-     */
-    void remove_static_arp_entry(uint32_t ip);
-
-    /**
-     * @brief Retrieves a static ARP entry.
-     * @param ip The IP address to look up in static entries.
-     * @param mac_out Output parameter for the MAC address if found.
-     * @return True if a static entry exists for the IP, false otherwise.
-     */
-    bool get_static_arp_entry(uint32_t ip, mac_addr_t& mac_out) const {
-        auto it = static_arp_entries_.find(ip);
-        if (it != static_arp_entries_.end()) {
-            mac_out = it->second;
-            return true;
-        }
-        return false;
-    }
-
     // --- Configuration Setters ---
-
-    /**
-     * @brief Sets the general ARP rate limiting configuration.
-     * When enabled, incoming ARP packets are rate-limited based on the specified mode,
-     * count, and interval to prevent ARP storms or excessive processing.
-     * Changing the configuration resets any existing rate limit counters.
-     * @param mode The rate limiting mode (e.g., DISABLED, PER_SOURCE_MAC, PER_SOURCE_IP).
-     * @param count The number of packets allowed from a source (MAC or IP) within the interval.
-     * @param interval The time interval over which the packet count is measured.
-     */
-    void set_general_arp_rate_limit_config(ArpRateLimitMode mode, int count, std::chrono::seconds interval);
-
-    /**
-     * @brief Sets whether to enforce DHCP validation for ARP entries.
-     * If enabled, ARP packets mapping an IP to a MAC will be checked against a
-     * (typically external, via virtual method `is_ip_mac_dhcp_validated`) DHCP snooping database.
-     * If validation fails and enforcement is on, the packet is dropped.
-     * @param enforce True to enable enforcement, false to disable.
-     */
-    void set_enforce_dhcp_validation(bool enforce);
-
-    /**
-     * @brief Adds a MAC address to the list of known (allowed) MACs for a specific interface.
-     * Used in conjunction with `set_enforce_known_macs_on_interface`.
-     * @param interface_id The identifier of the interface.
-     * @param mac The MAC address to add to the known list.
-     */
-    void add_known_mac(uint32_t interface_id, const mac_addr_t& mac);
-
-    /**
-     * @brief Removes a MAC address from the list of known MACs for a specific interface.
-     * @param interface_id The identifier of the interface.
-     * @param mac The MAC address to remove from the known list.
-     */
-    void remove_known_mac(uint32_t interface_id, const mac_addr_t& mac);
-
-    /**
-     * @brief Checks if a MAC address is in the known list for a specific interface.
-     * @param interface_id The identifier of the interface.
-     * @param mac The MAC address to check.
-     * @return True if the MAC is known on the interface, false otherwise.
-     */
-    bool is_mac_known_on_interface(uint32_t interface_id, const mac_addr_t& mac) const {
-        auto it = known_macs_per_interface_.find(interface_id);
-        if (it != known_macs_per_interface_.end()) {
-            return it->second.count(mac) > 0;
-        }
-        // If the interface_id is not in known_macs_per_interface_,
-        // it means no MACs are specifically "known" (or "restricted") for this interface.
-        // Depending on desired default behavior:
-        // - return false: (strictest) if interface isn't configured, no MACs are considered known.
-        // - return true: (permissive) if interface isn't configured for known MACs, all MACs are treated as if known (i.e., check passes).
-        // Given the context of "is known", `false` seems more appropriate if the interface itself isn't configured.
-        return false;
-    }
-
-    /**
-     * @brief Enables or disables source MAC validation (known MAC list) for a given interface.
-     * If enabled, only ARP packets from MAC addresses registered via `add_known_mac`
-     * for that interface will be processed. Others will be dropped.
-     * @param interface_id The identifier of the interface.
-     * @param enforce True to enable enforcement, false to disable.
-     */
-    void set_enforce_known_macs_on_interface(uint32_t interface_id, bool enforce);
-
-    /**
-     * @brief Gets the source MAC validation enforcement status for a given interface.
-     * @param interface_id The identifier of the interface.
-     * @return True if enforcement is enabled for the interface, false otherwise.
-     *         Returns the default enforcement policy if not explicitly set for the interface.
-     */
-    bool get_enforce_known_macs_on_interface(uint32_t interface_id) const {
-        auto it = enforce_known_macs_status_.find(interface_id);
-        if (it != enforce_known_macs_status_.end()) {
-            return it->second;
-        }
-        return default_enforce_known_macs_;
-    }
 
     /**
      * @brief Sets the policy for handling IP address conflicts.
@@ -653,30 +467,6 @@ public:
     }
 
     // --- Main ARP Cache Operations ---
-
-    /**
-     * @brief Sets the trust status for a specific network interface.
-     * ARP packets received on untrusted interfaces might be subject to stricter validation rules
-     * or different processing logic, though current direct enforcement is via other specific features
-     * like known MAC lists or DHCP validation. This status serves as a classification.
-     * @param interface_id The identifier of the interface.
-     * @param is_trusted True if the interface is considered trusted, false otherwise.
-     */
-    void set_interface_trust_status(uint32_t interface_id, bool is_trusted);
-
-    /**
-     * @brief Gets the trust status for a specific interface.
-     * @param interface_id The identifier of the interface.
-     * @return True if the interface is trusted, false if untrusted.
-     *         Returns the default trust status if not explicitly set for the interface.
-     */
-    bool get_interface_trust_status(uint32_t interface_id) const {
-        auto it = interface_trust_status_.find(interface_id);
-        if (it != interface_trust_status_.end()) {
-            return it->second;
-        }
-        return default_interface_trust_status_;
-    }
 
     /**
      * @brief Sets the MAC address for a specific interface.
@@ -762,69 +552,9 @@ public:
      * @brief Adds or updates an ARP entry.
      * @param ip The IP address of the entry.
      * @param new_mac The MAC address corresponding to the IP.
-     * @param received_interface_id The ID of the interface on which the ARP packet was received.
      * @param packet_type The type of ARP packet that triggered this entry update.
      */
-    void add_entry(uint32_t ip, const mac_addr_t& new_mac, uint32_t received_interface_id, ARPPacketType packet_type = ARPPacketType::UNKNOWN) {
-        // Log interface trust status
-        bool is_trusted = get_interface_trust_status(received_interface_id);
-        fprintf(stderr, "INFO: ARP packet on interface %u (Trusted: %s) for IP %u MAC %02x:%02x:%02x:%02x:%02x:%02x\n",
-                received_interface_id, is_trusted ? "yes" : "no", ip,
-                new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
-
-        // General ARP Rate Limiting Check
-        if (general_arp_rate_limit_mode_ != ArpRateLimitMode::DISABLED) {
-            auto current_time = std::chrono::steady_clock::now();
-            uint64_t key = 0;
-            char id_str[64] = {0}; // For logging
-
-            if (general_arp_rate_limit_mode_ == ArpRateLimitMode::PER_SOURCE_MAC) {
-                for (int i = 0; i < 6; ++i) key = (key << 8) | new_mac[i];
-                snprintf(id_str, sizeof(id_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-                         new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
-            } else { // PER_SOURCE_IP
-                key = ip;
-                snprintf(id_str, sizeof(id_str), "%u.%u.%u.%u", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF);
-            }
-
-            auto it_limit = arp_rate_limit_counters_.find(key);
-            if (it_limit == arp_rate_limit_counters_.end() ||
-                (current_time - it_limit->second.second) > general_arp_rate_limit_interval_) {
-                arp_rate_limit_counters_[key] = {1, current_time};
-            } else {
-                it_limit->second.first++;
-                if (it_limit->second.first > general_arp_rate_limit_count_) {
-                    fprintf(stderr, "WARNING: General ARP rate limit exceeded for %s %s. Packet dropped.\n",
-                            (general_arp_rate_limit_mode_ == ArpRateLimitMode::PER_SOURCE_MAC ? "MAC" : "IP"),
-                            id_str);
-                    return; // Drop the packet
-                }
-            }
-        }
-
-        // Static ARP check
-        mac_addr_t static_mac;
-        if (get_static_arp_entry(ip, static_mac)) {
-            if (static_mac != new_mac) {
-                fprintf(stderr, "WARNING: ARP packet for IP %u (MAC %02x:%02x:%02x:%02x:%02x:%02x) conflicts with static entry (MAC %02x:%02x:%02x:%02x:%02x:%02x). Packet dropped.\n",
-                        ip,
-                        new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5],
-                        static_mac[0], static_mac[1], static_mac[2], static_mac[3], static_mac[4], static_mac[5]);
-                return; // Drop the packet by returning early.
-            }
-            // If MACs match, normal processing will ensure the entry becomes REACHABLE.
-        }
-
-        // Known MAC enforcement check (Source MAC validation)
-        if (get_enforce_known_macs_on_interface(received_interface_id)) {
-            if (!is_mac_known_on_interface(received_interface_id, new_mac)) {
-                fprintf(stderr, "WARNING: ARP packet on interface %u from unknown MAC %02x:%02x:%02x:%02x:%02x:%02x. Packet dropped.\n",
-                        received_interface_id,
-                        new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
-                return; // Drop the packet
-            }
-        }
-
+    void add_entry(uint32_t ip, const mac_addr_t& new_mac, ARPPacketType packet_type = ARPPacketType::UNKNOWN) {
         auto current_time_for_processing = std::chrono::steady_clock::now(); // Time for GARP checks
 
         // 1. Handle GratuitousArpPolicy::DROP_IF_CONFLICT
@@ -877,14 +607,8 @@ public:
 
         // --- DHCP Snooping Validation Hook ---
         if (!this->is_ip_mac_dhcp_validated(ip, new_mac)) {
-            if (enforce_dhcp_validation_) {
-                fprintf(stderr, "WARNING: IP-MAC mapping for IP %u, MAC %02x:%02x:%02x:%02x:%02x:%02x failed DHCP snooping validation. Packet dropped due to enforcement policy.\n",
-                        ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
-                return; // Drop the packet
-            } else {
-                fprintf(stderr, "WARNING: IP-MAC mapping for IP %u, MAC %02x:%02x:%02x:%02x:%02x:%02x failed DHCP snooping validation. Processing continues (enforcement policy is off).\n",
-                        ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
-            }
+            fprintf(stderr, "WARNING: IP-MAC mapping for IP %u, MAC %02x:%02x:%02x:%02x:%02x:%02x failed DHCP snooping validation. Processing continues (no specific drop policy implemented for this yet).\n",
+                    ip, new_mac[0], new_mac[1], new_mac[2], new_mac[3], new_mac[4], new_mac[5]);
             // Future: Could consult a policy here, e.g., if (dhcp_validation_policy_ == DROP_INVALID) return;
         }
         // --- End DHCP Snooping Validation Hook ---
@@ -967,21 +691,6 @@ public:
             // existing_backups is already empty if new entry
             cache_[ip] = {new_mac, ARPState::REACHABLE, current_time, 0, no_packets, existing_backups, 0, 0, current_time};
             // For a truly new entry, last_mac_update_time could be 'epoch' or current_time. Current_time is fine.
-        }
-
-        // If a static entry exists for this IP and MAC, ensure the state is REACHABLE.
-        // The general logic above (setting state to REACHABLE on new/matching MAC) handles this.
-        // If a static entry forced this update, it will be marked REACHABLE.
-        mac_addr_t temp_static_mac_check;
-        if (get_static_arp_entry(ip, temp_static_mac_check) && temp_static_mac_check == new_mac) {
-            // Ensure the state is set to REACHABLE if it's a static entry.
-            // The main logic block for adding/updating entries already does this if new_mac matches entry.mac or if it's a new entry.
-            // If an existing entry.mac was different but conflict policy allowed update, it would also become REACHABLE.
-            // So, this explicit check might be redundant but ensures intent for static entries.
-            if (cache_.count(ip)) {
-                 cache_[ip].state = ARPState::REACHABLE;
-                 cache_[ip].timestamp = current_time; // Also update timestamp to prevent immediate aging
-            }
         }
 
         promoteToMRU(ip);
