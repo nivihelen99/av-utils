@@ -14,6 +14,7 @@
 #include <utility> // For std::pair
 #include <type_traits> // For std::is_same, std::decay_t, etc.
 #include <functional> // For std::less
+#include <cstdlib> // For malloc and free
 
 // Helper to extract KeyType from T
 template <typename T>
@@ -213,6 +214,7 @@ public:
     }
 
 private:
+#ifndef SKIPLIST_USE_STD_ALLOC
     class MemoryPool {
     private:
         static std::vector<SkipListNode<T>*>& get_thread_local_cache() {
@@ -376,26 +378,56 @@ private:
     #endif
         }
     };
+#endif // SKIPLIST_USE_STD_ALLOC
 
     static const int MAX_LEVEL = 16;
     SkipListNode<T>* header;
     std::atomic<int> currentLevel;
+#ifndef SKIPLIST_USE_STD_ALLOC
     MemoryPool memory_pool_;
+#endif
     // Compare key_compare_; // Moved up
+
+private:
+    SkipListNode<T>* allocate_node(T value, int level) {
+#ifdef SKIPLIST_USE_STD_ALLOC
+        // Allocate memory using malloc
+        void* raw_mem = malloc(sizeof(SkipListNode<T>));
+        if (!raw_mem) {
+            throw std::bad_alloc();
+        }
+        // Construct object using placement new
+        return new (raw_mem) SkipListNode<T>(value, level);
+#else
+        return memory_pool_.allocate(value, level);
+#endif
+    }
+
+    void deallocate_node(SkipListNode<T>* node) {
+        if (!node) return;
+#ifdef SKIPLIST_USE_STD_ALLOC
+        // Call destructor explicitly
+        node->~SkipListNode<T>();
+        // Free the memory
+        free(node);
+#else
+        memory_pool_.deallocate(node);
+#endif
+    }
 
 public:
     SkipList() : currentLevel(0), key_compare_() {
-        header = new SkipListNode<T>(T{}, MAX_LEVEL);
+        header = allocate_node(T{}, MAX_LEVEL);
     }
 
     ~SkipList() {
         SkipListNode<T>* current = header->forward[0].load(std::memory_order_acquire);
         while (current != nullptr) {
             SkipListNode<T>* next = current->forward[0].load(std::memory_order_relaxed);
-            memory_pool_.deallocate(current);
+            deallocate_node(current);
             current = next;
         }
-        delete header;
+        deallocate_node(header);
     }
 
     int randomLevel() {
@@ -484,7 +516,7 @@ public:
                 localCurrentLevel = currentLevel.load(std::memory_order_acquire);
             }
 
-            SkipListNode<T>* newNode = memory_pool_.allocate(value, newLevel);
+            SkipListNode<T>* newNode = allocate_node(value, newLevel);
 #ifdef SKIPLIST_DEBUG_LOGGING
             std::cout << "[Insert] Allocated newNode: " << newNode << std::endl;
 #endif
@@ -655,7 +687,7 @@ public:
 #ifdef SKIPLIST_DEBUG_LOGGING
             std::cout << "[Remove] Calling deallocate for target_node: " << target_node << std::endl;
 #endif
-            memory_pool_.deallocate(target_node);
+            deallocate_node(target_node);
 
             int newLevel = localCurrentLevel;
             while (newLevel > 0 && header->forward[newLevel].load(std::memory_order_acquire) == nullptr) {
@@ -807,7 +839,7 @@ public:
                 // localCurrentLevel = currentLevel.load(std::memory_order_acquire); // Update local view, though newLevel is the target for this node
             }
 
-            SkipListNode<T>* newNode = memory_pool_.allocate(value_to_insert_or_assign, newLevel);
+            SkipListNode<T>* newNode = allocate_node(value_to_insert_or_assign, newLevel);
         #ifdef SKIPLIST_DEBUG_LOGGING
             std::cout << "[InsertOrAssign] Allocated newNode: " << newNode << " with level " << newLevel << std::endl;
         #endif
@@ -1004,7 +1036,7 @@ public:
         #ifdef SKIPLIST_DEBUG_LOGGING
             std::cout << "[Clear] Deallocating node with value: " << value_to_log_string(current->value) << " (Key: " << value_to_log_string(get_comparable_value(current->value)) << ")" << std::endl;
         #endif
-            memory_pool_.deallocate(current);
+            deallocate_node(current);
             current = next;
         }
 

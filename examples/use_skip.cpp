@@ -1,5 +1,13 @@
 #include "skiplist.h"
 
+// To compile this example using standard library malloc/free for SkipList nodes
+// instead of the default custom memory pool, define the SKIPLIST_USE_STD_ALLOC macro.
+// For example, with g++:
+// g++ use_skip.cpp -o use_skip_std_alloc -std=c++17 -DSKIPLIST_USE_STD_ALLOC -I../include
+//
+// To compile with the default memory pool:
+// g++ use_skip.cpp -o use_skip_mem_pool -std=c++17 -I../include
+
 // Example usage and test cases
 int main() {
     SkipList<int> skipList;
