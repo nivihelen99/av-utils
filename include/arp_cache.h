@@ -10,9 +10,23 @@
 #include <unordered_set> // Required for std::unordered_set
 #include <vector>
 #include <string> // For std::to_string in potential logging helpers
+#include <functional> // Required for std::hash
 
 // Type alias for MAC addresses
 using mac_addr_t = std::array<uint8_t, 6>;
+
+// Custom hash function for mac_addr_t
+struct MacAddrHash {
+    std::size_t operator()(const mac_addr_t& mac) const {
+        std::size_t hash_value = 0;
+        std::hash<uint8_t> hasher;
+        // Simple hash combination. Could be replaced with a more robust one if needed.
+        for (uint8_t byte : mac) {
+            hash_value = hash_value ^ (hasher(byte) << 1);
+        }
+        return hash_value;
+    }
+};
 
 /**
  * @brief Defines modes for general ARP rate limiting.
@@ -129,7 +143,7 @@ protected: // cache_ made protected for test access via MockARPCache
     bool default_interface_trust_status_; /**< Default trust status for interfaces not explicitly set. */
 
     // Data structures for known MACs enforcement
-    std::unordered_map<uint32_t, std::unordered_set<mac_addr_t>> known_macs_per_interface_; /**< List of known MACs allowed per interface. */
+    std::unordered_map<uint32_t, std::unordered_set<mac_addr_t, MacAddrHash>> known_macs_per_interface_; /**< List of known MACs allowed per interface, using custom hash. */
     std::unordered_map<uint32_t, bool> enforce_known_macs_status_; /**< Per-interface enforcement status for known MACs. */
     bool default_enforce_known_macs_; /**< Default policy for enforcing known MACs on interfaces. */
 
