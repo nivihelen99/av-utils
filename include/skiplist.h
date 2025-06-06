@@ -4,10 +4,10 @@
 #include <atomic> // Added for std::atomic
 #include <mutex>  // Added for std::mutex
 #include <random>
-#include <climits>
+// <climits> removed - not used
 #include <iomanip>
 #include <string> // Added for std::string
-#include <list>   // For MemoryPool's free list
+// <list> removed - not used
 #include <memory> // For std::unique_ptr
 #include <iterator> // For std::forward_iterator_tag and iterator traits
 #include <cstddef>  // For std::ptrdiff_t
@@ -499,9 +499,10 @@ public:
 
                 while (!pred->forward[i].compare_exchange_weak(succ, newNode, std::memory_order_release, std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Insert] CAS failed for level " << i << ", retrying." << std::endl;
+                    std::cout << "[Insert] CAS failed for level " << i << ", retrying. pred=" << pred << " current_succ=" << succ << std::endl;
 #endif
-                    newNode->forward[i].store(succ, std::memory_order_relaxed);
+                    succ = pred->forward[i].load(std::memory_order_acquire); // Re-fetch successor
+                    newNode->forward[i].store(succ, std::memory_order_relaxed); // Reset newNode's forward pointer for the next attempt
                 }
 #ifdef SKIPLIST_DEBUG_LOGGING
                 std::cout << "[Insert] CAS successful for level " << i << std::endl;
