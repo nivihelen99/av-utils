@@ -80,6 +80,7 @@ void ExpectVectorsEqualUnordered(std::vector<T> vec1, std::vector<T> vec2) {
 
 TEST(SkipListTest, EmptyList) {
     SkipList<int> sl;
+    EXPECT_TRUE(sl.empty()); // Use new empty() method
     EXPECT_EQ(sl.size(), 0);
     EXPECT_FALSE(sl.search(10));
     EXPECT_FALSE(sl.remove(10));
@@ -96,11 +97,11 @@ TEST(SkipListTest, EmptyList) {
 
 TEST(SkipListTest, BasicIntOperations) {
     SkipList<int> sl;
-    sl.insert(3);
-    sl.insert(6);
-    sl.insert(1);
-    sl.insert(9);
-    sl.insert(6); // Duplicate insert
+    EXPECT_TRUE(sl.insert(3));
+    EXPECT_TRUE(sl.insert(6));
+    EXPECT_TRUE(sl.insert(1));
+    EXPECT_TRUE(sl.insert(9));
+    EXPECT_FALSE(sl.insert(6)); // Duplicate insert
 
     EXPECT_EQ(sl.size(), 4);
     EXPECT_TRUE(sl.search(3));
@@ -129,10 +130,10 @@ TEST(SkipListTest, BasicIntOperations) {
 
 TEST(SkipListTest, StringOperations) {
     SkipList<std::string> sl;
-    sl.insert("apple");
-    sl.insert("banana");
-    sl.insert("cherry");
-    sl.insert("apple"); // Duplicate
+    EXPECT_TRUE(sl.insert("apple"));
+    EXPECT_TRUE(sl.insert("banana"));
+    EXPECT_TRUE(sl.insert("cherry"));
+    EXPECT_FALSE(sl.insert("apple")); // Duplicate
 
     EXPECT_EQ(sl.size(), 3);
     EXPECT_TRUE(sl.search("apple"));
@@ -273,10 +274,10 @@ TEST(SkipListTest, BulkOperationsString) {
 TEST(SkipListTest, KeyValuePairs) {
     SkipList<std::pair<const int, std::string>> sl;
 
-    sl.insert({10, "apple"});
-    sl.insert({5, "banana"});
-    sl.insert({20, "cherry"});
-    sl.insert({5, "orange"});
+    EXPECT_TRUE(sl.insert({10, "apple"}));
+    EXPECT_TRUE(sl.insert({5, "banana"}));
+    EXPECT_TRUE(sl.insert({20, "cherry"}));
+    EXPECT_FALSE(sl.insert({5, "orange"})); // Key 5 already exists
 
     EXPECT_EQ(sl.size(), 3);
     EXPECT_TRUE(sl.search({5, ""}));
@@ -339,10 +340,10 @@ TEST(SkipListTest, CustomStructOperations) {
     MyData d2_orig(2, "Bob", 88.02, false);
     MyData d3_orig(3, "Charlie", 92.53, true);
 
-    sl.insert({d1_orig.id, d1_orig});
-    sl.insert({d2_orig.id, d2_orig});
+    EXPECT_TRUE(sl.insert({d1_orig.id, d1_orig}));
+    EXPECT_TRUE(sl.insert({d2_orig.id, d2_orig}));
     EXPECT_EQ(sl.size(), 2);
-    sl.insert({d3_orig.id, d3_orig});
+    EXPECT_TRUE(sl.insert({d3_orig.id, d3_orig}));
     EXPECT_EQ(sl.size(), 3);
 
     EXPECT_TRUE(sl.search({d1_orig.id, MyData()}));
@@ -409,8 +410,129 @@ TEST(SkipListTest, CustomStructOperations) {
     }
 
     sl.clear();
+    EXPECT_TRUE(sl.empty()); // Check with empty()
     EXPECT_EQ(sl.size(), 0);
     EXPECT_TRUE(sl.begin() == sl.end());
     auto it_after_clear = sl.find(d4_orig.id);
     EXPECT_EQ(it_after_clear, sl.end());
+}
+
+TEST(SkipListTest, ConstructorMaxLevel) {
+    SkipList<int> sl_default; // Uses DEFAULT_MAX_LEVEL
+    EXPECT_TRUE(sl_default.empty());
+    EXPECT_TRUE(sl_default.insert(10));
+    EXPECT_EQ(sl_default.size(), 1);
+    EXPECT_TRUE(sl_default.search(10));
+
+    SkipList<int> sl_custom_low(3); // Custom max level
+    EXPECT_TRUE(sl_custom_low.empty());
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_TRUE(sl_custom_low.insert(i * 10));
+    }
+    EXPECT_EQ(sl_custom_low.size(), 10);
+    EXPECT_TRUE(sl_custom_low.search(50));
+    EXPECT_FALSE(sl_custom_low.search(55));
+    // It's hard to assert the actual max level used without internals,
+    // but we ensure it functions correctly.
+    // randomLevel should be capped by this.
+
+    SkipList<int> sl_custom_high(20); // Custom max level
+    EXPECT_TRUE(sl_custom_high.empty());
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_TRUE(sl_custom_high.insert(i * 10));
+    }
+    EXPECT_EQ(sl_custom_high.size(), 10);
+    EXPECT_TRUE(sl_custom_high.search(50));
+    EXPECT_FALSE(sl_custom_high.search(55));
+
+    SkipList<int> sl_zero_level(0); // Max level 0
+    EXPECT_TRUE(sl_zero_level.empty());
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_TRUE(sl_zero_level.insert(i));
+    }
+    EXPECT_EQ(sl_zero_level.size(), 5);
+    for (int i = 0; i < 5; ++i) {
+        EXPECT_TRUE(sl_zero_level.search(i));
+    }
+    EXPECT_FALSE(sl_zero_level.search(10));
+    // All nodes should be at level 0.
+}
+
+TEST(SkipListTest, EmptyAndToVector) {
+    SkipList<int> sl;
+    EXPECT_TRUE(sl.empty());
+    EXPECT_EQ(sl.size(), 0);
+    EXPECT_TRUE(sl.toVector().empty());
+
+    EXPECT_TRUE(sl.insert(10));
+    EXPECT_FALSE(sl.empty());
+    EXPECT_EQ(sl.size(), 1);
+    std::vector<int> vec1 = {10};
+    EXPECT_EQ(sl.toVector(), vec1);
+
+    EXPECT_TRUE(sl.insert(5));
+    EXPECT_TRUE(sl.insert(20));
+    // Expected order: 5, 10, 20
+    EXPECT_FALSE(sl.empty());
+    EXPECT_EQ(sl.size(), 3);
+    std::vector<int> vec2 = {5, 10, 20};
+    EXPECT_EQ(sl.toVector(), vec2);
+
+    EXPECT_TRUE(sl.remove(10));
+    EXPECT_FALSE(sl.empty());
+    EXPECT_EQ(sl.size(), 2);
+    std::vector<int> vec3 = {5, 20};
+    EXPECT_EQ(sl.toVector(), vec3);
+
+    sl.clear();
+    EXPECT_TRUE(sl.empty());
+    EXPECT_EQ(sl.size(), 0);
+    EXPECT_TRUE(sl.toVector().empty());
+}
+
+TEST(SkipListTest, ToVectorString) {
+    SkipList<std::string> sl_str;
+    EXPECT_TRUE(sl_str.empty());
+    EXPECT_TRUE(sl_str.toVector().empty());
+
+    EXPECT_TRUE(sl_str.insert("banana"));
+    EXPECT_TRUE(sl_str.insert("apple"));
+    EXPECT_TRUE(sl_str.insert("cherry"));
+
+    std::vector<std::string> expected_str = {"apple", "banana", "cherry"};
+    EXPECT_EQ(sl_str.toVector(), expected_str);
+    EXPECT_FALSE(sl_str.empty());
+    EXPECT_EQ(sl_str.size(), 3);
+
+    sl_str.clear();
+    EXPECT_TRUE(sl_str.empty());
+    EXPECT_TRUE(sl_str.toVector().empty());
+}
+
+TEST(SkipListTest, ToVectorCustomStruct) {
+    SkipList<std::pair<const int, MyData>> sl_custom;
+    EXPECT_TRUE(sl_custom.empty());
+    EXPECT_TRUE(sl_custom.toVector().empty());
+
+    MyData d1(1, "A", 1.0, true);
+    MyData d2(2, "B", 2.0, false);
+    MyData d3(0, "C", 0.5, true); // Insert out of order
+
+    EXPECT_TRUE(sl_custom.insert({d1.id, d1}));
+    EXPECT_TRUE(sl_custom.insert({d2.id, d2}));
+    EXPECT_TRUE(sl_custom.insert({d3.id, d3}));
+
+    EXPECT_FALSE(sl_custom.empty());
+    EXPECT_EQ(sl_custom.size(), 3);
+
+    std::vector<std::pair<const int, MyData>> expected_custom = {
+        {d3.id, d3}, {d1.id, d1}, {d2.id, d2}
+    };
+    std::vector<std::pair<const int, MyData>> actual_vector = sl_custom.toVector();
+
+    ASSERT_EQ(actual_vector.size(), expected_custom.size());
+    for(size_t i = 0; i < actual_vector.size(); ++i) {
+        EXPECT_EQ(actual_vector[i].first, expected_custom[i].first);
+        EXPECT_EQ(actual_vector[i].second, expected_custom[i].second);
+    }
 }
