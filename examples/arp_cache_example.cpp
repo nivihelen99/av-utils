@@ -43,7 +43,7 @@ int main() {
     }
 
     std::cout << "Adding entry for 192.168.1.10 -> "; print_mac(mac1);
-    arp_cache.add_entry(ip1, mac1);
+    arp_cache.add_entry(ip1, mac1); // Using interface_id = 1
 
     if (arp_cache.lookup(ip1, mac_out)) {
         std::cout << "  Lookup hit for 192.168.1.10. MAC: "; print_mac(mac_out);
@@ -60,11 +60,11 @@ int main() {
     std::array<uint8_t, 6> mac_new_conflict = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x02};
 
     std::cout << "Adding initial entry for 192.168.1.11 -> "; print_mac(mac_orig);
-    arp_cache.add_entry(ip_conflict, mac_orig);
+    arp_cache.add_entry(ip_conflict, mac_orig); // Using interface_id = 1
 
     std::cout << "Attempting to add same IP (192.168.1.11) with a DIFFERENT MAC ("; print_mac(mac_new_conflict);
     std::cout << "  (ARPCache should print a warning to stderr if conflict detected)" << std::endl;
-    arp_cache.add_entry(ip_conflict, mac_new_conflict); // This should trigger the warning in ARPCache
+    arp_cache.add_entry(ip_conflict, mac_new_conflict); // Using interface_id = 1 // This should trigger the warning in ARPCache
 
     if (arp_cache.lookup(ip_conflict, mac_out) && mac_out == mac_new_conflict) {
         std::cout << "  IP 192.168.1.11 now resolved to new MAC: "; print_mac(mac_out);
@@ -98,7 +98,7 @@ int main() {
     std::array<uint8_t, 6> backup_mac2 = {0x33, 0x33, 0x33, 0x33, 0x33, 0x33};
 
     std::cout << "Adding entry for 192.168.1.12 with primary MAC: "; print_mac(primary_mac);
-    arp_cache.add_entry(ip_failover, primary_mac);
+    arp_cache.add_entry(ip_failover, primary_mac); // Using interface_id = 1
     std::cout << "Adding backup MAC for 192.168.1.12: "; print_mac(backup_mac1);
     arp_cache.add_backup_mac(ip_failover, backup_mac1);
     std::cout << "Adding another backup MAC for 192.168.1.12: "; print_mac(backup_mac2);
