@@ -19,6 +19,7 @@ add_executable(tcam_example examples/use_tcam.cpp)
 add_executable(arp_cache_example examples/arp_cache_example.cpp)
 add_executable(nd_cache_example examples/nd_cache_example.cpp)
 add_executable(use_dsu_example examples/use_dsu.cpp)
+add_executable(use_persist_array_example examples/use_persist_array.cpp)
 
 # Google Test
 include(FetchContent)
