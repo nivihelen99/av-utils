@@ -172,6 +172,192 @@ An ND entry can be in one of these states (similar to ARP, defined in RFC 4861):
 // // }
 ```
 
+# PersistentArray (persist_array.h)
+
+## Introduction
+`PersistentArray` is a C++ template class that implements a persistent array with copy-on-write (CoW) semantics. It allows for efficient versioning, where modifications create new versions of the array without altering existing ones. Underlying data is shared between versions whenever possible to save memory and copying time, with actual data duplication (copy-on-write) occurring only when a shared version is modified.
+
+The `PersistentArray` is header-only, provided in `persist_array.h`.
+
+## Key Features
+- **Copy-on-Write (CoW)**: Data is shared between array versions until a modification occurs. This optimizes memory usage by avoiding unnecessary data duplication.
+- **Persistence**: Original versions of the array remain unchanged when copies are modified, preserving history.
+- **Efficient Version Creation**:
+    - Creating a new reference to an existing version (e.g., copy construction or assignment) is an O(1) operation.
+    - Modifications that require a new data segment (because the current data is shared) incur an O(N) cost for copying the data, where N is the number of elements.
+- **Standard Array Operations**: Supports common array operations like `set` (element modification), `get` (element access via `operator[]` or `at()`), `push_back`, `pop_back`, `insert`, `erase`, `size`, and `empty`.
+- **In-Place Operations**: Offers optional in-place modification methods (e.g., `set_inplace`, `push_back_inplace`). These modify the current array instance directly but will perform a copy-on-write if the underlying data is shared, thus preserving other versions.
+- **Iterator Support**: Provides `const_iterator` (compatible with `std::vector<T>::const_iterator`) for easy traversal using range-based for loops or standard `begin()`/`end()` patterns.
+- **Templated**: `PersistentArray<T>` can be used with any element type `T` that is at least CopyConstructible. For operations like `insert` or `erase` that modify the collection's structure, `T` should meet the full requirements for elements in `std::vector`.
+- **Memory Management**: Utilizes `std::shared_ptr` for automatic memory management of the underlying data segments, simplifying resource handling.
+
+## Getting Started
+
+To use `PersistentArray`, include the header file:
+```cpp
+#include "persist_array.h"
+```
+
+### Basic Construction Examples:
+- **Default Constructor (empty array)**:
+  ```cpp
+  PersistentArray<int> arr_empty;
+  ```
+- **Constructor with Size and Initial Value**:
+  ```cpp
+  PersistentArray<std::string> arr_sized(5, "hello"); // Creates an array of 5 strings, all "hello"
+  ```
+- **Constructor with Initializer List**:
+  ```cpp
+  PersistentArray<double> arr_init = {1.0, 2.5, 3.0}; // Creates an array with {1.0, 2.5, 3.0}
+  ```
+
+## Usage Examples
+
+### Element Access and Modification (Copy-on-Write)
+```cpp
+#include "persist_array.h"
+#include <iostream>
+
+int main() {
+    PersistentArray<int> v1 = {10, 20, 30};
+    std::cout << "v1[1]: " << v1[1] << std::endl; // Output: v1[1]: 20
+
+    PersistentArray<int> v2 = v1.set(1, 25); // v1 remains unchanged due to CoW
+
+    // v1 is still {10, 20, 30}
+    // v2 is {10, 25, 30}
+    std::cout << "v1[1] after v2.set: " << v1[1] << std::endl; // Output: v1[1] after v2.set: 20
+    std::cout << "v2[1]: " << v2[1] << std::endl;             // Output: v2[1]: 25
+    return 0;
+}
+```
+
+### Push Back and Iteration
+```cpp
+#include "persist_array.h"
+#include <iostream>
+
+int main() {
+    PersistentArray<char> v_char = {'a', 'b'};
+    PersistentArray<char> v_char_pushed = v_char.push_back('c');
+    // v_char remains {'a', 'b'}
+    // v_char_pushed is {'a', 'b', 'c'}
+
+    std::cout << "Iterating v_char_pushed: ";
+    for (char c : v_char_pushed) {
+        std::cout << c << " ";
+    }
+    std::cout << std::endl; // Output: Iterating v_char_pushed: a b c
+    return 0;
+}
+```
+
+### In-Place Modification
+```cpp
+#include "persist_array.h"
+#include <iostream>
+
+int main() {
+    PersistentArray<int> arr_inplace = {1, 2, 3};
+    // arr_inplace.use_count() is likely 1 here if no other copies exist.
+    std::cout << "arr_inplace before: ";
+    for(int x : arr_inplace) std::cout << x << " ";
+    std::cout << "(use_count: " << arr_inplace.use_count() << ")" << std::endl;
+
+    arr_inplace.set_inplace(0, 100); // Modifies arr_inplace directly as it's unique
+    // arr_inplace is now {100, 2, 3}
+    std::cout << "arr_inplace after set_inplace: ";
+    for(int x : arr_inplace) std::cout << x << " ";
+    std::cout << "(use_count: " << arr_inplace.use_count() << ")" << std::endl;
+
+
+    PersistentArray<int> arr_shared1 = {5, 6, 7};
+    PersistentArray<int> arr_shared2 = arr_shared1; // Data is now shared
+    std::cout << "arr_shared1 use_count (after sharing with arr_shared2): " << arr_shared1.use_count() << std::endl;
+
+    arr_shared2.set_inplace(1, 600); // CoW occurs for arr_shared2
+                                     // arr_shared1 remains {5, 6, 7}
+                                     // arr_shared2 becomes {5, 600, 7}
+
+    std::cout << "arr_shared1 after arr_shared2.set_inplace: ";
+    for(int x : arr_shared1) std::cout << x << " "; // Output: 5 6 7
+    std::cout << "(use_count: " << arr_shared1.use_count() << ")" << std::endl;
+
+    std::cout << "arr_shared2 after its set_inplace: ";
+    for(int x : arr_shared2) std::cout << x << " "; // Output: 5 600 7
+    std::cout << "(use_count: " << arr_shared2.use_count() << ")" << std::endl;
+    return 0;
+}
+```
+
+### Undo Functionality Example (Conceptual)
+The persistent nature of the array makes implementing undo/redo history straightforward.
+```cpp
+#include "persist_array.h"
+#include <vector>
+#include <string>
+#include <iostream>
+
+int main() {
+    std::vector<PersistentArray<std::string>> history;
+    PersistentArray<std::string> current_doc = {"Initial", "content"};
+    history.push_back(current_doc);
+    std::cout << "Version 0: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
+
+
+    current_doc = current_doc.set(1, "edited content");
+    history.push_back(current_doc);
+    std::cout << "Version 1: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
+
+    current_doc = current_doc.push_back("!");
+    history.push_back(current_doc);
+    std::cout << "Version 2 (current): "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
+    // current_doc is {"Initial", "edited content", "!"}
+
+    // Undo:
+    if (history.size() > 1) { // Ensure there's a previous state
+      history.pop_back(); // Remove current state from history log
+      current_doc = history.back(); // Revert to previous state
+    }
+    std::cout << "After Undo 1: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
+    // current_doc is now {"Initial", "edited content"}
+
+    // Undo again:
+    if (history.size() > 1) {
+      history.pop_back();
+      current_doc = history.back();
+    }
+    std::cout << "After Undo 2: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
+    // current_doc is now {"Initial", "content"}
+    return 0;
+}
+```
+
+## Performance Characteristics (Summary)
+- **Version Creation (Reference Copy)**: O(1) for operations like `PersistentArray<T> v2 = v1;` or assignment, as only a `std::shared_ptr` is copied.
+- **Version Creation (Modification with CoW)**: O(N) for data copying if the underlying data is shared (i.e., `use_count > 1`), plus the cost of the specific modification operation (e.g., `set` is O(1) after copy, `insert`/`erase` can be O(N) after copy). If data is already unique (`use_count == 1`), complexity is that of the underlying `std::vector` operation.
+- **Element Access (`operator[]`, `at`)**: O(1), same as `std::vector`.
+- **Memory Usage**: Scales with the number of unique data segments. Versions that share the same underlying data do not duplicate that data in memory. Each unique version requires memory for its `std::vector` and the `std::shared_ptr` control block. Each instance of `PersistentArray` holds a `std::shared_ptr`.
+- **Thread Safety**: Please refer to the Doxygen comments in `persist_array.h` (specifically, the class-level "Thread Safety" note) for details. In summary, `const` operations are thread-safe for concurrent reads. Modifying operations on the same `PersistentArray` instance require external synchronization.
+
+## API Reference
+Comprehensive API documentation is available as Doxygen-style comments within the `include/persist_array.h` header file.
+Key operations include:
+- **Constructors**: Default, size-based, value-based, initializer list, copy, move.
+- **Element Access**: `operator[]`, `at()`.
+- **Copy-on-Write Modifications**: `set()`, `push_back()`, `pop_back()`, `insert()`, `erase()`.
+- **In-Place Modifications**: `set_inplace()`, `push_back_inplace()`, `pop_back_inplace()`.
+- **Iterators**: `begin()`, `end()` (providing `const_iterator`).
+- **Utilities**: `size()`, `empty()`, `clear()`.
+- **Comparison**: `operator==`, `operator!=`.
+- **Debug**: `use_count()`.
+
+## Dependencies
+- C++11 (or a later standard).
+- Standard Library headers: `<vector>`, `<memory>`, `<stdexcept>`, `<iostream>` (for `print_debug_info`), `<cassert>`.
+- No external library dependencies.
+
 # C++ Data Structures: Skip List and Trie (Existing Content)
 
 ## Introduction
