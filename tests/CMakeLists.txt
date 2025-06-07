@@ -1,16 +1,7 @@
 # This CMakeLists.txt is in the 'tests' subdirectory.
 
-# Include GTest
-include(FetchContent) # CMake's built-in module for fetching external projects
-
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
-)
-
-# For Windows: Prevent overriding the parent project's compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest) # Fetches and configures googletest
+# GoogleTest is assumed to be available from a higher-level CMake file
+# or system-wide. `include(GoogleTest)` is still needed for gtest_discover_tests.
 
 # Define test executable
 # Source files are now relative to this tests/CMakeLists.txt
@@ -39,4 +30,16 @@ target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gm
 include(GoogleTest)
 gtest_discover_tests(run_tests)
 
-message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' executable defined and linked with GTest.")
+
+# Add Fenwick Tree test
+add_executable(fenwick_tree_test fenwick_tree_test.cpp)
+# Ensure it can find headers from the project's include directory (already handled by root CMakeLists.txt)
+
+# Link GTest libraries for fenwick_tree_test
+target_link_libraries(fenwick_tree_test PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+
+# Discover and add tests from fenwick_tree_test to CTest
+gtest_discover_tests(fenwick_tree_test)
+
+
+message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' and 'fenwick_tree_test' executables defined and configured for GTest.")
