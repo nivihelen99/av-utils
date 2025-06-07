@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cassert>
 #include <numeric> // For std::accumulate in naive sum or other checks
+#include <limits>  // For std::numeric_limits
 
 // Forward declarations of test functions
 void testInitialization();
