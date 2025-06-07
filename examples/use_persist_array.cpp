@@ -1,5 +1,112 @@
 #include "persist_array.h"
 
+// Demonstration and test code
+void demonstrate_persistent_array() {
+    std::cout << "=== Persistent Array Demonstration ===" << std::endl;
+    
+    // Create initial array
+    PersistentArray<int> v1{1, 2, 3, 4, 5};
+    std::cout << "v1 created with values: ";
+    for (const auto& val : v1) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    v1.print_debug_info();
+    
+    // Create version 2 by modifying v1
+    auto v2 = v1.set(2, 100);
+    std::cout << "\nv2 = v1.set(2, 100):" << std::endl;
+    std::cout << "v1: ";
+    for (const auto& val : v1) {
+        std::cout << val << " ";
+    }
+    std::cout << " (unchanged)" << std::endl;
+    std::cout << "v2: ";
+    for (const auto& val : v2) {
+        std::cout << val << " ";
+    }
+    std::cout << " (modified)" << std::endl;
+    
+    v1.print_debug_info();
+    v2.print_debug_info();
+    
+    // Create version 3 by adding to v2
+    auto v3 = v2.push_back(200);
+    std::cout << "\nv3 = v2.push_back(200):" << std::endl;
+    std::cout << "v2: ";
+    for (const auto& val : v2) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "v3: ";
+    for (const auto& val : v3) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    
+    // Show that copying shares data initially
+    auto v4 = v3;
+    std::cout << "\nv4 = v3 (copy):" << std::endl;
+    v3.print_debug_info();
+    v4.print_debug_info();
+    
+    // Modify v4 to trigger copy-on-write
+    v4.set_inplace(0, 999);
+    std::cout << "\nAfter v4.set_inplace(0, 999):" << std::endl;
+    std::cout << "v3: ";
+    for (const auto& val : v3) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    std::cout << "v4: ";
+    for (const auto& val : v4) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    v3.print_debug_info();
+    v4.print_debug_info();
+    
+    // Demonstrate undo functionality
+    std::cout << "\n=== Undo Functionality Demo ===" << std::endl;
+    std::vector<PersistentArray<int>> history;
+    auto current = PersistentArray<int>{10, 20};
+    history.push_back(current);
+    
+    std::cout << "Initial: ";
+    for (const auto& val : current) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    
+    // Perform operations and save history
+    current = current.push_back(30);
+    history.push_back(current);
+    std::cout << "After push_back(30): ";
+    for (const auto& val : current) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    
+    current = current.set(1, 200);
+    history.push_back(current);
+    std::cout << "After set(1, 200): ";
+    for (const auto& val : current) {
+        std::cout << val << " ";
+    }
+    std::cout << std::endl;
+    
+    // Undo operations
+    std::cout << "\nUndo operations:" << std::endl;
+    for (int i = history.size() - 2; i >= 0; --i) {
+        std::cout << "Undo to state " << i << ": ";
+        for (const auto& val : history[i]) {
+            std::cout << val << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+
 int main() {
     try {
         demonstrate_persistent_array();
