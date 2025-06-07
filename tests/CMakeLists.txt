@@ -39,4 +39,12 @@ target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gm
 include(GoogleTest)
 gtest_discover_tests(run_tests)
 
-message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' executable defined and linked with GTest.")
+
+# Add Fenwick Tree test
+add_executable(fenwick_tree_test fenwick_tree_test.cpp)
+# Ensure it can find headers from the project's include directory (already handled by root CMakeLists.txt)
+# fenwick_tree_test.cpp has its own main() and does not use GTest, so no specific linking needed for GTest.
+add_test(NAME FenwickTreeTest COMMAND fenwick_tree_test)
+
+
+message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' and 'fenwick_tree_test' executables defined.")
