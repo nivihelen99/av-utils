@@ -16,11 +16,11 @@ enum class UnionStrategy {
 
 /**
  * @brief Disjoint Set Union (Union-Find) data structure.
- * 
+ *
  * Manages a collection of disjoint sets. It supports efficient union of sets
  * and finding the representative of a set.
  * This implementation uses path compression and union by rank for optimization.
- * 
+ *
  * @tparam T The type of elements.
  * @tparam Hash The hash functor for T. Defaults to std::hash<T>.
  * @tparam KeyEqual The equality comparison functor for T. Defaults to std::equal_to<T>.
@@ -33,15 +33,16 @@ private:
     std::unordered_map<T, int, Hash, KeyEqual> setSize;     // setSize[x] = size of set rooted at x (only valid for roots)
     int numSets;                            // total number of disjoint sets
     UnionStrategy strategy;                 // Strategy for union operations
-    
+
 public:
     /**
      * @brief Constructs an empty DisjointSetUnion structure.
      * Initializes the number of sets to 0 and sets the union strategy.
      * @param strategy The union strategy to use (default: BY_RANK).
      */
-    DisjointSetUnion(UnionStrategy strategy = UnionStrategy::BY_RANK) : numSets(0), strategy(strategy) {}
-    
+    explicit DisjointSetUnion(UnionStrategy strategy = UnionStrategy::BY_RANK) noexcept
+        : numSets(0), strategy(strategy) {}
+
     /**
      * @brief Creates a new set containing only the element x.
      * If x already exists in a set, this operation does nothing.
@@ -53,13 +54,13 @@ public:
         if (parent.find(x) != parent.end()) {
             return; // Element already exists
         }
-        
+
         parent[x] = x;      // x is its own parent (root)
         rank[x] = 0;        // Initial rank is 0
         setSize[x] = 1;     // Set size is 1
         numSets++;
     }
-    
+
     /**
      * @brief Finds the representative (root) of the set containing x.
      * Applies path compression: makes every node on the find path point directly to the root.
@@ -68,19 +69,19 @@ public:
      * @return The representative of the set containing x.
      * @note Time Complexity: O(α(N)) amortized (N is total elements).
      */
-    T find(const T& x) {
+    [[nodiscard]] T find(const T& x) {
         if (parent.find(x) == parent.end()) {
             makeSet(x); // Auto-create if doesn't exist
         }
-        
+
         // Path compression
         if (parent[x] != x) {
             parent[x] = find(parent[x]);
         }
-        
+
         return parent[x];
     }
-    
+
     /**
      * @brief Merges the sets containing elements x and y.
      * Uses union by rank: attaches the root of the smaller rank tree to the root of the larger rank tree.
@@ -91,14 +92,14 @@ public:
      * @return True if the sets were merged (were different), false otherwise.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    bool unionSets(const T& x, const T& y) {
+    [[nodiscard]] bool unionSets(const T& x, const T& y) {
         T rootX = find(x);
         T rootY = find(y);
-        
+
         if (rootX == rootY) {
             return false; // Already in same set
         }
-        
+
         if (strategy == UnionStrategy::BY_RANK) {
             // Union by rank
             if (rank[rootX] < rank[rootY]) {
@@ -122,20 +123,18 @@ public:
             } else {
                 // If sizes are equal, attach rootX to rootY.
                 // Rank is only incremented if using BY_RANK strategy and ranks were equal.
-                // For BY_SIZE, rank is not the primary factor.
                 parent[rootX] = rootY;
                 setSize[rootY] += setSize[rootX];
-                // If ranks were equal and strategy was BY_RANK, rank[rootY] would have been incremented.
-                // We don't strictly need to update rank here for BY_SIZE, but if we were to,
-                // it would be: if (rank[rootX] == rank[rootY]) rank[rootY]++;
-                // For now, we only update rank if strategy is BY_RANK.
+                // For BY_SIZE strategy, rank is not updated based on size comparison.
+                // If ranks were also equal and one wanted to break ties by incrementing rank,
+                // that would be a hybrid strategy. Standard BY_SIZE does not require this.
             }
         }
-        
+
         numSets--;
         return true;
     }
-    
+
     /**
      * @brief Checks if elements x and y are in the same set.
      * @param x The first element.
@@ -143,10 +142,10 @@ public:
      * @return True if x and y are in the same set, false otherwise.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    bool connected(const T& x, const T& y) {
+    [[nodiscard]] bool connected(const T& x, const T& y) {
         return find(x) == find(y);
     }
-    
+
     /**
      * @brief Gets the size of the set containing element x.
      * If x is not present, it's added as a new set, and its size (1) is returned.
@@ -154,17 +153,17 @@ public:
      * @return The size of the set containing x.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    int size(const T& x) {
+    [[nodiscard]] int size(const T& x) {
         T root = find(x);
         return setSize[root];
     }
-    
+
     /**
      * @brief Gets the total number of disjoint sets.
      * @return The number of disjoint sets.
      * @note Time Complexity: O(1).
      */
-    int countSets() const {
+    [[nodiscard]] int countSets() const noexcept {
         return numSets;
     }
 
@@ -173,29 +172,29 @@ public:
      * @return True if empty, false otherwise.
      * @note Time Complexity: O(1).
      */
-    bool isEmpty() const {
-        return numSets == 0; 
+    [[nodiscard]] bool isEmpty() const noexcept {
+        return numSets == 0;
     }
-    
+
     /**
      * @brief Gets the total number of elements currently in the structure.
      * @return The total number of elements.
      * @note Time Complexity: O(1) (due to `std::unordered_map::size()`).
      */
-    int totalElements() const {
+    [[nodiscard]] int totalElements() const noexcept {
         return parent.size();
     }
-    
+
     /**
      * @brief Checks if an element exists in the structure.
      * @param x The element to check.
      * @return True if the element exists, false otherwise.
      * @note Time Complexity: O(1) on average for `std::unordered_map::find()`, O(N) in the worst case.
      */
-    bool contains(const T& x) const {
+    [[nodiscard]] bool contains(const T& x) const {
         return parent.find(x) != parent.end();
     }
-    
+
     /**
      * @brief Gets all elements belonging to the same set as x.
      * If x is not present, it's added as a new set, and its members (just x) are returned.
@@ -204,7 +203,7 @@ public:
      * @note Time Complexity: O(N * α(N)) where N is the total number of elements in DSU,
      *       due to iterating all elements and calling `find` for each.
      */
-    std::vector<T> getSetMembers(const T& x) {
+    [[nodiscard]] std::vector<T> getSetMembers(const T& x) {
         T root = find(x); // Ensures x is in the DSU
         std::vector<T> members;
         members.reserve(size(x)); // Optimization
@@ -215,7 +214,7 @@ public:
         }
         return members;
     }
-    
+
     /**
      * @brief Gets all disjoint sets currently in the structure.
      * Each set is represented as a vector of its members.
@@ -223,14 +222,14 @@ public:
      * @note Time Complexity: O(N * α(N)) where N is the total number of elements,
      *       due to iterating all elements and calling `find` for each.
      */
-    std::vector<std::vector<T>> getAllSets() {
+    [[nodiscard]] std::vector<std::vector<T>> getAllSets() {
         std::unordered_map<T, std::vector<T>, Hash, KeyEqual> setMap;
         if (parent.empty()) return {};
 
         for (const auto& pair : parent) {
             setMap[find(pair.first)].push_back(pair.first);
         }
-        
+
         std::vector<std::vector<T>> result;
         result.reserve(numSets); // Optimization
         for (const auto& pair : setMap) {
@@ -238,7 +237,7 @@ public:
         }
         return result;
     }
-    
+
     /**
      * @brief Resets all elements to be in individual sets.
      * Maintains all existing elements. For each element x, parent[x]=x, rank[x]=0, setSize[x]=1.
@@ -254,19 +253,19 @@ public:
             setSize[pair.first] = 1;
         }
     }
-    
+
     /**
      * @brief Removes all elements and sets from the structure.
      * Resets the DSU to its initial empty state.
      * @note Time Complexity: O(N) where N is the number of elements, due to `std::unordered_map::clear()`.
      */
-    void clear() {
+    void clear() noexcept {
         parent.clear();
         rank.clear();
         setSize.clear();
         numSets = 0;
     }
-    
+
     /**
      * @brief Manually triggers path compression for all elements.
      * This is generally not needed as `find()` performs path compression automatically.
@@ -276,10 +275,10 @@ public:
      */
     void compress() {
         for (const auto& pair : parent) {
-            find(pair.first);
+            (void) find(pair.first);
         }
     }
-    
+
     /**
      * @brief Debug utility to print the internal structure information.
      * Prints total elements, number of sets, and for each element: its parent, rank, and set size.
@@ -289,7 +288,7 @@ public:
         std::cout << "DSU Structure (Generic):\n";
         std::cout << "Total elements: " << totalElements() << "\n";
         std::cout << "Number of sets: " << countSets() << "\n";
-        
+
         // To make printing more informative, print root for each element
         // This is illustrative; direct parent map iteration is also fine.
         if (parent.empty()) return;
@@ -300,7 +299,7 @@ public:
             // might be relaxed for ease of inspection if find() must be called.
             // For truly const behavior, one might need a separate const_find or avoid calling find.
             T root = const_cast<DisjointSetUnion<T, Hash, KeyEqual>*>(this)->find(element);
-            std::cout << element << ": root=" << root 
+            std::cout << element << ": root=" << root
                       << ", rank=" << rank.at(root) // Rank of the root
                       << ", set_size=" << setSize.at(root) // Size of the set identified by root
                       << " (direct parent in map: " << parent.at(element) << ")"
@@ -309,7 +308,7 @@ public:
     }
 
     // FOR TESTING PURPOSES ONLY
-    T getDirectParent_Test(const T& x) const {
+    [[nodiscard]] T getDirectParent_Test(const T& x) const {
         auto it = parent.find(x);
         if (it == parent.end()) {
              // Element not found in parent map.
@@ -321,7 +320,7 @@ public:
 
 /**
  * @brief A specialized Disjoint Set Union (DSU) optimized for contiguous integers (0 to N-1).
- * 
+ *
  * Manages a collection of disjoint sets for elements in a fixed integer range.
  * It is initialized with a maximum number of elements (N) and all elements from 0 to N-1
  * are initially in their own sets.
@@ -337,7 +336,7 @@ private:
     UnionStrategy strategy;  // Strategy for union operations
     int numSets;             // Total number of disjoint sets
     int maxElement;          // The maximum number of elements (N, elements are 0 to N-1)
-    
+
 public:
     /**
      * @brief Constructs a FastDSU structure for a fixed number of elements.
@@ -353,7 +352,7 @@ public:
             parent[i] = i;
         }
     }
-    
+
     /**
      * @brief Finds the representative (root) of the set containing element x.
      * Applies path compression.
@@ -361,14 +360,14 @@ public:
      * @return The representative of the set containing x.
      * @note Time Complexity: O(α(N)) amortized (N is maxElement).
      */
-    int find(int x) {
+    [[nodiscard]] int find(int x) {
         assert(x >= 0 && x < maxElement);
         if (parent[x] != x) {
             parent[x] = find(parent[x]); // Path compression
         }
         return parent[x];
     }
-    
+
     /**
      * @brief Merges the sets containing elements x and y.
      * Uses union by rank.
@@ -377,14 +376,14 @@ public:
      * @return True if the sets were merged, false if already in the same set.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    bool unionSets(int x, int y) {
+    [[nodiscard]] bool unionSets(int x, int y) {
         assert(x >= 0 && x < maxElement && y >= 0 && y < maxElement);
-        
+
         int rootX = find(x);
         int rootY = find(y);
-        
+
         if (rootX == rootY) return false;
-        
+
         if (strategy == UnionStrategy::BY_RANK) {
             // Union by rank
             if (rank[rootX] < rank[rootY]) {
@@ -407,20 +406,16 @@ public:
                 setSize[rootX] += setSize[rootY];
             } else {
                 // If sizes are equal, attach rootX to rootY.
-                // Rank is only incremented if using BY_RANK strategy and ranks were equal.
                 parent[rootX] = rootY;
                 setSize[rootY] += setSize[rootX];
-                // if (strategy == UnionStrategy::BY_RANK && rank[rootX] == rank[rootY]) {
-                // This condition is only for BY_RANK, handled above.
-                // For BY_SIZE, rank update isn't the primary mechanism.
-                // if (rank[rootX] == rank[rootY]) rank[rootY]++; // Only if also tie-breaking by rank for BY_SIZE
+                // For BY_SIZE strategy, rank is not updated based on size comparison.
             }
         }
-        
+
         numSets--;
         return true;
     }
-    
+
     /**
      * @brief Checks if elements x and y are in the same set.
      * @param x The first element.
@@ -428,28 +423,28 @@ public:
      * @return True if x and y are in the same set, false otherwise.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    bool connected(int x, int y) {
+    [[nodiscard]] bool connected(int x, int y) {
         assert(x >= 0 && x < maxElement && y >= 0 && y < maxElement);
         return find(x) == find(y);
     }
-    
+
     /**
      * @brief Gets the size of the set containing element x.
      * @param x The element.
      * @return The size of the set containing x.
      * @note Time Complexity: O(α(N)) amortized.
      */
-    int size(int x) {
+    [[nodiscard]] int size(int x) {
         assert(x >= 0 && x < maxElement);
         return setSize[find(x)];
     }
-    
+
     /**
      * @brief Gets the total number of disjoint sets.
      * @return The number of disjoint sets.
      * @note Time Complexity: O(1).
      */
-    int countSets() const {
+    [[nodiscard]] int countSets() const noexcept {
         return numSets;
     }
 
@@ -471,7 +466,7 @@ public:
      * @return True if the index is valid, false otherwise.
      * @note Time Complexity: O(1).
      */
-    bool contains(int x) const {
+    [[nodiscard]] bool contains(int x) const noexcept {
         return x >= 0 && x < maxElement;
     }
 
@@ -481,7 +476,7 @@ public:
      * @return True if empty (maxElement is 0), false otherwise.
      * @note Time Complexity: O(1).
      */
-    bool isEmpty() const {
+    [[nodiscard]] bool isEmpty() const noexcept {
         return numSets == 0; // Also equivalent to maxElement == 0 for FastDSU
     }
 
@@ -489,7 +484,7 @@ public:
      * @brief Resets all elements (0 to maxElement-1) to individual sets.
      * @note Time Complexity: O(N) where N is maxElement.
      */
-    void reset() {
+    void reset() noexcept {
         if (maxElement == 0) return;
         numSets = maxElement;
         for (int i = 0; i < maxElement; ++i) {
@@ -505,7 +500,7 @@ public:
      */
     void compress() {
         for (int i = 0; i < maxElement; ++i) {
-            find(i); 
+            (void) find(i);
         }
     }
 
@@ -514,15 +509,15 @@ public:
      * @return A vector of vectors, where each inner vector is a disjoint set.
      * @note Time Complexity: O(N * α(N)) where N is maxElement.
      */
-    std::vector<std::vector<int>> getAllSets() {
+    [[nodiscard]] std::vector<std::vector<int>> getAllSets() {
         if (maxElement == 0) return {};
         std::unordered_map<int, std::vector<int>> setMap;
         for (int i = 0; i < maxElement; ++i) {
             setMap[find(i)].push_back(i);
         }
-        
+
         std::vector<std::vector<int>> result;
-        result.reserve(numSets); 
+        result.reserve(numSets);
         for (const auto& pair : setMap) {
             result.push_back(pair.second);
         }
@@ -545,7 +540,7 @@ public:
             // This version provides more insight but technically find is not const.
             int root = const_cast<FastDSU*>(this)->find(i);
              std::cout << i << ": root=" << root
-                      << ", rank=" << rank[root] 
+                      << ", rank=" << rank[root]
                       << ", set_size=" << setSize[root]
                       << " (direct parent in vector: " << parent[i] << ")"
                       << std::endl;
@@ -553,7 +548,7 @@ public:
     }
 
     // FOR TESTING PURPOSES ONLY
-    int getDirectParent_Test(int x) const {
+    [[nodiscard]] int getDirectParent_Test(int x) const {
         assert(x >= 0 && x < maxElement); // This assert is correct here
         return parent[x];
     }
@@ -561,7 +556,7 @@ public:
 
 // Example applications and testing
 namespace DSUApplications {
-    
+
     /**
      * Kruskal's Algorithm for Minimum Spanning Tree
      */
@@ -571,12 +566,12 @@ namespace DSUApplications {
             return weight < other.weight;
         }
     };
-    
+
     std::vector<Edge> kruskalMST(int n, std::vector<Edge>& edges) {
         std::sort(edges.begin(), edges.end());
         FastDSU dsu(n); // Use FastDSU for Kruskal's as it's typically on integer nodes
         std::vector<Edge> mst;
-        
+
         for (const Edge& e : edges) {
             if (dsu.unionSets(e.u, e.v)) {
                 mst.push_back(e);
@@ -585,7 +580,7 @@ namespace DSUApplications {
         }
         return mst;
     }
-    
+
     /**
      * Detect cycle in undirected graph using DSU
      */
@@ -598,14 +593,14 @@ namespace DSUApplications {
         }
         return false;
     }
-    
+
     /**
      * Count connected components in a graph using DSU
      */
     int countConnectedComponents(int n, const std::vector<std::pair<int, int>>& edges) {
         FastDSU dsu(n);
         for (const auto& edge : edges) {
-            dsu.unionSets(edge.first, edge.second);
+            (void) dsu.unionSets(edge.first, edge.second);
         }
         return dsu.countSets();
     }
