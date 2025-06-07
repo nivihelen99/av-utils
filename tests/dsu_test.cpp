@@ -37,7 +37,7 @@ namespace std {
         size_t operator()(const CustomData& cd) const {
             size_t h1 = hash<int>()(cd.id);
             size_t h2 = hash<string>()(cd.name);
-            return h1 ^ (h2 << 1); 
+            return h1 ^ (h2 << 1);
         }
     };
 }
@@ -75,9 +75,9 @@ public: // Made public static for use in TYPED_TEST macros
             return {unique_id, name_prefix + std::to_string(unique_id)};
         }
         // Should not happen with MyTypes restriction but as a fallback:
-        return T(); 
+        return T();
     }
-    
+
     // Helper function to convert vector to set for easier comparison of contents (ignoring order)
     // Made static as it doesn't depend on fixture instance members and is used by normalizeSets.
     static std::set<T> toSet(const std::vector<T>& vec) {
@@ -91,7 +91,7 @@ public: // Made public static for use in TYPED_TEST macros
         for (const auto& setVec_inner : setsVec) {
             // Use DSTest<T>::toSet if TypeParam is needed, but T is template param of class
             // so it's fine as is. For clarity, could use DSTest<T>::toSet or self::toSet
-            normalized.insert(toSet(setVec_inner)); 
+            normalized.insert(toSet(setVec_inner));
         }
         return normalized;
     }
@@ -187,20 +187,20 @@ TYPED_TEST(DSTest, GetAllSets) {
     auto sets1_expected = DSTest<TypeParam>::normalizeSets({{v1}, {v2}, {v3}, {v4}});
     EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets1_expected);
 
-    this->dsu.unionSets(v1, v2);
+    (void) this->dsu.unionSets(v1, v2);
     auto sets2_expected = DSTest<TypeParam>::normalizeSets({{v1, v2}, {v3}, {v4}});
     EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets2_expected);
-    
-    this->dsu.unionSets(v3, v4);
+
+    (void) this->dsu.unionSets(v3, v4);
     auto sets3_expected = DSTest<TypeParam>::normalizeSets({{v1, v2}, {v3, v4}});
     EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets3_expected);
 
-    this->dsu.unionSets(v1, v4); 
+    (void) this->dsu.unionSets(v1, v4);
     auto sets4_expected = DSTest<TypeParam>::normalizeSets({{v1, v2, v3, v4}});
     EXPECT_EQ(DSTest<TypeParam>::normalizeSets(this->dsu.getAllSets()), sets4_expected);
-    
+
     this->dsu.clear();
-    EXPECT_TRUE(this->dsu.getAllSets().empty()); 
+    EXPECT_TRUE(this->dsu.getAllSets().empty());
 }
 
 TYPED_TEST(DSTest, UnionSetsByRankLogic) {
@@ -218,13 +218,13 @@ TYPED_TEST(DSTest, UnionSetsByRankLogic) {
     dsu.makeSet(v3_tc1); dsu.makeSet(v4_tc1);
 
     // Union v1,v2. Assume v2_tc1 becomes root, rank[v2_tc1_root]=1.
-    dsu.unionSets(v1_tc1, v2_tc1);
+    (void)dsu.unionSets(v1_tc1, v2_tc1);
     TypeParam root_v1_set = dsu.find(v1_tc1);
     ASSERT_EQ(dsu.size(v1_tc1), 2);
     // Rank of root_v1_set is 1 (implicit)
 
     // Union v3,v4. Assume v4_tc1 becomes root, rank[v4_tc1_root]=1.
-    dsu.unionSets(v3_tc1, v4_tc1);
+    (void)dsu.unionSets(v3_tc1, v4_tc1);
     TypeParam root_v3_set = dsu.find(v3_tc1);
     ASSERT_EQ(dsu.size(v3_tc1), 2);
     ASSERT_NE(root_v1_set, root_v3_set); // Ensure they are different sets for now
@@ -233,7 +233,7 @@ TYPED_TEST(DSTest, UnionSetsByRankLogic) {
     // Union v1,v3. This unions two sets, each with a root of rank 1.
     // The new root's rank should become 2.
     // Let's say root_v3_set becomes the overall root.
-    dsu.unionSets(v1_tc1, v3_tc1);
+    (void)dsu.unionSets(v1_tc1, v3_tc1);
     TypeParam final_root_tc1 = dsu.find(v1_tc1);
     EXPECT_EQ(dsu.find(v2_tc1), final_root_tc1);
     EXPECT_EQ(dsu.find(v3_tc1), final_root_tc1);
@@ -251,7 +251,7 @@ TYPED_TEST(DSTest, UnionSetsByRankLogic) {
     dsu2.makeSet(v5_tc2); dsu2.makeSet(v6_tc2); dsu2.makeSet(v7_tc2);
 
     // Union v5,v6. Assume v6_tc2 becomes root, rank[v6_tc2_root]=1.
-    dsu2.unionSets(v5_tc2, v6_tc2);
+    (void)dsu2.unionSets(v5_tc2, v6_tc2);
     TypeParam root_v5_set_tc2 = dsu2.find(v5_tc2); // This is root of {v5,v6}, rank 1
     ASSERT_EQ(dsu2.size(v5_tc2), 2);
 
@@ -262,7 +262,7 @@ TYPED_TEST(DSTest, UnionSetsByRankLogic) {
     // Union v5,v7. Root of v5 is root_v5_set_tc2 (rank 1). Root of v7 is root_v7_set_tc2 (rank 0).
     // v7 (lower rank root) should attach to v5's root (higher rank root).
     // Rank of root_v5_set_tc2 should remain 1.
-    dsu2.unionSets(v5_tc2, v7_tc2);
+    (void)dsu2.unionSets(v5_tc2, v7_tc2);
     EXPECT_EQ(dsu2.find(v5_tc2), root_v5_set_tc2); // Root should still be the original root of {v5,v6}
     EXPECT_EQ(dsu2.find(v6_tc2), root_v5_set_tc2);
     EXPECT_EQ(dsu2.find(v7_tc2), root_v5_set_tc2); // v7 now part of the same set
@@ -276,14 +276,14 @@ TYPED_TEST(DSTest, UnionSetsByRankLogic) {
     TypeParam v8_extra = DSTest<TypeParam>::CreateVal(8, "Extra_V8");
     dsu.makeSet(v8_extra); // dsu is from TC1
     TypeParam root_v8_extra = dsu.find(v8_extra); // rank 0
-    dsu.unionSets(v1_tc1, v8_extra); // Union rank 2 set with rank 0 set. Root is final_root_tc1, rank should remain 2.
+    (void)dsu.unionSets(v1_tc1, v8_extra); // Union rank 2 set with rank 0 set. Root is final_root_tc1, rank should remain 2.
     EXPECT_EQ(dsu.size(v1_tc1), 5);
     // If rank of final_root_tc1 was correctly 2, it remains 2.
 
     TypeParam v9_extra = DSTest<TypeParam>::CreateVal(9, "Extra_V9");
     dsu2.makeSet(v9_extra); // dsu2 is from TC2
     TypeParam root_v9_extra = dsu2.find(v9_extra); // rank 0
-    dsu2.unionSets(v5_tc2, v9_extra); // Union rank 1 set with rank 0 set. Root is root_v5_set_tc2, rank should remain 1.
+    (void)dsu2.unionSets(v5_tc2, v9_extra); // Union rank 1 set with rank 0 set. Root is root_v5_set_tc2, rank should remain 1.
     EXPECT_EQ(dsu2.size(v5_tc2), 4);
     // If rank of root_v5_set_tc2 was correctly 1, it remains 1.
 }
@@ -300,14 +300,14 @@ TYPED_TEST(DSTest, ResetOperation) {
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "R1");
     TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "R2");
     TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "R3");
-    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
-    this->dsu.unionSets(v1, v2);
+    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3); // makeSet is void
+    (void)this->dsu.unionSets(v1, v2);
     ASSERT_EQ(this->dsu.countSets(), 2);
     ASSERT_EQ(this->dsu.totalElements(), 3);
 
     this->dsu.reset();
     EXPECT_EQ(this->dsu.countSets(), 3);
-    EXPECT_EQ(this->dsu.totalElements(), 3); 
+    EXPECT_EQ(this->dsu.totalElements(), 3);
     EXPECT_FALSE(this->dsu.isEmpty());
 
     EXPECT_EQ(this->dsu.find(v1), v1);
@@ -332,15 +332,15 @@ TYPED_TEST(DSTest, CompressOperation) {
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "C1");
     TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "C2");
     TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "C3");
-    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
-    this->dsu.unionSets(v1, v2);
-    this->dsu.unionSets(v2, v3); 
+    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3); // makeSet is void
+    (void)this->dsu.unionSets(v1, v2);
+    (void)this->dsu.unionSets(v2, v3);
 
-    this->dsu.compress();
-    
-    TypeParam root = this->dsu.find(v3); 
-    EXPECT_EQ(this->dsu.find(v1), root); 
-    EXPECT_EQ(this->dsu.find(v2), root); 
+    (void) this->dsu.compress();
+
+    TypeParam root = this->dsu.find(v3);
+    EXPECT_EQ(this->dsu.find(v1), root);
+    EXPECT_EQ(this->dsu.find(v2), root);
     EXPECT_TRUE(this->dsu.connected(v1, v3));
     EXPECT_EQ(this->dsu.size(v1), 3);
 }
@@ -350,7 +350,7 @@ TYPED_TEST(DSTest, IsEmptyAdvanced) {
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "E1");
     this->dsu.makeSet(v1);
     EXPECT_FALSE(this->dsu.isEmpty());
-    this->dsu.reset(); 
+    this->dsu.reset();
     EXPECT_FALSE(this->dsu.isEmpty());
     this->dsu.clear();
     EXPECT_TRUE(this->dsu.isEmpty());
@@ -365,7 +365,7 @@ TYPED_TEST(DSTest, ContainsAdvanced) {
     EXPECT_FALSE(this->dsu.contains(v_non_existent));
 
     this->dsu.reset();
-    EXPECT_TRUE(this->dsu.contains(v1)); 
+    EXPECT_TRUE(this->dsu.contains(v1));
 
     this->dsu.clear();
     EXPECT_FALSE(this->dsu.contains(v1));
@@ -386,8 +386,8 @@ TYPED_TEST(DSTest, ClearOperation) {
 
     TypeParam v1 = DSTest<TypeParam>::CreateVal(1, "CL1");
     TypeParam v2 = DSTest<TypeParam>::CreateVal(2, "CL2");
-    this->dsu.makeSet(v1); this->dsu.makeSet(v2);
-    this->dsu.unionSets(v1, v2);
+    this->dsu.makeSet(v1); this->dsu.makeSet(v2); // makeSet is void
+    (void)this->dsu.unionSets(v1, v2);
     ASSERT_EQ(this->dsu.countSets(), 1);
     ASSERT_EQ(this->dsu.totalElements(), 2);
 
@@ -415,8 +415,8 @@ TYPED_TEST(DSTest, GetSetMembers) {
     TypeParam v3 = DSTest<TypeParam>::CreateVal(3, "M3");
     TypeParam v4 = DSTest<TypeParam>::CreateVal(4, "M4_Auto");
 
-    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
-    this->dsu.unionSets(v1, v2);
+    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3); // makeSet is void
+    (void)this->dsu.unionSets(v1, v2);
 
     std::set<TypeParam> set1_members_expected = {v1, v2};
     EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v1)), set1_members_expected);
@@ -424,11 +424,11 @@ TYPED_TEST(DSTest, GetSetMembers) {
 
     std::set<TypeParam> set3_members_expected = {v3};
     EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v3)), set3_members_expected);
-    
+
     std::set<TypeParam> set4_members_expected = {v4};
     EXPECT_EQ(DSTest<TypeParam>::toSet(this->dsu.getSetMembers(v4)), set4_members_expected); // Auto-creates
     EXPECT_TRUE(this->dsu.contains(v4));
-    EXPECT_EQ(this->dsu.countSets(), 3); 
+    EXPECT_EQ(this->dsu.countSets(), 3);
 }
 
 TYPED_TEST(DSTest, PathCompressionChain) {
@@ -438,18 +438,18 @@ TYPED_TEST(DSTest, PathCompressionChain) {
     TypeParam v4 = DSTest<TypeParam>::CreateVal(4, "PC4");
     TypeParam v5 = DSTest<TypeParam>::CreateVal(5, "PC5");
 
-    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3);
-    this->dsu.makeSet(v4); this->dsu.makeSet(v5);
+    this->dsu.makeSet(v1); this->dsu.makeSet(v2); this->dsu.makeSet(v3); // makeSet is void
+    this->dsu.makeSet(v4); this->dsu.makeSet(v5); // makeSet is void
 
-    this->dsu.unionSets(v1,v2); this->dsu.unionSets(v2,v3);
-    this->dsu.unionSets(v3,v4); this->dsu.unionSets(v4,v5); 
+    (void)this->dsu.unionSets(v1,v2); (void)this->dsu.unionSets(v2,v3);
+    (void)this->dsu.unionSets(v3,v4); (void)this->dsu.unionSets(v4,v5);
 
-    TypeParam root = this->dsu.find(v5); 
+    TypeParam root = this->dsu.find(v5);
     EXPECT_EQ(this->dsu.find(v1), root);
     EXPECT_EQ(this->dsu.find(v2), root);
     EXPECT_EQ(this->dsu.find(v3), root);
     EXPECT_EQ(this->dsu.find(v4), root);
-    
+
     EXPECT_TRUE(this->dsu.connected(v1,v5));
     EXPECT_EQ(this->dsu.size(v1), 5);
 }
@@ -466,8 +466,7 @@ TYPED_TEST(DSTest, UnionSetsBySizeLogic) {
     // For DisjointSetUnion<T>, rank is stored in a map, access needs find.
     // We can't directly access rank easily here without find and knowing the root.
     // We'll focus on size and parent relationships.
-
-    dsu.unionSets(v1, v2); // Set {v1,v2} size 2; v3 size 1
+    (void)dsu.unionSets(v1, v2); // Set {v1,v2} size 2; v3 size 1
     EXPECT_EQ(dsu.size(v1), 2);
     EXPECT_EQ(dsu.size(v3), 1);
     TypeParam root_v1_old_tc1 = dsu.find(v1); // Root of {v1,v2}
@@ -491,9 +490,9 @@ TYPED_TEST(DSTest, UnionSetsBySizeLogic) {
 
     dsu_eq.makeSet(v4); dsu_eq.makeSet(v5); dsu_eq.makeSet(v6); dsu_eq.makeSet(v7);
 
-    dsu_eq.unionSets(v4, v5); // Set {v4,v5} size 2
+    (void)dsu_eq.unionSets(v4, v5); // Set {v4,v5} size 2
     EXPECT_EQ(dsu_eq.size(v4), 2);
-    dsu_eq.unionSets(v6, v7); // Set {v6,v7} size 2
+    (void)dsu_eq.unionSets(v6, v7); // Set {v6,v7} size 2
     EXPECT_EQ(dsu_eq.size(v6), 2);
 
     TypeParam root_v4_old_tc2 = dsu_eq.find(v4);
@@ -559,7 +558,7 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
     // Let's re-think the chain setup for generic DSU.
     // Create a structure: v0, v1, v2, v3.
     // Union v0 and v1. Let's say v1 becomes root of v0. (parent[v0] = v1)
-    dsu.unionSets(v0, v1);
+    (void) dsu.unionSets(v0, v1);
     // Union v1 and v2. If v2 becomes root of v1. (parent[v1] = v2)
     // To encourage v2 to be root of v1:
     // If using union by rank, after (v0,v1), rank[v1] is 1. rank[v2] is 0.
@@ -577,17 +576,17 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
 
     // Let's try a specific sequence with UnionByRank (default for DisjointSetUnion if not specified)
     // Ranks: v0:0, v1:0, v2:0, v3:0
-    dsu.unionSets(v0, v1); // parent[v0]=v1, rank[v1]=1. v0 is child of v1.
+    (void) dsu.unionSets(v0, v1); // parent[v0]=v1, rank[v1]=1. v0 is child of v1.
     // Ranks: v0:0, v1:1, v2:0, v3:0
     // Parents: v0:v1
     // Now, union v1 and v2. find(v1)=v1, find(v2)=v2. rank[v1]=1, rank[v2]=0.
     // So, v2 becomes child of v1. parent[v2]=v1.
-    dsu.unionSets(v2, v1); // v2 is child of v1.
+    (void)dsu.unionSets(v2, v1); // v2 is child of v1.
     // Ranks: v0:0, v1:1, v2:0, v3:0
     // Parents: v0:v1, v2:v1
     // Now, union v1 and v3. find(v1)=v1, find(v3)=v3. rank[v1]=1, rank[v3]=0.
     // So, v3 becomes child of v1. parent[v3]=v1.
-    dsu.unionSets(v3, v1); // v3 is child of v1.
+    (void)dsu.unionSets(v3, v1); // v3 is child of v1.
     // All v0,v2,v3 are children of v1. This is a star, not a chain. Path compression on find(v0) changes nothing.
 
     // To test path compression, we need a path of nodes.
@@ -618,7 +617,7 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
     // Build chain e0 -> e1 -> e2 -> e3 (e3 is the overall root)
     // All start with rank 0.
     // 1. dsu_pc.unionSets(e0, e1); // e0 points to e1 (parent[e0]=e1), rank[e1] becomes 1.
-    // 2. dsu_pc.unionSets(e1, e2); // rootE1=e1 (rank 1), rootE2=e2 (rank 0). rootE2 points to rootE1. parent[e2]=e1.
+    // 2. (void)dsu_pc.unionSets(e1, e2); // rootE1=e1 (rank 1), rootE2=e2 (rank 0). rootE2 points to rootE1. parent[e2]=e1.
                                // This is not e1->e2. It becomes e0->e1, e2->e1.
     // The only way to force a chain with current unionSets is if the "parent" side of union always has higher rank.
     // This is not naturally occurring for a simple chain.
@@ -640,7 +639,7 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
     // Chain: pc_v0 -> pc_v1 -> pc_v2 -> pc_v3 (pc_v3 is root)
     // Union (child, parent_candidate)
     // 1. union(pc_v0, pc_v1): parent[pc_v0]=pc_v1, rank[pc_v1]=1.
-    dsu_alt.unionSets(pc_v0, pc_v1);
+    (void) dsu_alt.unionSets(pc_v0, pc_v1);
     // Current state: pc_v0 -> pc_v1. Direct parent of pc_v0 is pc_v1.
     ASSERT_EQ(dsu_alt.getDirectParent_Test(pc_v0), pc_v1);
 
@@ -668,7 +667,7 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
 
     // Build structure: grandchild1 -> child1, child1 -> root_val, child2 -> root_val
     // 1. Union grandchild1 and child1. Let child1 be root of grandchild1.
-    dsu_explicit.unionSets(grandchild1_val, child1_val); // parent[grandchild1]=child1, rank[child1]=1
+    (void)dsu_explicit.unionSets(grandchild1_val, child1_val); // parent[grandchild1]=child1, rank[child1]=1
     ASSERT_EQ(dsu_explicit.getDirectParent_Test(grandchild1_val), child1_val);
 
     // 2. Union child1 and root_val. Let root_val be root of child1.
@@ -679,18 +678,18 @@ TYPED_TEST(DSTest, PathCompressionExplicit) {
     // Let's make rank of root_val higher first.
     TypeParam dummy_for_rank = DSTest<TypeParam>::CreateVal(999, "Dummy");
     dsu_explicit.makeSet(dummy_for_rank);
-    dsu_explicit.unionSets(dummy_for_rank, root_val); // parent[dummy]=root_val, rank[root_val]=1.
+    (void)dsu_explicit.unionSets(dummy_for_rank, root_val); // parent[dummy]=root_val, rank[root_val]=1.
 
     // Now, rank[child1]=1, rank[root_val]=1.
     // unionSets(child1, root_val): parent[child1]=root_val, rank[root_val]=2.
-    dsu_explicit.unionSets(child1_val, root_val);
+    (void)dsu_explicit.unionSets(child1_val, root_val);
     ASSERT_EQ(dsu_explicit.getDirectParent_Test(child1_val), root_val);
     // Path is now: grandchild1_val -> child1_val -> root_val
 
     // 3. Union child2 and root_val. Let root_val be root of child2.
     //    find(child2)=child2 (rank 0), find(root_val)=root_val (rank 2).
     //    Result: parent[child2]=root_val.
-    dsu_explicit.unionSets(child2_val, root_val);
+    (void)dsu_explicit.unionSets(child2_val, root_val);
     ASSERT_EQ(dsu_explicit.getDirectParent_Test(child2_val), root_val);
 
     // Verify initial direct parents in the chain grandchild1_val -> child1_val -> root_val
@@ -793,8 +792,8 @@ TEST_F(FastDSUTest, InitialState) {
         EXPECT_EQ(dsu_10.find(i), i);
         EXPECT_EQ(dsu_10.size(i), 1);
     }
-    EXPECT_FALSE(dsu_10.contains(10)); 
-    EXPECT_FALSE(dsu_10.contains(-1));  
+    EXPECT_FALSE(dsu_10.contains(10));
+    EXPECT_FALSE(dsu_10.contains(-1));
 
     FastDSU dsu_0(0);
     EXPECT_EQ(dsu_0.countSets(), 0);
@@ -804,9 +803,9 @@ TEST_F(FastDSUTest, InitialState) {
 
 TEST_F(FastDSUTest, MakeSetNoOp) {
     FastDSU dsu_5(5);
-    dsu_5.makeSet(0); 
+    dsu_5.makeSet(0);
     dsu_5.makeSet(4);
-    EXPECT_EQ(dsu_5.countSets(), 5); 
+    EXPECT_EQ(dsu_5.countSets(), 5);
     EXPECT_EQ(dsu_5.find(0), 0);
     EXPECT_EQ(dsu_5.size(0), 1);
 }
@@ -823,10 +822,10 @@ TEST_F(FastDSUTest, UnionSetsSimple) {
     EXPECT_EQ(dsu_5.size(1), 2);
     EXPECT_EQ(dsu_5.find(0), dsu_5.find(1));
 
-    EXPECT_FALSE(dsu_5.unionSets(0, 1)); 
+    EXPECT_FALSE(dsu_5.unionSets(0, 1));
     EXPECT_EQ(dsu_5.countSets(), 4);
 
-    EXPECT_TRUE(dsu_5.unionSets(0, 2)); 
+    EXPECT_TRUE(dsu_5.unionSets(0, 2));
     EXPECT_EQ(dsu_5.countSets(), 3);
     EXPECT_TRUE(dsu_5.connected(0, 2));
     EXPECT_TRUE(dsu_5.connected(1, 2));
@@ -845,24 +844,22 @@ TEST_F(FastDSUTest, GetAllSets) {
     FastDSU dsu_4(4);
     auto sets1_expected = FastDSUTest::normalizeFastDSUSets({{0}, {1}, {2}, {3}});
     EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets1_expected);
-
-    dsu_4.unionSets(0, 1);
+    (void)dsu_4.unionSets(0, 1);
     auto sets2_expected = FastDSUTest::normalizeFastDSUSets({{0, 1}, {2}, {3}});
     EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets2_expected);
-    
-    dsu_4.unionSets(2, 3);
+
+    (void)dsu_4.unionSets(2, 3);
     auto sets3_expected = FastDSUTest::normalizeFastDSUSets({{0, 1}, {2, 3}});
     EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets3_expected);
-
-    dsu_4.unionSets(0, 3); 
+    (void)dsu_4.unionSets(0, 3);
     auto sets4_expected = FastDSUTest::normalizeFastDSUSets({{0, 1, 2, 3}});
     EXPECT_EQ(FastDSUTest::normalizeFastDSUSets(dsu_4.getAllSets()), sets4_expected);
 }
 
 TEST_F(FastDSUTest, ResetOperation) {
     FastDSU dsu_3(3);
-    dsu_3.unionSets(0,1);
-    dsu_3.unionSets(1,2); 
+    (void)dsu_3.unionSets(0,1);
+    (void)dsu_3.unionSets(1,2);
     ASSERT_EQ(dsu_3.countSets(), 1);
 
     dsu_3.reset();
@@ -871,7 +868,7 @@ TEST_F(FastDSUTest, ResetOperation) {
     for (int i=0; i<3; ++i) {
         EXPECT_EQ(dsu_3.find(i), i);
         EXPECT_EQ(dsu_3.size(i), 1);
-        EXPECT_FALSE(dsu_3.connected(i, (i+1)%3)); 
+        EXPECT_FALSE(dsu_3.connected(i, (i+1)%3));
         EXPECT_TRUE(dsu_3.contains(i));
     }
 
@@ -891,7 +888,7 @@ TEST_F(FastDSUTest, ResetOperation) {
         EXPECT_EQ(dsu_3.find(i), i);
         EXPECT_EQ(dsu_3.size(i), 1);
     }
-    dsu_3.unionSets(0,1);
+    (void)dsu_3.unionSets(0,1);
     ASSERT_EQ(dsu_3.countSets(), 2);
     dsu_3.reset(); // Reset again
     EXPECT_EQ(dsu_3.countSets(), 3);
@@ -907,7 +904,7 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
     // Test Case 1: Union of sets with equal ranks.
     // Resulting root should have its rank incremented.
     // Elements 0,1. Union(0,1). Assume 1 is root of 0, rank[1]=1.
-    dsu.unionSets(0, 1);
+    (void)dsu.unionSets(0, 1);
     int root_0_set = dsu.find(0);
     ASSERT_EQ(root_0_set, dsu.find(1));
     ASSERT_EQ(dsu.size(0), 2);
@@ -921,7 +918,7 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
 
 
     // Elements 2,3. Union(2,3). Assume 3 is root of 2, rank[3]=1.
-    dsu.unionSets(2, 3);
+    (void)dsu.unionSets(2, 3);
     int root_2_set = dsu.find(2);
     ASSERT_EQ(root_2_set, dsu.find(3));
     ASSERT_EQ(dsu.size(2), 2);
@@ -936,7 +933,7 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
     // Union the two sets (e.g., union 0 and 2). Their roots both have rank 1.
     // The new overall root should have rank 2.
     // Let's say root of set {2,3} (root_2_set) becomes the new overall root.
-    dsu.unionSets(0, 2);
+    (void)dsu.unionSets(0, 2);
     int final_root_tc1 = dsu.find(0);
     EXPECT_EQ(dsu.find(1), final_root_tc1);
     EXPECT_EQ(dsu.find(2), final_root_tc1);
@@ -952,7 +949,7 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
     // Test Case 2: Union of a set with rank 0 and a set with rank 1.
     // Lower rank (0) should attach to higher rank (1). Rank of higher rank root should remain 1.
     // Elements 4,5. Union(4,5). Assume 5 is root of 4, rank[5]=1.
-    dsu.unionSets(4, 5);
+    (void)dsu.unionSets(4, 5);
     int root_4_set_tc2 = dsu.find(4); // This is root of {4,5}, rank 1
     ASSERT_EQ(dsu.size(4), 2);
     // Element 6 is a single element set. Its root is 6, rank[6]=0.
@@ -963,7 +960,7 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
     // Union 4 and 6. Root of 4 is root_4_set_tc2 (rank 1). Root of 6 is 6 (rank 0).
     // Element 6 (lower rank root) should attach to root_4_set_tc2 (higher rank root).
     // Rank of root_4_set_tc2 should remain 1.
-    dsu.unionSets(4, 6);
+    (void)dsu.unionSets(4, 6);
     EXPECT_EQ(dsu.find(4), root_4_set_tc2); // Root should still be the original root of {4,5}
     EXPECT_EQ(dsu.find(5), root_4_set_tc2);
     EXPECT_EQ(dsu.find(6), root_4_set_tc2); // 6 now part of the same set, its parent should be root_4_set_tc2
@@ -974,28 +971,28 @@ TEST_F(FastDSUTest, UnionSetsByRankLogic) {
     // To further (indirectly) verify rank behavior of TC1 (final_root_tc1, rank 2) vs TC2 (root_4_set_tc2, rank 1):
     // Create element 7 (rank 0). Union it with TC1's final_root_tc1 (rank 2).
     // final_root_tc1's rank should remain 2.
-    dsu.unionSets(0, 7); // Element 7 (root 7, rank 0) unioned with set of final_root_tc1 (rank 2)
+    (void)dsu.unionSets(0, 7); // Element 7 (root 7, rank 0) unioned with set of final_root_tc1 (rank 2)
     EXPECT_EQ(dsu.find(7), final_root_tc1);
     EXPECT_EQ(dsu.size(0), 5); // Size of set under final_root_tc1 becomes 5
     EXPECT_EQ(dsu.getDirectParent_Test(7), final_root_tc1);
 
     // Create element 8 (rank 0). Union it with TC2's root_4_set_tc2 (rank 1).
     // root_4_set_tc2's rank should remain 1.
-    dsu.unionSets(4, 8); // Element 8 (root 8, rank 0) unioned with set of root_4_set_tc2 (rank 1)
+    (void)dsu.unionSets(4, 8); // Element 8 (root 8, rank 0) unioned with set of root_4_set_tc2 (rank 1)
     EXPECT_EQ(dsu.find(8), root_4_set_tc2);
     EXPECT_EQ(dsu.size(4), 4); // Size of set under root_4_set_tc2 becomes 4
     EXPECT_EQ(dsu.getDirectParent_Test(8), root_4_set_tc2);
 }
-    
+
 TEST_F(FastDSUTest, CompressOperation) {
     FastDSU dsu_3(3);
-    dsu_3.unionSets(0,1);
-    dsu_3.unionSets(1,2); 
-    
-    dsu_3.compress(); 
+    (void)dsu_3.unionSets(0,1);
+    (void)dsu_3.unionSets(1,2);
+
+    dsu_3.compress();
     int root = dsu_3.find(2);
-    EXPECT_EQ(dsu_3.find(0), root); 
-    EXPECT_EQ(dsu_3.find(1), root); 
+    EXPECT_EQ(dsu_3.find(0), root);
+    EXPECT_EQ(dsu_3.find(1), root);
     EXPECT_TRUE(dsu_3.connected(0,2));
     EXPECT_EQ(dsu_3.size(0), 3);
 }
@@ -1006,8 +1003,8 @@ TEST_F(FastDSUTest, IsEmptyAdvanced) {
 
     FastDSU dsu_5(5);
     EXPECT_FALSE(dsu_5.isEmpty());
-    dsu_5.reset(); 
-    EXPECT_FALSE(dsu_5.isEmpty()); 
+    dsu_5.reset();
+    EXPECT_FALSE(dsu_5.isEmpty());
 }
 
 TEST_F(FastDSUTest, ContainsAdvanced) {
@@ -1015,48 +1012,48 @@ TEST_F(FastDSUTest, ContainsAdvanced) {
     EXPECT_TRUE(dsu_3.contains(0));
     EXPECT_TRUE(dsu_3.contains(1));
     EXPECT_TRUE(dsu_3.contains(2));
-    EXPECT_FALSE(dsu_3.contains(3));   
-    EXPECT_FALSE(dsu_3.contains(-1));  
+    EXPECT_FALSE(dsu_3.contains(3));
+    EXPECT_FALSE(dsu_3.contains(-1));
 
     FastDSU dsu_0(0);
-    EXPECT_FALSE(dsu_0.contains(0)); 
+    EXPECT_FALSE(dsu_0.contains(0));
 }
 
 TEST_F(FastDSUTest, PathCompressionChain) {
-    FastDSU dsu_5(5); 
-    dsu_5.unionSets(0,1);
-    dsu_5.unionSets(1,2);
-    dsu_5.unionSets(2,3);
-    dsu_5.unionSets(3,4); 
+    FastDSU dsu_5(5);
+    (void)dsu_5.unionSets(0,1);
+    (void)dsu_5.unionSets(1,2);
+    (void)dsu_5.unionSets(2,3);
+    (void)dsu_5.unionSets(3,4);
 
-    int root = dsu_5.find(4); 
-    
-    EXPECT_EQ(dsu_5.find(0), root); 
+    int root = dsu_5.find(4);
+
+    EXPECT_EQ(dsu_5.find(0), root);
     EXPECT_EQ(dsu_5.find(1), root);
     EXPECT_EQ(dsu_5.find(2), root);
     EXPECT_EQ(dsu_5.find(3), root);
-    
+
     EXPECT_TRUE(dsu_5.connected(0,4));
     EXPECT_EQ(dsu_5.size(0), 5);
     EXPECT_EQ(dsu_5.size(4), 5);
 }
 
 TEST_F(FastDSUTest, BoundaryConditions) {
-    FastDSU dsu_10(10); 
-    EXPECT_TRUE(dsu_10.unionSets(0, 9)); 
+    FastDSU dsu_10(10);
+    EXPECT_TRUE(dsu_10.unionSets(0, 9));
     EXPECT_EQ(dsu_10.countSets(), 9);
     EXPECT_TRUE(dsu_10.connected(0,9));
     EXPECT_EQ(dsu_10.size(0), 2);
     EXPECT_EQ(dsu_10.size(9), 2);
 
-    EXPECT_TRUE(dsu_10.unionSets(5,0)); 
+    EXPECT_TRUE(dsu_10.unionSets(5,0));
     EXPECT_EQ(dsu_10.countSets(), 8);
-    EXPECT_TRUE(dsu_10.connected(5,9)); 
-    EXPECT_EQ(dsu_10.size(0), 3); 
+    EXPECT_TRUE(dsu_10.connected(5,9));
+    EXPECT_EQ(dsu_10.size(0), 3);
     EXPECT_EQ(dsu_10.size(5), 3);
     EXPECT_EQ(dsu_10.size(9), 3);
 
-    FastDSU dsu_2(2); 
+    FastDSU dsu_2(2);
     EXPECT_TRUE(dsu_2.unionSets(1,0));
     EXPECT_EQ(dsu_2.countSets(),1);
     EXPECT_EQ(dsu_2.size(0),2);
@@ -1070,7 +1067,7 @@ TEST_F(FastDSUTest, UnionSetsBySizeLogic) {
     // initial ranks: rank[0]=0, rank[1]=0, rank[2]=0
     // initial sizes: setSize[0]=1, setSize[1]=1, setSize[2]=1
 
-    dsu.unionSets(0, 1); // Set {0,1} size 2. Element 2 is size 1.
+    (void)dsu.unionSets(0, 1); // Set {0,1} size 2. Element 2 is size 1.
                          // New root for {0,1} could be 0 or 1. Let's assume 1 (as per current by_rank tie-breaking if sizes are 1 and ranks 0)
                          // If 1 becomes root of 0: parent[0]=1, setSize[1]=2. rank[1] might become 1 if it was by_rank.
                          // For BY_SIZE, if initial sizes are 1, it's an equal size union.
@@ -1105,9 +1102,9 @@ TEST_F(FastDSUTest, UnionSetsBySizeLogic) {
     // dsu state: {0,1,2}, {3}, {4}, {5}, {6}, ...
     // rank[3]=0, size[3]=1. rank[4]=0, size[4]=1 etc.
 
-    dsu.unionSets(3, 4); // Set {3,4} size 2. Assume 4 is root of 3. parent[3]=4, setSize[4]=2. rank[4] unchanged (0).
+    (void)dsu.unionSets(3, 4); // Set {3,4} size 2. Assume 4 is root of 3. parent[3]=4, setSize[4]=2. rank[4] unchanged (0).
     EXPECT_EQ(dsu.size(3), 2);
-    dsu.unionSets(5, 6); // Set {5,6} size 2. Assume 6 is root of 5. parent[5]=6, setSize[6]=2. rank[6] unchanged (0).
+    (void)dsu.unionSets(5, 6); // Set {5,6} size 2. Assume 6 is root of 5. parent[5]=6, setSize[6]=2. rank[6] unchanged (0).
     EXPECT_EQ(dsu.size(5), 2);
 
     int root3_old_tc2 = dsu.find(3); // root of {3,4}, e.g. 4
@@ -1150,7 +1147,7 @@ TEST_F(FastDSUTest, PathCompressionExplicit) {
 
     // Simpler setup for FastDSU: 0->1, 1->2. Then find(0).
     // 1. unionSets(0,1): parent[0]=1, rank[1]=1.
-    dsu.unionSets(0,1);
+    (void)dsu.unionSets(0,1);
     ASSERT_EQ(dsu.getDirectParent_Test(0), 1);
     ASSERT_EQ(dsu.getDirectParent_Test(1), 1); // 1 is root
 
@@ -1166,7 +1163,7 @@ TEST_F(FastDSUTest, PathCompressionExplicit) {
 
     // 1. grandchild (0) -> child1 (1)
     //    unionSets(0,1): parent[0]=1, rank[1]=1
-    dsu_explicit.unionSets(0,1);
+    (void) dsu_explicit.unionSets(0,1);
     ASSERT_EQ(dsu_explicit.getDirectParent_Test(0), 1);
 
     // 2. child1 (1) -> root (2)
@@ -1179,15 +1176,15 @@ TEST_F(FastDSUTest, PathCompressionExplicit) {
     //    This is getting complicated. The key is to have an uncompressed path.
     //    If we set parent[0]=1, parent[1]=2, parent[2]=2 (root).
     //    This can be achieved if:
-    //    union(0,1) -> p[0]=1, r[1]=1
-    //    union(other,2) -> p[other]=2, r[2]=1 (to make r[2] same as r[1])
-    //    union(1,2) -> p[1]=2, r[2]=2
+    //    (void)union(0,1) -> p[0]=1, r[1]=1
+    //    (void)union(other,2) -> p[other]=2, r[2]=1 (to make r[2] same as r[1])
+    //    (void)union(1,2) -> p[1]=2, r[2]=2
     FastDSU dsu_chain(4); // 0,1,2,3. Element 3 is dummy for rank.
-    dsu_chain.unionSets(0,1); // p[0]=1, r[1]=1
-    dsu_chain.unionSets(3,2); // p[3]=2, r[2]=1 (dummy union to raise rank of 2)
+    (void)dsu_chain.unionSets(0,1); // p[0]=1, r[1]=1
+    (void)dsu_chain.unionSets(3,2); // p[3]=2, r[2]=1 (dummy union to raise rank of 2)
 
     // Now, r[find(1)]=r[1]=1. r[find(2)]=r[2]=1.
-    dsu_chain.unionSets(1,2); // p[1]=2, r[2]=2. (Chain: 0->1->2)
+    (void)dsu_chain.unionSets(1,2); // p[1]=2, r[2]=2. (Chain: 0->1->2)
 
     ASSERT_EQ(dsu_chain.getDirectParent_Test(0), 1);
     ASSERT_EQ(dsu_chain.getDirectParent_Test(1), 2);
@@ -1215,7 +1212,7 @@ TEST_F(FastDSUTest, PathCompressionExplicit) {
 
 TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     DisjointSetUnion<int> dsu;
-    const int num_elements = 100000; 
+    const int num_elements = 100000;
     const int num_unions = 50000;
 
     auto start_time = std::chrono::high_resolution_clock::now();
@@ -1225,11 +1222,11 @@ TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     }
 
     for (int i = 0; i < num_unions; ++i) {
-        dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
+        (void)dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
     }
-    
+
     for (int i = 0; i < num_elements; ++i) {
-        dsu.find(i % num_elements);
+        (void)dsu.find(i % num_elements);
     }
 
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -1238,24 +1235,24 @@ TEST(DSUPerformance, GenericDSULargeScaleOperations) {
     std::cout << "[ INFO     ] GenericDSU " << num_elements << " elements, "
               << num_unions << " unions, " << num_elements << " finds took: "
               << duration.count() << " ms." << std::endl;
-    SUCCEED(); 
+    SUCCEED();
 }
 
 TEST(DSUPerformance, FastDSULargeScaleOperations) {
     const int num_elements = 100000;
     const int num_unions = 50000;
-    FastDSU dsu(num_elements); 
+    FastDSU dsu(num_elements);
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < num_unions; ++i) {
-        dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
+        (void)dsu.unionSets(i % num_elements, (i * 13 + num_unions / 4) % num_elements);
     }
-    
+
     for (int i = 0; i < num_elements; ++i) {
-        dsu.find(i % num_elements);
+        (void)dsu.find(i % num_elements);
     }
-    
+
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
