@@ -25,6 +25,7 @@ protected:
     MacAddress::MacArray zero_mac_;
     MacAddress::MacArray multicast_mac_;
     MacAddress::MacArray locally_administered_mac_;
+    MacAddress::MacArray universally_admin_test_mac_bytes_ = {0x00, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
 };
 
 // Test Constructors
@@ -297,7 +298,7 @@ TEST_F(MacAddressTest, IsUnicast) {
 
 TEST_F(MacAddressTest, IsLocallyAdministered) {
     MacAddress locally_admin_mac(locally_administered_mac_);
-    MacAddress universally_admin_mac(test_mac_bytes_);
+    MacAddress universally_admin_mac(universally_admin_test_mac_bytes_);
     
     EXPECT_TRUE(locally_admin_mac.isLocallyAdministered());
     EXPECT_FALSE(universally_admin_mac.isLocallyAdministered());
@@ -305,7 +306,7 @@ TEST_F(MacAddressTest, IsLocallyAdministered) {
 
 TEST_F(MacAddressTest, IsUniversallyAdministered) {
     MacAddress locally_admin_mac(locally_administered_mac_);
-    MacAddress universally_admin_mac(test_mac_bytes_);
+    MacAddress universally_admin_mac(universally_admin_test_mac_bytes_);
     
     EXPECT_FALSE(locally_admin_mac.isUniversallyAdministered());
     EXPECT_TRUE(universally_admin_mac.isUniversallyAdministered());
@@ -534,7 +535,7 @@ TEST_F(MacAddressTest, CompleteWorkflow) {
         EXPECT_FALSE(mac.isZero());
         EXPECT_FALSE(mac.isBroadcast());
         EXPECT_TRUE(mac.isUnicast());
-        EXPECT_TRUE(mac.isUniversallyAdministered());
+        EXPECT_TRUE(mac.isLocallyAdministered());
         
         // Test conversions
         uint64_t value = mac.toUInt64();

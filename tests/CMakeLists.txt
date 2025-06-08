@@ -10,14 +10,15 @@ include(GoogleTest) # For gtest_discover_tests
 # Define general test executable (if it doesn't use variant_vector, it doesn't need to link it)
 # Source files are now relative to this tests/CMakeLists.txt
 add_executable(run_tests
-  trie_test.cpp
+  arp_cache_test.cpp
+  dsu_test.cpp # Added new DSU test file
+  mac_test.cpp # Added MacAddress test file
+  nd_cache_test.cpp
+  persistent_array_test.cpp # Added PersistentArray test file
   policy_radix_test.cpp
   skiplist_test.cpp
   tcam_test.cpp
-  arp_cache_test.cpp
-  nd_cache_test.cpp
-  dsu_test.cpp # Added new DSU test file
-  persistent_array_test.cpp # Added PersistentArray test file
+  trie_test.cpp
 )
 
 # Important: The header files for the code being tested are in the 'include' directory
