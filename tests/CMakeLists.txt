@@ -1,9 +1,13 @@
 # This CMakeLists.txt is in the 'tests' subdirectory.
+cmake_minimum_required(VERSION 3.10) # Or match root
+project(VariantVectorTests CXX)
 
-# GoogleTest is assumed to be available from a higher-level CMake file
-# or system-wide. `include(GoogleTest)` is still needed for gtest_discover_tests.
+# GTest is made available by FetchContent in the parent CMakeLists.txt.
+# Targets like GTest::gtest will be available directly.
+# find_package(GTest REQUIRED) # This is not needed and can conflict with FetchContent
+include(GoogleTest) # For gtest_discover_tests
 
-# Define test executable
+# Define general test executable (if it doesn't use variant_vector, it doesn't need to link it)
 # Source files are now relative to this tests/CMakeLists.txt
 add_executable(run_tests
   trie_test.cpp
@@ -28,7 +32,6 @@ target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gm
 # GTest::gmock should provide the necessary gmock functionalities.
 
 # Discover and add tests to CTest
-include(GoogleTest)
 gtest_discover_tests(run_tests)
 
 
@@ -42,5 +45,14 @@ target_link_libraries(fenwick_tree_test PRIVATE GTest::gtest GTest::gtest_main G
 # Discover and add tests from fenwick_tree_test to CTest
 gtest_discover_tests(fenwick_tree_test)
 
+# Add use_variant_vector example
+add_executable(use_variant_vector use_variant_vector.cpp)
+# target_include_directories(use_variant_vector PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include") # Should come from library
+target_link_libraries(use_variant_vector PRIVATE cpp_library::variant_vector)
 
-message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' and 'fenwick_tree_test' executables defined and configured for GTest.")
+# Add variant_vector_test executable
+add_executable(variant_vector_test variant_vector_test.cpp)
+target_link_libraries(variant_vector_test PRIVATE GTest::gtest GTest::gmock GTest::gtest_main cpp_library::variant_vector)
+gtest_discover_tests(variant_vector_test)
+
+message(STATUS "Test subdirectory CMake configuration complete. 'run_tests', 'fenwick_tree_test', 'use_variant_vector', and 'variant_vector_test' executables defined and configured.")

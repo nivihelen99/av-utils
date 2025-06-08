@@ -14,7 +14,8 @@
 // Include the variant vector implementation
 // (Assuming the previous code is in a header file or included here)
 // For this test, I'll include the key classes inline
-#include "variant-vector.h"
+#include "variant_vector.h"
+#include <any>
 
 #include <type_traits>
 
@@ -158,6 +159,55 @@ TEST_F(StaticVariantVectorTest, AtBoundsChecking) {
     
     EXPECT_NO_THROW(vec.at(0));
     EXPECT_THROW(vec.at(1), std::out_of_range);
+}
+
+TEST_F(StaticVariantVectorTest, ClearMethod) {
+    vec.emplace_back<TestSmall>(42);
+    vec.emplace_back<TestMedium>(1, 2, 3.14);
+    ASSERT_FALSE(vec.empty());
+    ASSERT_EQ(vec.size(), 2);
+
+    vec.clear();
+    EXPECT_TRUE(vec.empty());
+    EXPECT_EQ(vec.size(), 0);
+
+    // Check if underlying type vectors are also cleared
+    EXPECT_TRUE(vec.get_type_vector<TestSmall>().empty());
+    EXPECT_TRUE(vec.get_type_vector<TestMedium>().empty());
+
+    // Add more elements to ensure it works after clear
+    vec.emplace_back<TestLarge>("cleared", 1);
+    EXPECT_EQ(vec.size(), 1);
+    EXPECT_FALSE(vec.get_type_vector<TestLarge>().empty());
+}
+
+TEST_F(StaticVariantVectorTest, PopBackMethod) {
+    vec.emplace_back<TestSmall>(10);
+    vec.emplace_back<TestMedium>(20, 21, 22.2);
+    vec.emplace_back<TestLarge>("item3", 30);
+    ASSERT_EQ(vec.size(), 3);
+
+    // Pop Large
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 2);
+    EXPECT_TRUE(std::holds_alternative<TestMedium>(vec[1])); // Check last element
+    EXPECT_EQ(vec.get_type_vector<TestLarge>().size(), 0); // Large vector should be empty now
+
+    // Pop Medium
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 1);
+    EXPECT_TRUE(std::holds_alternative<TestSmall>(vec[0]));
+    EXPECT_EQ(vec.get_type_vector<TestMedium>().size(), 0);
+
+    // Pop Small
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 0);
+    EXPECT_TRUE(vec.empty());
+    EXPECT_EQ(vec.get_type_vector<TestSmall>().size(), 0);
+
+    // Pop on empty (should not throw, should be no-op as per current impl)
+    EXPECT_NO_THROW(vec.pop_back());
+    EXPECT_TRUE(vec.empty());
 }
 
 // Type-specific Vector Access Tests
@@ -321,6 +371,92 @@ TEST_F(DynamicVariantVectorTest, MutableAccess) {
     EXPECT_EQ(vec.get_typed<TestSmall>(0).value, 100);
 }
 
+TEST_F(DynamicVariantVectorTest, ClearMethod) {
+    vec.emplace_back<TestSmall>(42);
+    vec.emplace_back<TestMedium>(1, 2, 3.14);
+    ASSERT_FALSE(vec.empty());
+    ASSERT_EQ(vec.size(), 2);
+
+    vec.clear();
+    EXPECT_TRUE(vec.empty());
+    EXPECT_EQ(vec.size(), 0);
+
+    // Check if underlying type vectors are also cleared
+    // This assumes types were registered before clear.
+    // If clear also clears type_storages then this check needs adjustment.
+    // Based on current clear impl, type_storages are kept, data is cleared.
+    EXPECT_TRUE(vec.get_type_vector<TestSmall>().empty());
+    EXPECT_TRUE(vec.get_type_vector<TestMedium>().empty());
+
+    // Add more elements to ensure it works after clear
+    vec.emplace_back<TestLarge>("cleared", 1); // Assumes TestLarge was registered or auto-registers
+    EXPECT_EQ(vec.size(), 1);
+    EXPECT_FALSE(vec.get_type_vector<TestLarge>().empty());
+}
+
+TEST_F(DynamicVariantVectorTest, PopBackMethod) {
+    vec.emplace_back<TestSmall>(10);
+    vec.emplace_back<TestMedium>(20, 21, 22.2);
+    vec.emplace_back<TestLarge>("item3", 30);
+    ASSERT_EQ(vec.size(), 3);
+
+    // Pop Large
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 2);
+    EXPECT_NO_THROW({
+        [[maybe_unused]] auto& last_el = vec.get_typed<TestMedium>(1);
+    });
+    EXPECT_EQ(vec.get_type_vector<TestLarge>().size(), 0);
+
+    // Pop Medium
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 1);
+    EXPECT_NO_THROW({
+        [[maybe_unused]] auto& last_el = vec.get_typed<TestSmall>(0);
+    });
+    EXPECT_EQ(vec.get_type_vector<TestMedium>().size(), 0);
+
+    // Pop Small
+    vec.pop_back();
+    ASSERT_EQ(vec.size(), 0);
+    EXPECT_TRUE(vec.empty());
+    EXPECT_EQ(vec.get_type_vector<TestSmall>().size(), 0);
+
+    // Pop on empty
+    EXPECT_NO_THROW(vec.pop_back());
+    EXPECT_TRUE(vec.empty());
+}
+
+TEST_F(DynamicVariantVectorTest, AnyAccessAtMethod) {
+    vec.emplace_back<TestSmall>(42);
+    vec.emplace_back<TestMedium>(1, 2, 3.14);
+    vec.emplace_back<TestLarge>("test_any", 100);
+
+    // Access Small
+    std::any any_val_small = vec.at(0);
+    ASSERT_EQ(any_val_small.type(), typeid(TestSmall));
+    EXPECT_EQ(std::any_cast<TestSmall>(any_val_small).value, 42);
+
+    // Access Medium
+    std::any any_val_medium = vec.at(1);
+    ASSERT_EQ(any_val_medium.type(), typeid(TestMedium));
+    EXPECT_EQ(std::any_cast<TestMedium>(any_val_medium).x, 1);
+
+    // Access Large
+    std::any any_val_large = vec.at(2);
+    ASSERT_EQ(any_val_large.type(), typeid(TestLarge));
+    EXPECT_EQ(std::any_cast<TestLarge>(any_val_large).name, "test_any");
+
+    // Out of bounds
+    EXPECT_THROW(vec.at(3), std::out_of_range);
+
+    // Const correctness check (if possible to make vec const)
+    const auto& const_vec = vec;
+    std::any any_val_const = const_vec.at(0);
+    ASSERT_EQ(any_val_const.type(), typeid(TestSmall));
+    EXPECT_EQ(std::any_cast<TestSmall>(any_val_const).value, 42);
+}
+
 // Type-specific Vector Access Tests
 TEST_F(DynamicVariantVectorTest, GetTypeVector) {
     vec.emplace_back<TestSmall>(1);
@@ -426,6 +562,7 @@ TEST_F(PerformanceComparisonTest, MemoryEfficiencyComparison) {
     size_t dynamic_memory = optimized_dynamic.memory_usage();
     
     // The optimized versions should use less memory
+    // Note: These assertions for performance/memory are indicative and may need tuning for specific platforms or more rigorous benchmarking.
     EXPECT_LT(static_memory, traditional_memory);
     EXPECT_LT(dynamic_memory, traditional_memory);
     
@@ -477,6 +614,7 @@ TEST_F(PerformanceComparisonTest, TypeSpecificIterationPerformance) {
     
     // The optimized version should be faster (or at least not significantly slower)
     // This is a loose check since performance can vary
+    // Note: These assertions for performance/memory are indicative and may need tuning for specific platforms or more rigorous benchmarking.
     std::cout << "Type-specific iteration performance (microseconds):\n";
     std::cout << "Optimized: " << optimized_time.count() << "\n";
     std::cout << "Traditional: " << traditional_time.count() << "\n";

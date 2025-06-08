@@ -6,7 +6,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
 
 # Add include directory for header files (globally for all targets in this directory and subdirectories)
-include_directories(include)
+include_directories(include) # Prefer target_include_directories
+
+# --- Variant Vector Library (Header-Only) ---
+add_library(variant_vector INTERFACE)
+add_library(cpp_library::variant_vector ALIAS variant_vector) # Modern CMake alias
+target_include_directories(variant_vector INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+# This makes sure anyone linking against variant_vector gets 'include' in their include path.
 
 # Enable testing (should be global)
 enable_testing()

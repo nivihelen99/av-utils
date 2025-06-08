@@ -118,11 +118,46 @@ void benchmark_memory_usage() {
     std::cout << "Speedup: " << static_cast<double>(traditional_time.count()) / optimized_time.count() << "x\n";
 }
 
+void demonstrate_new_features() {
+    std::cout << "\n--- Demonstrating new features ---\n";
+    static_variant_vector<SmallData, MediumData, LargeData> s_vec;
+    s_vec.emplace_back<SmallData>(101);
+    s_vec.emplace_back<MediumData>(102, 103, 104.0);
+    std::cout << "Static vec size before pop_back: " << s_vec.size() << std::endl; // Expected: 2
+    s_vec.pop_back(); // Pops MediumData
+    std::cout << "Static vec size after pop_back: " << s_vec.size() << std::endl;  // Expected: 1
+    if (s_vec.size() == 1) {
+        auto val = s_vec[0];
+        if(std::holds_alternative<SmallData>(val)) {
+             std::cout << "Remaining element is SmallData with value: " << std::get<SmallData>(val).x << std::endl;
+        }
+    }
+    s_vec.clear();
+    std::cout << "Static vec size after clear: " << s_vec.size() << std::endl;    // Expected: 0
 
+    dynamic_variant_vector d_vec;
+    d_vec.emplace_back<SmallData>(201);
+    d_vec.emplace_back<LargeData>("example_large");
+    std::cout << "Dynamic vec size before pop_back: " << d_vec.size() << std::endl; // Expected: 2
+    d_vec.pop_back(); // Pops LargeData
+    std::cout << "Dynamic vec size after pop_back: " << d_vec.size() << std::endl;  // Expected: 1
+    if (d_vec.size() == 1) {
+        SmallData& val = d_vec.get_typed<SmallData>(0);
+        std::cout << "Remaining element in dynamic_vec is SmallData with value: " << val.x << std::endl;
+        // Demonstrate std::any at()
+        std::any any_val = d_vec.at(0);
+        if (any_val.type() == typeid(SmallData)) {
+            std::cout << "Dynamic vec at(0) via std::any has SmallData with value: " << std::any_cast<SmallData>(any_val).x << std::endl;
+        }
+    }
+    d_vec.clear();
+    std::cout << "Dynamic vec size after clear: " << d_vec.size() << std::endl;    // Expected: 0
+}
 
 
 int main() {
     benchmark_memory_usage();
+    demonstrate_new_features(); // Call the new function
     return 0;
 }
 

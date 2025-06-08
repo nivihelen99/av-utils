@@ -9,8 +9,7 @@
 #include <unordered_map>
 #include <typeindex>
 #include <stdexcept>
-#include <unordered_map>
-#include <typeindex>
+#include <any> // Add this include at the top of the file
 
 // ============================================================================
 // STATIC VARIANT VECTOR (Compile-time known maximum size)
@@ -36,6 +35,7 @@ public:
     static_variant_vector() = default;
     
     // Reserve space for better performance
+    // Note: This reserve strategy divides capacity among types. It might be suboptimal for skewed distributions.
     void reserve(size_t capacity) {
         index_map.reserve(capacity);
         std::apply([capacity](auto&... vectors) {
@@ -85,6 +85,7 @@ public:
         return get_variant_at(type_idx, local_idx);
     }
     
+    // No bounds checking.
     variant_type operator[](size_t global_idx) const {
         auto [type_idx, local_idx] = index_map[global_idx];
         return get_variant_at(type_idx, local_idx);
@@ -110,6 +111,33 @@ public:
     // Size and capacity
     size_t size() const { return index_map.size(); }
     bool empty() const { return index_map.empty(); }
+
+    void clear() {
+        std::apply([](auto&... vectors) {
+            (vectors.clear(), ...);
+        }, type_vectors);
+        index_map.clear();
+    }
+
+    void pop_back() {
+        if (index_map.empty()) {
+            // Behavior consistent with std::vector (undefined if empty, or could throw)
+            // For safety, let's add a check or ensure behavior is documented.
+            // Given no explicit requirement, this will just return if empty.
+            return;
+        }
+        auto [type_idx_to_pop, local_idx_ignored] = index_map.back(); // local_idx is for the specific element, not needed for vector's pop_back
+
+        // Helper to call pop_back on the correct type_vector
+        auto pop_from_correct_vector = [this, type_idx_to_pop]<size_t... Is>(std::index_sequence<Is...>) {
+            bool popped = false;
+            (((type_idx_to_pop == Is) ? (std::get<Is>(type_vectors).pop_back(), popped = true) : false) || ...);
+            return popped;
+        };
+
+        pop_from_correct_vector(std::make_index_sequence<num_types>{});
+        index_map.pop_back();
+    }
     
     // Memory usage statistics
     size_t memory_usage() const {
@@ -133,10 +161,18 @@ public:
     
     // Get type index for global index
     uint8_t get_type_index(size_t global_idx) const {
+        if (global_idx >= index_map.size()) {
+            throw std::out_of_range("get_type_index: Index out of range");
+        }
         return index_map[global_idx].first;
     }
-    
+
 private:
+    template<size_t... Is>
+    void pop_back_helper(uint8_t type_idx, size_t local_idx, std::index_sequence<Is...>) {
+        ((type_idx == Is ? (std::get<Is>(type_vectors).pop_back(), true) : false) || ...);
+    }
+
     variant_type get_variant_at(uint8_t type_idx, size_t local_idx) const {
         return get_variant_helper(type_idx, local_idx, std::make_index_sequence<num_types>{});
     }
@@ -164,6 +200,9 @@ private:
         virtual void reserve(size_t cap) = 0;
         virtual size_t element_size() const = 0;
         virtual size_t memory_usage() const = 0;
+        virtual void clear_data() = 0;
+        virtual void pop_back_element() = 0;
+        virtual std::any get_any_at(size_t idx) const = 0;
     };
     
     template<typename T>
@@ -177,6 +216,12 @@ private:
         void reserve(size_t cap) override { data.reserve(cap); }
         size_t element_size() const override { return sizeof(T); }
         size_t memory_usage() const override { return data.capacity() * sizeof(T); }
+        void clear_data() override { data.clear(); }
+        void pop_back_element() override { if (!data.empty()) data.pop_back(); }
+        std::any get_any_at(size_t idx) const override {
+            if (idx >= data.size()) throw std::out_of_range("local index out of range for get_any_at");
+            return data[idx];
+        }
         
         size_t push_back(T&& value) {
             data.push_back(std::move(value));
@@ -247,7 +292,34 @@ public:
     
     size_t size() const { return index_map.size(); }
     bool empty() const { return index_map.empty(); }
+
+    void clear() {
+        for (auto& storage : type_storages) {
+            storage->clear_data(); // Call the new virtual method
+        }
+        index_map.clear();
+    }
+
+    void pop_back() {
+        if (index_map.empty()) {
+            return; // Or throw
+        }
+        auto [storage_idx, local_idx_ignored] = index_map.back();
+        // Need a way to call pop_back on the correct type_storage's vector
+        // Add pop_back_element to type_storage_base and type_storage<T>
+        type_storages[storage_idx]->pop_back_element(); // New method
+        index_map.pop_back();
+    }
+
+    std::any at(size_t global_idx) const {
+        if (global_idx >= index_map.size()) {
+            throw std::out_of_range("Index out of range");
+        }
+        auto [storage_idx, local_idx] = index_map[global_idx];
+        return type_storages[storage_idx]->get_any_at(local_idx);
+    }
     
+    // Note: This reserve strategy divides capacity approximately. May be suboptimal if new types are registered after reserve or for skewed distributions.
     void reserve(size_t capacity) {
         index_map.reserve(capacity);
         for (auto& storage : type_storages) {
