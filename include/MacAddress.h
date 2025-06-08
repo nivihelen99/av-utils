@@ -136,8 +136,23 @@ class MacAddress
       }
 
       // Try different formats
-      return parseWithSeparator(clean_mac, ':') || parseWithSeparator(clean_mac, '-') ||
-             parseWithSeparator(clean_mac, '.') || parseWithoutSeparator(clean_mac);
+        if (clean_mac.find(':') != std::string::npos) {
+            return parseWithSeparator(clean_mac, ':');
+        }
+        if (clean_mac.find('-') != std::string::npos) {
+            return parseWithSeparator(clean_mac, '-');
+        }
+        // Cisco format AABB.CCDD.EEFF (length 14) or AA.BB.CC.DD.EE.FF (length 17, less common for MACs)
+        if (clean_mac.find('.') != std::string::npos) {
+            return parseWithSeparator(clean_mac, '.');
+        }
+        // If no separators are found, assume it might be a 12-character hex string
+        if (clean_mac.length() == 12 && clean_mac.find_first_not_of("0123456789abcdefABCDEF") == std::string::npos) {
+            return parseWithoutSeparator(clean_mac);
+        }
+
+        // If none of the above specific formats match, return false.
+        return false;
    }
 
    // Accessors
@@ -410,23 +425,28 @@ class MacAddress
 
    bool parseWithSeparator(const std::string& mac_str, char separator)
    {
-      std::regex pattern;
+      // Using static const std::regex for performance
+      static const std::regex colon_pattern("^([0-9A-Fa-f]{1,2}):([0-9A-Fa-f]{1,2}):([0-9A-Fa-f]{1,2}):([0-9A-Fa-f]{1,2}):([0-9A-Fa-f]{1,2}):([0-9A-Fa-f]{1,2})$");
+      static const std::regex hyphen_pattern("^([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})-([0-9A-Fa-f]{1,2})$");
+      static const std::regex cisco_pattern("^([0-9A-Fa-f]{4})\\.([0-9A-Fa-f]{4})\\.([0-9A-Fa-f]{4})$");
+      // Generic dot pattern for AA.BB.CC.DD.EE.FF style, less common but possible
+      static const std::regex dot_pattern("^([0-9A-Fa-f]{1,2})\\.([0-9A-Fa-f]{1,2})\\.([0-9A-Fa-f]{1,2})\\.([0-9A-Fa-f]{1,2})\\.([0-9A-Fa-f]{1,2})\\.([0-9A-Fa-f]{1,2})$");
 
-      // Build regex pattern based on separator
-      std::string sep_escaped = (separator == '.') ? "\\." : std::string(1, separator);
-      std::string regex_pattern = "^([0-9A-Fa-f]{1,2})" + sep_escaped + "([0-9A-Fa-f]{1,2})" +
-                                  sep_escaped + "([0-9A-Fa-f]{1,2})" + sep_escaped +
-                                  "([0-9A-Fa-f]{1,2})" + sep_escaped + "([0-9A-Fa-f]{1,2})" +
-                                  sep_escaped + "([0-9A-Fa-f]{1,2})$";
+      std::smatch matches;
+      const std::regex* current_pattern = nullptr;
 
-      // Special case for Cisco format (xxxx.xxxx.xxxx)
-      if (separator == '.')
+      if (separator == ':')
       {
-         regex_pattern = "^([0-9A-Fa-f]{4})\\.([0-9A-Fa-f]{4})\\.([0-9A-Fa-f]{4})$";
-         pattern = std::regex(regex_pattern);
-         std::smatch matches;
-
-         if (std::regex_match(mac_str, matches, pattern))
+         current_pattern = &colon_pattern;
+      }
+      else if (separator == '-')
+      {
+         current_pattern = &hyphen_pattern;
+      }
+      else if (separator == '.')
+      {
+         // Try Cisco format first for '.'
+         if (std::regex_match(mac_str, matches, cisco_pattern))
          {
             try
             {
@@ -442,16 +462,23 @@ class MacAddress
             }
             catch (...)
             {
+               // Error during conversion
                return false;
             }
          }
+         // If Cisco didn't match, try generic dot pattern
+         current_pattern = &dot_pattern;
+      }
+      else
+      {
+         // Should not happen if separator is one of ':', '-', '.'
+         // but as a fallback or if new separators are added without static regexes:
          return false;
       }
 
-      pattern = std::regex(regex_pattern);
-      std::smatch matches;
+      if (!current_pattern) return false; // Should be caught by above else
 
-      if (std::regex_match(mac_str, matches, pattern))
+      if (std::regex_match(mac_str, matches, *current_pattern))
       {
          try
          {
@@ -463,21 +490,25 @@ class MacAddress
          }
          catch (...)
          {
+            // Error during conversion
             return false;
          }
       }
-
       return false;
    }
 
    bool parseWithoutSeparator(const std::string& mac_str)
    {
+      // Length check is already done in the calling `parse` method for this specific path.
+      // However, keeping it here makes parseWithoutSeparator safe if called directly.
       if (mac_str.length() != 12)
       {
          return false;
       }
 
-      std::regex pattern("^[0-9A-Fa-f]{12}$");
+      // Regex check for hex characters is also partly done by find_first_not_of
+      // in `parse` for this path. Static regex is still good for robustness.
+      static const std::regex pattern("^[0-9A-Fa-f]{12}$");
       if (!std::regex_match(mac_str, pattern))
       {
          return false;
@@ -494,6 +525,7 @@ class MacAddress
       }
       catch (...)
       {
+         // Error during conversion
          return false;
       }
    }
