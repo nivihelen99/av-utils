@@ -141,6 +141,13 @@ Expected<std::string> fallback_handler(const std::string& error) {
     return "0"; // Return a default valid input
 }
 
+// New fallback handler for compatible or_else usage in the problematic chain
+Expected<int, std::string> new_fallback_handler(const std::string& error_msg) {
+    std::cout << "Handling error with new_fallback_handler: " << error_msg << "\n";
+    // This handler provides a default integer value.
+    return 0;
+}
+
 void monadic_operations_example() {
     std::cout << "=== Monadic Operations Example ===\n";
     
@@ -164,12 +171,23 @@ void monadic_operations_example() {
     }
     
     // Using or_else for error recovery
-    auto result3 = parse_int("invalid")
-        .or_else(fallback_handler)
-        .and_then([](const std::string& s) { return parse_int(s); })
-        .map([](int x) { return x + 100; });
-    
-    std::cout << "Chain with recovery: " << result3.value_or(-1) << "\n";
+    // Original chain that is problematic with the new or_else:
+    // auto result3_original = parse_int("invalid")
+    //     .or_else(fallback_handler) // fallback_handler returns Expected<std::string, std::string>
+    //                                  // This causes static_assert failure if parse_int succeeded, as
+    //                                  // Expected<std::string, std::string> is not constructible from int.
+    //     .and_then([](const std::string& s) { return parse_int(s); })
+    //     .map([](int x) { return x + 100; });
+    // std::cout << "Chain with recovery (original, problematic): " << result3_original.value_or(-1) << "\n";
+
+    // Revised chain for result3 to be compatible with the new or_else definition
+    auto result3 = parse_int("invalid") // Returns Expected<int, std::string>
+        .or_else(new_fallback_handler)  // new_fallback_handler returns Expected<int, std::string>
+                                        // The static_assert (is_constructible<Expected<int,std::string>, const int&>) passes.
+                                        // Output of or_else is Expected<int, std::string>
+        .map([](int x) { return x + 100; }); // map operates on the int.
+
+    std::cout << "Chain with recovery (revised): " << result3.value_or(-1) << "\n";
     std::cout << "\n";
 }
 
