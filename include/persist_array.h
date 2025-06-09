@@ -72,14 +72,10 @@ private:
     // otherwise it's O(1) (checking use_count).
     void ensure_unique() const {
         if (!root || root.use_count() > 1) {
-            // If root is null, the behavior of *root is undefined.
-            // Current constructors ensure root is always initialized to a valid Node.
-            // A moved-from object will have root == nullptr.
-            // If ensure_unique() is called on a moved-from object, this line will cause a crash.
-            // The original prompt's ensure_unique was: root = std::make_shared<Node<T>>(root ? root->data : std::vector<T>());
-            // which would handle a null root by creating an empty vector.
-            // Sticking to commenting existing code:
-            root = std::make_shared<Node>(*root);
+            // If root is null, create a new Node with an empty vector.
+            // Otherwise, copy the existing root's data.
+            // This prevents dereferencing a nullptr if ensure_unique is called on a (e.g. moved-from) object where root is null.
+            root = std::make_shared<Node>(root ? root->data : std::vector<T>());
         }
     }
     
