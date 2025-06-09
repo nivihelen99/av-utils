@@ -425,6 +425,7 @@ public:
         }
         // Consider adding an upper cap for effective_max_level_ if necessary, e.g. 30 or some reasonable limit.
         header = allocate_node(T{}, effective_max_level_);
+        thread_local_finger = header;
     }
 
     ~SkipList() {
