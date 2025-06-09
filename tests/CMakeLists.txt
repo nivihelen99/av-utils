@@ -7,19 +7,30 @@ project(VariantVectorTests CXX)
 # find_package(GTest REQUIRED) # This is not needed and can conflict with FetchContent
 include(GoogleTest) # For gtest_discover_tests
 
-# Define general test executable (if it doesn't use variant_vector, it doesn't need to link it)
-# Source files are now relative to this tests/CMakeLists.txt
-add_executable(run_tests
-  arp_cache_test.cpp
-  dsu_test.cpp # Added new DSU test file
-  mac_test.cpp # Added MacAddress test file
-  nd_cache_test.cpp
-  persistent_array_test.cpp # Added PersistentArray test file
-  policy_radix_test.cpp
-  skiplist_test.cpp
-  tcam_test.cpp
-  trie_test.cpp
+# Define sources for the combined 'run_tests' target
+# Glob all *_test.cpp files, then exclude those meant to be standalone.
+# All .cpp files in tests/ are considered potential test sources.
+file(GLOB ALL_TEST_FILES "*.cpp")
+
+# Define test files that are built as standalone executables and should be excluded from run_tests
+set(STANDALONE_TEST_FILES
+    expected_test.cpp
+    fenwick_tree_test.cpp
+    variant_vector_test.cpp
+    use_variant_vector.cpp # This was standalone, though its nature as a GTest is ambiguous from original.
 )
+
+# Create the list of sources for the main 'run_tests' executable
+set(RUN_TESTS_SOURCES_LIST "") # Initialize empty
+foreach(FILE_PATH ${ALL_TEST_FILES})
+    get_filename_component(CURRENT_FILENAME ${FILE_PATH} NAME)
+    list(FIND STANDALONE_TEST_FILES ${CURRENT_FILENAME} IS_STANDALONE)
+    if(IS_STANDALONE EQUAL -1) # If not found in STANDALONE_TEST_FILES
+        list(APPEND RUN_TESTS_SOURCES_LIST ${FILE_PATH}) # Append the full path
+    endif()
+endforeach()
+
+add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 
 # Important: The header files for the code being tested are in the 'include' directory
 # at the project root. We need to tell this target where to find them.
@@ -36,36 +47,20 @@ target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gm
 gtest_discover_tests(run_tests)
 
 
-# Add Fenwick Tree test
-add_executable(fenwick_tree_test fenwick_tree_test.cpp)
-# Ensure it can find headers from the project's include directory (already handled by root CMakeLists.txt)
+# Automatically create individual executables for all .cpp files in tests/
+file(GLOB INDIVIDUAL_TEST_FILES "*.cpp")
 
-# Link GTest libraries for fenwick_tree_test
-target_link_libraries(fenwick_tree_test PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
+    get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+    add_executable(${TEST_NAME} ${TEST_FILE})
+    target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
+    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+    if(TEST_FILE STREQUAL "variant_vector_test.cpp" OR TEST_FILE STREQUAL "use_variant_vector.cpp")
+        target_link_libraries(${TEST_NAME} PRIVATE cpp_library::variant_vector)
+    endif()
+    # For use_variant_vector, gtest_discover_tests might not be appropriate if it has no tests.
+    # However, to keep the loop simple, we call it. It will just find 0 tests for that target.
+    gtest_discover_tests(${TEST_NAME})
+endforeach()
 
-# Discover and add tests from fenwick_tree_test to CTest
-gtest_discover_tests(fenwick_tree_test)
-
-# Add use_variant_vector example
-add_executable(use_variant_vector use_variant_vector.cpp)
-# target_include_directories(use_variant_vector PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../include") # Should come from library
-target_link_libraries(use_variant_vector PRIVATE cpp_library::variant_vector)
-
-# Add variant_vector_test executable
-add_executable(variant_vector_test variant_vector_test.cpp)
-target_link_libraries(variant_vector_test PRIVATE GTest::gtest GTest::gmock GTest::gtest_main cpp_library::variant_vector)
-gtest_discover_tests(variant_vector_test)
-
-# Add Expected test
-add_executable(expected_test expected_test.cpp)
-
-# Ensure it can find headers from the project's include directory
-target_include_directories(expected_test PRIVATE "${CMAKE_SOURCE_DIR}/include")
-
-# Link GTest libraries for expected_test
-target_link_libraries(expected_test PRIVATE GTest::gtest GTest::gtest_main)
-
-# Discover and add tests from expected_test to CTest
-gtest_discover_tests(expected_test)
-
-message(STATUS "Test subdirectory CMake configuration complete. 'run_tests', 'fenwick_tree_test', 'use_variant_vector', 'variant_vector_test', and 'expected_test' executables defined and configured.")
+message(STATUS "Test subdirectory CMake configuration complete. 'run_tests' and individual test executables automatically defined and configured.")

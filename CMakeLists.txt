@@ -19,17 +19,15 @@ target_include_directories(variant_vector INTERFACE
 # Enable testing (should be global)
 enable_testing()
 
-# Define executables for examples
-add_executable(trie_example examples/example.cpp)
-add_executable(policy_example examples/use_policy.cpp)
-add_executable(skip_example examples/use_skip.cpp)
-add_executable(tcam_example examples/use_tcam.cpp)
-add_executable(arp_cache_example examples/arp_cache_example.cpp)
-add_executable(nd_cache_example examples/nd_cache_example.cpp)
-add_executable(use_dsu_example examples/use_dsu.cpp)
-add_executable(use_persist_array_example examples/use_persist_array.cpp)
-add_executable(use_mac_parser_example examples/use_mac_parser.cpp)
-add_executable(use_expected_example examples/use_expected.cpp)
+# Automatically define executables for examples
+file(GLOB EXAMPLE_SOURCES "examples/*.cpp")
+foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
+    get_filename_component(BASE_NAME ${SOURCE_FILE} NAME_WE)
+    set(EXECUTABLE_NAME "example_${BASE_NAME}")
+    add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
+    # Link common libraries if needed by examples
+    target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector)
+endforeach()
 
 # Google Test
 include(FetchContent)
