@@ -9,8 +9,8 @@
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <functional>
 
-// Please refer to docs/README_expected.md
 
 namespace aos_utils
 {
