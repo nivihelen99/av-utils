@@ -56,4 +56,16 @@ add_executable(variant_vector_test variant_vector_test.cpp)
 target_link_libraries(variant_vector_test PRIVATE GTest::gtest GTest::gmock GTest::gtest_main cpp_library::variant_vector)
 gtest_discover_tests(variant_vector_test)
 
-message(STATUS "Test subdirectory CMake configuration complete. 'run_tests', 'fenwick_tree_test', 'use_variant_vector', and 'variant_vector_test' executables defined and configured.")
+# Add Expected test
+add_executable(expected_test expected_test.cpp)
+
+# Ensure it can find headers from the project's include directory
+target_include_directories(expected_test PRIVATE "${CMAKE_SOURCE_DIR}/include")
+
+# Link GTest libraries for expected_test
+target_link_libraries(expected_test PRIVATE GTest::gtest GTest::gtest_main)
+
+# Discover and add tests from expected_test to CTest
+gtest_discover_tests(expected_test)
+
+message(STATUS "Test subdirectory CMake configuration complete. 'run_tests', 'fenwick_tree_test', 'use_variant_vector', 'variant_vector_test', and 'expected_test' executables defined and configured.")
