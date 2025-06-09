@@ -339,20 +339,32 @@ public:
 
     // or_else for error handling
     template <typename F>
-    constexpr auto or_else(F&& f) const& -> Expected
+    constexpr auto or_else(F&& f) const& -> std::invoke_result_t<F, const E&>
     {
         if (has_value()) {
-            return *this;
+            using NextExpected = std::invoke_result_t<F, const E&>;
+            // Ensure that if we have a value, it's convertible to the value_type of NextExpected
+            // or NextExpected can be constructed from our T.
+            // This typically means NextExpected::value_type must be T or constructible from T.
+            // And NextExpected::error_type must be compatible if we were to construct an error case.
+            // For simplicity, we assume NextExpected is constructible with our value T.
+            // This is a common pattern for or_else where the value path should seamlessly transition.
+            static_assert(std::is_constructible_v<NextExpected, const T&>,
+                          "The type returned by the function argument 'f' in or_else (when no error) must be constructible from the original Expected's value type.");
+            return NextExpected(**this);
         } else {
             return std::invoke(std::forward<F>(f), error());
         }
     }
 
     template <typename F>
-    constexpr auto or_else(F&& f) && -> Expected
+    constexpr auto or_else(F&& f) && -> std::invoke_result_t<F, E&&>
     {
         if (has_value()) {
-            return std::move(*this);
+            using NextExpected = std::invoke_result_t<F, E&&>;
+            static_assert(std::is_constructible_v<NextExpected, T&&>,
+                          "The type returned by the function argument 'f' in or_else (when no error) must be constructible from the original Expected's value type (rvalue).");
+            return NextExpected(std::move(**this));
         } else {
             return std::invoke(std::forward<F>(f), std::move(error()));
         }
