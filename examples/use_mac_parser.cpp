@@ -20,6 +20,80 @@ void printMacAddress(const std::optional<MAC_ADR>& mac_opt) {
     }
 }
 
+int test1()
+{
+    std::vector<std::string> test_macs = {
+        "AA:BB:CC:DD:EE:FF",
+        "aa:bb:cc:dd:ee:ff",
+        "AA-BB-CC-DD-EE-FF",
+        "aa-bb-cc-dd-ee-ff", 
+        "AABB.CCDD.EEFF",
+        "aabb.ccdd.eeff",
+        "AA.BB.CC.DD.EE.FF",
+        "aa.bb.cc.dd.ee.ff",
+        "AABBCCDDEEFF",
+        "aabbccddeeff",
+        "12:34:56:aB:Cd:Ef",  // Mixed case
+        "invalid_mac"
+    };
+    
+    for (const auto& mac_str : test_macs)
+    {
+        auto result = parseMAC(mac_str);
+        if (result)
+        {
+            bool input_lowercase = isInputLowercase(mac_str);
+            std::string formatted = formatMAC(*result, ':', input_lowercase);
+            std::cout << "Parsed '" << mac_str << "' -> " << formatted << std::endl;
+        }
+        else
+        {
+            std::cout << "Failed to parse: " << mac_str << std::endl;
+        }
+    }
+    
+    return 0;
+}
+
+int test2()
+{
+    // Example MAC address: AA:BB:CC:DD:EE:FF
+    MAC_ADR mac = {};
+    mac.macAdr[0] = 0xAA;
+    mac.macAdr[1] = 0xBB;
+    mac.macAdr[2] = 0xCC;
+    mac.macAdr[3] = 0xDD;
+    mac.macAdr[4] = 0xEE;
+    mac.macAdr[5] = 0xFF;
+    
+    std::cout << "=== Different Formats ===" << std::endl;
+    std::cout << "Colon:        " << macToString(mac, MacFormat::COLON_SEPARATED) << std::endl;
+    std::cout << "Hyphen:       " << macToString(mac, MacFormat::HYPHEN_SEPARATED) << std::endl;
+    std::cout << "Dot:          " << macToString(mac, MacFormat::DOT_SEPARATED) << std::endl;
+    std::cout << "Dotted Quad:  " << macToString(mac, MacFormat::DOTTED_QUAD) << std::endl;
+    std::cout << "No Separator: " << macToString(mac, MacFormat::NO_SEPARATOR) << std::endl;
+    
+    std::cout << "\n=== Case Variations ===" << std::endl;
+    std::cout << "Uppercase:    " << macToString(mac, MacFormat::COLON_SEPARATED, true) << std::endl;
+    std::cout << "Lowercase:    " << macToString(mac, MacFormat::COLON_SEPARATED, false) << std::endl;
+    
+    std::cout << "\n=== With 0x Prefix (only first octet) ===" << std::endl;
+    std::cout << "Colon + 0x:   " << macToString(mac, MacFormat::COLON_SEPARATED, true, true) << std::endl;
+    std::cout << "Hyphen + 0x:  " << macToString(mac, MacFormat::HYPHEN_SEPARATED, false, true) << std::endl;
+    std::cout << "Plain + 0x:   " << macToString(mac, MacFormat::NO_SEPARATOR, true, true) << std::endl;
+    std::cout << "Quad + 0x:    " << macToString(mac, MacFormat::DOTTED_QUAD, false, true) << std::endl;
+    
+    std::cout << "\n=== Convenience Functions ===" << std::endl;
+    std::cout << "macToColonString():      " << macToColonString(mac) << std::endl;
+    std::cout << "macToHyphenString():     " << macToHyphenString(mac, false) << std::endl;
+    std::cout << "macToDottedQuadString(): " << macToDottedQuadString(mac) << std::endl;
+    std::cout << "macToPlainString():      " << macToPlainString(mac, true, true) << std::endl;
+    
+    return 0;
+}
+
+
+
 int main() {
     std::cout << "--- MAC Address Parsing Demonstrations ---" << std::endl;
 
@@ -115,7 +189,9 @@ int main() {
         printMacAddress(result3);
     }
 
-
+    test1();
+    test2();
+    
     std::cout << "\nDemonstration complete." << std::endl;
 
     return 0;
