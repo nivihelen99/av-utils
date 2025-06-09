@@ -28,6 +28,7 @@ add_executable(arp_cache_example examples/arp_cache_example.cpp)
 add_executable(nd_cache_example examples/nd_cache_example.cpp)
 add_executable(use_dsu_example examples/use_dsu.cpp)
 add_executable(use_persist_array_example examples/use_persist_array.cpp)
+add_executable(use_mac_parser_example examples/use_mac_parser.cpp)
 
 # Google Test
 include(FetchContent)
