@@ -107,11 +107,11 @@ template<typename T, typename Compare = std::less<KeyType_t<T>>>
 class SkipList {
 public:
     using KeyType = KeyType_t<T>;
-    thread_local static SkipListNode<T>* thread_local_finger;
 
 private:
     Compare key_compare_;
     int effective_max_level_;
+    mutable SkipListNode<T>* finger_;
 
 public:
     class iterator {
@@ -425,7 +425,7 @@ public:
         }
         // Consider adding an upper cap for effective_max_level_ if necessary, e.g. 30 or some reasonable limit.
         header = allocate_node(T{}, effective_max_level_);
-        thread_local_finger = header;
+        this->finger_ = this->header;
     }
 
     ~SkipList() {
@@ -455,11 +455,12 @@ public:
     }
 
     bool insert(T value) {
+        this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Insert] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
 #endif
-        if (thread_local_finger == nullptr) {
-            thread_local_finger = header;
+        if (this->finger_ == nullptr) {
+            this->finger_ = header;
         }
 
         std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
@@ -467,7 +468,7 @@ public:
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
 
-        SkipListNode<T>* finger_candidate = thread_local_finger;
+        SkipListNode<T>* finger_candidate = this->finger_;
         if (finger_candidate != header && key_compare_(get_comparable_value(finger_candidate->value), get_comparable_value(value))) {
             current_node = finger_candidate;
             search_start_level = std::min(localCurrentLevel, finger_candidate->node_level);
@@ -550,42 +551,43 @@ public:
 #endif
             }
             if (update[0] != nullptr) {
-                thread_local_finger = update[0];
+                this->finger_ = update[0];
             } else {
-                thread_local_finger = header;
+                this->finger_ = header;
             }
             return true; // Inserted successfully
         } else {
             // Element already exists
             if (update[0] != nullptr) {
-                thread_local_finger = update[0];
+                this->finger_ = update[0];
             } else {
-                thread_local_finger = header;
+                this->finger_ = header;
             }
             return false; // Did not insert
         }
     }
 
     bool search(T value) const {
+        this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Search] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
 #endif
-        if (SkipList<T>::thread_local_finger == nullptr) {
-            SkipList<T>::thread_local_finger = header;
+        if (this->finger_ == nullptr) {
+            this->finger_ = header;
         }
 
         SkipListNode<T>* current_search_node = header;
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int start_level = localCurrentLevel;
         
-        SkipListNode<T>* finger_candidate = SkipList<T, Compare>::thread_local_finger; // Adjusted template arguments
+        SkipListNode<T>* finger_candidate = this->finger_;
 
         if (finger_candidate != header && key_compare_(get_comparable_value(finger_candidate->value), get_comparable_value(value))) {
             current_search_node = finger_candidate;
             start_level = std::min(localCurrentLevel, finger_candidate->node_level);
         } else if (finger_candidate != header &&
                    key_compare_(get_comparable_value(value), get_comparable_value(finger_candidate->value))) { // Corrected: value > finger_candidate.value
-            SkipList<T, Compare>::thread_local_finger = header; // Adjusted template arguments
+            this->finger_ = header;
             current_search_node = header;
             start_level = localCurrentLevel;
         } else {
@@ -613,7 +615,7 @@ public:
         }
         
         SkipListNode<T>* found_node = current_search_node->forward[0].load(std::memory_order_acquire);
-        SkipList<T, Compare>::thread_local_finger = predecessor_at_level0; // Adjusted template arguments
+        this->finger_ = predecessor_at_level0;
         // bool result = (found_node != nullptr && get_comparable_value(found_node->value) == get_comparable_value(value));
         bool result = (found_node != nullptr && !key_compare_(get_comparable_value(found_node->value), get_comparable_value(value)) && !key_compare_(get_comparable_value(value), get_comparable_value(found_node->value)));
 #ifdef SKIPLIST_DEBUG_LOGGING
@@ -623,11 +625,12 @@ public:
     }
 
     bool remove(T value) {
+        this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Remove] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
 #endif
-        if (thread_local_finger == nullptr) {
-            thread_local_finger = header;
+        if (this->finger_ == nullptr) {
+            this->finger_ = header;
         }
 
         std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
@@ -635,7 +638,7 @@ public:
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
 
-        SkipListNode<T>* finger_candidate = thread_local_finger; // Correct, direct member access
+        SkipListNode<T>* finger_candidate = this->finger_;
         if (finger_candidate != header && key_compare_(get_comparable_value(finger_candidate->value), get_comparable_value(value))) {
             current_node = finger_candidate;
             search_start_level = std::min(localCurrentLevel, finger_candidate->node_level);
@@ -717,17 +720,17 @@ public:
             }
             
             if (update[0] != nullptr) {
-                thread_local_finger = update[0];
+                this->finger_ = update[0];
             } else {
-                thread_local_finger = header;
+                this->finger_ = header;
             }
             return true;
         }
 
         if (update[0] != nullptr) {
-            thread_local_finger = update[0];
+            this->finger_ = update[0];
         } else {
-            thread_local_finger = header;
+            this->finger_ = header;
         }
         return false;
     }
@@ -737,14 +740,15 @@ public:
     // If T is std::pair<const K, V>, then 'value' will be std::pair<const K, V>.
     // The key for comparison is extracted by get_comparable_value(value).
     std::pair<iterator, bool> insert_or_assign(const T& value_to_insert_or_assign) {
+        this->finger_ = this->header;
         KeyType key_to_find = get_comparable_value(value_to_insert_or_assign);
 
     #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[InsertOrAssign] Value: " << value_to_log_string(value_to_insert_or_assign) << " (Key: " << value_to_log_string(key_to_find) << ")" << std::endl;
     #endif
 
-        if (thread_local_finger == nullptr) {
-            thread_local_finger = header;
+        if (this->finger_ == nullptr) {
+            this->finger_ = header;
         }
 
         std::vector<SkipListNode<T>*> update(effective_max_level_ + 1, nullptr); // Use instance-specific max level
@@ -752,7 +756,7 @@ public:
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int search_start_level = localCurrentLevel;
 
-        SkipListNode<T>* finger_candidate = thread_local_finger;
+        SkipListNode<T>* finger_candidate = this->finger_;
 
         // Optimized search using finger pointer
         if (finger_candidate != header && key_compare_(get_comparable_value(finger_candidate->value), key_to_find)) {
@@ -834,9 +838,9 @@ public:
             }
 
             if (update[0] != nullptr) {
-                thread_local_finger = update[0];
+                this->finger_ = update[0];
             } else {
-                thread_local_finger = header;
+                this->finger_ = header;
             }
             return {iterator(node_to_check), false}; // false for assignment
         } else {
@@ -894,27 +898,28 @@ public:
             }
 
             if (update[0] != nullptr) {
-                thread_local_finger = update[0];
+                this->finger_ = update[0];
             } else {
-                thread_local_finger = header;
+                this->finger_ = header;
             }
             return {iterator(newNode), true}; // true for insertion
         }
     }
 
     iterator find(const KeyType& key_to_find) {
+        this->finger_ = this->header;
     #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Find] Key: " << value_to_log_string(key_to_find) << std::endl;
     #endif
-        if (thread_local_finger == nullptr) {
-            thread_local_finger = header;
+        if (this->finger_ == nullptr) {
+            this->finger_ = header;
         }
 
         SkipListNode<T>* current_search_node = header;
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int start_level = localCurrentLevel;
 
-        SkipListNode<T>* finger_candidate = thread_local_finger;
+        SkipListNode<T>* finger_candidate = this->finger_;
 
         // Use key_compare_ for comparisons involving key_to_find
         if (finger_candidate != header && key_compare_(get_comparable_value(finger_candidate->value), key_to_find)) {
@@ -958,7 +963,7 @@ public:
         SkipListNode<T>* found_node = current_search_node->forward[0].load(std::memory_order_acquire);
         // Update finger to the predecessor of the found/insertion point
         if (predecessor_at_level0 != nullptr) { // predecessor_at_level0 could be header
-             thread_local_finger = predecessor_at_level0;
+             this->finger_ = predecessor_at_level0;
         }
 
 
@@ -976,33 +981,25 @@ public:
     }
 
     const_iterator find(const KeyType& key_to_find) const {
+        this->finger_ = this->header;
     #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Find const] Key: " << value_to_log_string(key_to_find) << std::endl;
     #endif
-        // Const version should not modify thread_local_finger.
-        // However, thread_local_finger is mutable in a sense (thread_local).
-        // For a const method, it's best practice to not rely on or modify mutable state like this.
+        // Const version should not modify finger_.
+        // However, finger_ is mutable.
+        // For a const method, it's best practice to not rely on or modify mutable state like this if it's not truly thread-local.
         // A truly const find might not use the finger pointer or would need a const version of it.
         // For now, let's replicate the logic but be mindful of this.
-        // A simple approach is to copy the non-const find but return const_iterator
-        // and ensure no modification to class members (finger is static thread_local, not a direct member state of the object instance).
+        // A simple approach is to copy the non-const find but return const_iterator.
+        // The aggressive reset of finger_ in a const method is unusual but per instructions.
 
         SkipListNode<T>* current_search_node = header;
-        // Use a local variable for finger if we decide const find should not use/update the shared finger.
-        // SkipListNode<T>* finger_candidate = SkipList<T, Compare>::thread_local_finger; // Read only
-        // For simplicity and to keep finger optimization, we allow reading thread_local_finger.
-        // Modifying it (which find does by setting predecessor) is more problematic for const.
-        // The current non-const find updates thread_local_finger.
-        // To make const find truly const, it should not update thread_local_finger.
-
-        // Option 1: Const find does not use or update finger. Potentially slower.
-        // Option 2: Const find uses finger for search start but does not update it.
-        // Option 3: Make thread_local_finger a SkipList member (not static) - complex change.
-        // Let's go with Option 2: Use finger for start, but don't update it.
+        // Modifying finger_ (which find does by setting predecessor) is problematic for const if finger_ is not thread_local.
+        // But per instructions, we are using a member finger_ and resetting it.
 
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
         int start_level = localCurrentLevel;
-        SkipListNode<T>* finger_candidate = SkipList<T, Compare>::thread_local_finger; // Read the current finger
+        SkipListNode<T>* finger_candidate = this->finger_; // Read the current finger
 
         if (finger_candidate == nullptr) finger_candidate = header; // Ensure finger_candidate is valid
 
@@ -1066,11 +1063,9 @@ public:
         // Reset currentLevel
         currentLevel.store(0, std::memory_order_release);
 
-        // Reset thread_local_finger for the current thread, as all nodes are gone.
-        // Other threads' fingers will become dangling if they point into this list,
-        // but they should re-validate or hit nulls.
+        // Reset finger_ for the current thread, as all nodes are gone.
         // Setting it to header is a safe choice for the current thread.
-        thread_local_finger = header;
+        this->finger_ = header;
 
     #ifdef SKIPLIST_DEBUG_LOGGING
         std::cout << "[Clear] Skiplist cleared. Current level set to 0." << std::endl;
@@ -1203,5 +1198,3 @@ public:
     }
 };
 
-template<typename T, typename Compare>
-thread_local SkipListNode<T>* SkipList<T, Compare>::thread_local_finger = nullptr;
