@@ -152,7 +152,8 @@ class TopicFilterTester
       TopicFilter filter;
 
       const int NUM_RULES = 1000; // Reduced for regex performance
-      filter.reserve(NUM_RULES, NUM_RULES, NUM_RULES, NUM_RULES);
+      // Estimate NUM_RULES / 10 for regex match rules, 0 for search rules in this test
+      filter.reserve(NUM_RULES, NUM_RULES, NUM_RULES, NUM_RULES / 10, 0);
 
       // Add different types of rules
       for (int i = 0; i < NUM_RULES; ++i)

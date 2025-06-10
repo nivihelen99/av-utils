@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cassert>
 #include <charconv>
-#include <chrono>
 #include <memory>
 #include <regex>
 #include <stdexcept>
@@ -82,13 +81,16 @@ struct RegexRule
 
    bool matches(std::string_view key) const
    {
-      // Convert string_view to string for regex matching
+      // std::regex currently doesn't have direct support for std::string_view,
+      // so conversion to std::string is necessary.
       std::string key_str(key);
       return std::regex_match(key_str, *regex, flags);
    }
 
    bool search(std::string_view key) const
    {
+      // std::regex currently doesn't have direct support for std::string_view,
+      // so conversion to std::string is necessary.
       std::string key_str(key);
       return std::regex_search(key_str, *regex, flags);
    }
@@ -112,10 +114,19 @@ class TopicFilter
 
    /**
      * @brief Adds a rule for a prefix match.
-     * @param key_pattern The prefix to match. A trailing '*' is handled automatically.
-     * (e.g., "Ethernet*", "PortChannel").
+     * If the key_pattern ends with a '*', it is treated as a wildcard,
+     * and the '*' is removed before storing the prefix. For example, "Eth*" becomes "Eth".
+     * If the key_pattern does not end with a '*', the entire string is used as the prefix.
+     * @param key_pattern The prefix to match (e.g., "Ethernet*", "PortChannel").
      */
    void addPrefixMatch(const std::string& key_pattern);
+   /**
+     * @brief Adds a rule for a prefix match (rvalue overload).
+     * If the key_pattern ends with a '*', it is treated as a wildcard,
+     * and the '*' is removed in-place before storing the prefix. For example, "Eth*" becomes "Eth".
+     * If the key_pattern does not end with a '*', the entire string is used as the prefix.
+     * @param key_pattern The prefix to match (e.g., "Ethernet*", "PortChannel").
+     */
    void addPrefixMatch(std::string&& key_pattern);
 
    /**
@@ -169,7 +180,7 @@ class TopicFilter
      * @brief Reserves space for rules to avoid reallocations.
      */
    void
-   reserve(size_t exact_count, size_t prefix_count, size_t range_count, size_t regex_count = 0);
+   reserve(size_t exact_count, size_t prefix_count, size_t range_count, size_t regex_match_count = 0, size_t regex_search_count = 0);
 
    /**
      * @brief Optimizes internal data structures after adding rules.
@@ -252,9 +263,13 @@ void TopicFilter::addPrefixMatch(std::string&& key_pattern)
 
    if (key_pattern.back() == '*')
    {
-      key_pattern.pop_back();
+      // Remove trailing '*' before moving
+      m_prefixMatches.emplace_back(std::move(key_pattern), 0, key_pattern.length() -1);
    }
-   m_prefixMatches.push_back(std::move(key_pattern));
+   else
+   {
+      m_prefixMatches.push_back(std::move(key_pattern));
+   }
 }
 
 void TopicFilter::addRangeMatch(const std::string& key_prefix, long long start, long long end)
@@ -343,6 +358,9 @@ void TopicFilter::addRegexMatch(std::string&& pattern,
 bool TopicFilter::match(std::string_view key) const
 {
    // 1. Check for exact match (O(1) average case) - fastest
+   // Note: std::string(key) is necessary here because std::unordered_set
+   // doesn't support heterogeneous lookup with std::string_view directly
+   // for std::string keys until C++20 (with custom hashers).
    if (m_exactMatches.count(std::string(key)))
    {
       return true;
@@ -416,13 +434,14 @@ size_t TopicFilter::size() const noexcept
 void TopicFilter::reserve(size_t exact_count,
                           size_t prefix_count,
                           size_t range_count,
-                          size_t regex_count)
+                          size_t regex_match_count,
+                          size_t regex_search_count)
 {
    m_exactMatches.reserve(exact_count);
    m_prefixMatches.reserve(prefix_count);
    m_rangeMatches.reserve(range_count);
-   m_regexMatches.reserve(regex_count / 2); // Estimate split between match and search
-   m_regexSearches.reserve(regex_count / 2);
+   m_regexMatches.reserve(regex_match_count);
+   m_regexSearches.reserve(regex_search_count);
 }
 
 void TopicFilter::optimize()
@@ -437,7 +456,10 @@ void TopicFilter::optimize()
              m_rangeMatches.end(),
              [](const RangeRule& a, const RangeRule& b) { return a.prefix < b.prefix; });
 
-   // Sort regex patterns by complexity (simpler patterns first for better average performance)
+   // Sort regex patterns by complexity (simpler patterns first for better average performance).
+   // Note: Sorting by pattern length is a heuristic and might not always
+   // reflect true regex complexity. More sophisticated metrics could be used
+   // (e.g., counting specific regex constructs) but add overhead.
    auto complexity_comparator = [](const RegexRule& a, const RegexRule& b) {
       // Heuristic: shorter patterns are often simpler
       return a.pattern_str.length() < b.pattern_str.length();
