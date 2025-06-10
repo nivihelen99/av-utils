@@ -897,29 +897,12 @@ TEST_F(PersistentArrayTest, LargeScaleOperations) {
        }
     }
 
-    EXPECT_EQ(current_v.use_count(), 1); // current_v holds the latest version, should be unique if not also the last stored_versions
-    // If current_v is the same as the last element of stored_versions, its use_count will be higher.
-    // Check if current_v is the same as stored_versions.back()
-    if (!stored_versions.empty() && &current_v != &stored_versions.back()) {
-         // This case is less likely with how the loop is structured, current_v will be the last one pushed.
-    } else if (!stored_versions.empty()) {
-        // current_v is the same object as stored_versions.back()
-        // its use_count should be 1 because only current_v and stored_versions.back() refer to it.
-        // No, this is not quite right. shared_ptr counts references to the control block.
-        // If current_v and stored_versions.back() are copies of the same PersistentArray object,
-        // they both point to the same shared_ptr, so the use_count on that shared_ptr is higher.
-        // The object `current_v` itself is one reference. `stored_versions.back()` is another. So use_count >= 2.
-        // The test `EXPECT_EQ(current_v.use_count(), 1);` is only true if `stored_versions` doesn't hold the *exact same* `shared_ptr` instance.
-        // Let's re-evaluate: current_v is assigned `current_v.set(...)`. This always returns a new PersistentArray.
-        // So current_v is always unique *unless* it's pushed to stored_versions.
-        // If it *is* pushed to stored_versions, then current_v and stored_versions.back() are two references to the same object.
-        // So use_count should be 2 for the last version if it was stored.
-         if (num_versions > 0 && ( (num_versions-1) % store_interval == 0 || (num_versions-1) == num_versions -1 ) ) {
-             EXPECT_EQ(current_v.use_count(), 2); // Held by current_v and stored_versions.back()
-         } else {
-             EXPECT_EQ(current_v.use_count(), 1); // Only held by current_v
-         }
-    }
+    // After the loop, current_v is the result of the last current_v.set(...), which would make its use_count 1.
+    // However, the condition `i == num_versions - 1` in the loop ensures that this final `current_v` is pushed into `stored_versions`.
+    // If `num_versions == 0`, the loop doesn't run. `current_v` (the initial version) was pushed into `stored_versions` before the loop.
+    // In both cases (`num_versions == 0` or `num_versions > 0`), `current_v` shares its data with `stored_versions.back()`
+    // at the time of this assertion. Thus, its use_count should be 2.
+    EXPECT_EQ(current_v.use_count(), 2);
 
 
     // Verify content of a few selected stored versions
