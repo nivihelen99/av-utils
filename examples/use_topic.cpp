@@ -3,7 +3,7 @@
 #include <chrono>
 #include "topic_filter.h"
 
-using namespace aos_utils;
+
 
 // Test and benchmark code
 class TopicFilterTester
