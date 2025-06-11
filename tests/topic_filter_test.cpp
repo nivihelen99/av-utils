@@ -5,8 +5,6 @@
 #include <string>
 #include <chrono> // For performance test
 
-// Using namespace for convenience in test file
-using namespace aos_utils;
 
 TEST(TopicFilterTest, BasicFunctionality)
 {
