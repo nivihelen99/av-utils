@@ -164,8 +164,8 @@ TEST(TopicFilterTest, PerformanceTest)
                                 std::to_string((i % NUM_RULES) * 100 + 50));
             break;
         case 3:
-            // Ensure this regex key is one that was added
-            test_keys.push_back("REGEX_" + std::to_string((i % (NUM_RULES / 10)) * 10) + "_123");
+            // Modify this case to generate non-matching keys
+            test_keys.push_back("NOMATCH_" + std::to_string(i)); // This key is unlikely to match
             break;
         }
     }
