@@ -11,8 +11,6 @@
 #include <unordered_set>
 #include <vector>
 
-namespace aos_utils
-{
 
 // Struct to hold the components of a range-based filtering rule
 struct RangeRule
@@ -494,5 +492,5 @@ bool TopicFilter::startsWith(std::string_view str, std::string_view prefix) noex
    return str.size() >= prefix.size() && str.substr(0, prefix.size()) == prefix;
 }
 
-} // namespace aos_utils
+
 
