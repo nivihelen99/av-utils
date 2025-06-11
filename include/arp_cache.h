@@ -791,6 +791,13 @@ public:
                             }
                         } else {
                             // ... (send another probe logic as before) ...
+                            fprintf(stderr, "DEBUG_ARP_CACHE: age_entries: Attempting to send ARP request for IP: %u, State: %d, Probe Count: %d, Age Duration: %lds, Required Wait: %lds, Backoff Exp: %d\n",
+                                    it->first,
+                                    static_cast<int>(entry.state),
+                                    entry.probe_count, // This is after increment
+                                    age_duration.count(),
+                                    current_required_wait.count(),
+                                    entry.backoff_exponent);
                             this->send_arp_request(it->first);
                             entry.timestamp = current_time;
                             if (entry.backoff_exponent < 30) {

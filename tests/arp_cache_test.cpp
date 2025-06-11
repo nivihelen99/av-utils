@@ -52,6 +52,8 @@ public:
         } else {
             it->second.state = new_state;
             it->second.timestamp = timestamp;
+            it->second.probe_count = 0;      // Explicitly reset
+            it->second.backoff_exponent = 0; // Explicitly reset
         }
     }
 
@@ -206,16 +208,19 @@ TEST_F(ARPCacheTestFixture, FastFailoverInLookupIfStale) {
 
 TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
     ReinitializeCache();
-    mac_addr_t mac1_primary_dummy_ = {};
+    mac_addr_t mac1_primary_dummy_ = {0x00, 0x00, 0x00, 0x00, 0x00, 0x01}; // Changed from all zeros
     cache_->add_entry(ip1_, mac1_primary_dummy_ );
     cache_->add_backup_mac(ip1_, mac2_);
 
     cache_->force_set_state_for_test(ip1_, ARPCache::ARPState::INCOMPLETE, std::chrono::steady_clock::now() - probe_interval_ * 10);
 
     auto current_time = std::chrono::steady_clock::now();
-    EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
+    EXPECT_CALL(*cache_, send_arp_request(ip1_))
+        .WillOnce(testing::InvokeWithoutArgs([]() {
+            std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (first call)." << std::endl;
+        }));
     cache_->age_entries(current_time);
-    testing::Mock::VerifyAndClearExpectations(&(*cache_));
+    testing::Mock::VerifyAndClearExpectations(&(*cache_)); // Restore this
 
     for (int k = 0; k < ARPCache::MAX_PROBES; ++k) {
         long long wait_multiplier = (1LL << k);
@@ -223,7 +228,10 @@ TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
         if (wait_duration > max_backoff_) wait_duration = max_backoff_;
 
         current_time += wait_duration + std::chrono::milliseconds(100);
-        EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
+        EXPECT_CALL(*cache_, send_arp_request(ip1_))
+            .WillOnce(testing::InvokeWithoutArgs([k]() { // Capture k for unique message
+                std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (loop k=" << k << ")." << std::endl;
+            }));
         cache_->age_entries(current_time);
         testing::Mock::VerifyAndClearExpectations(&(*cache_));
     }
