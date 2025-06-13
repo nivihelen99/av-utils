@@ -39,7 +39,7 @@ add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
 # Link GTest to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter)
 # GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
 # GTest::gmock should provide the necessary gmock functionalities.
 
@@ -55,6 +55,9 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
     target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+    if(TEST_NAME STREQUAL "counter_test")
+        target_link_libraries(${TEST_NAME} PRIVATE cpp_library::Counter)
+    endif()
     if(TEST_NAME STREQUAL "skiplist_test")
         target_compile_definitions(${TEST_NAME} PRIVATE SKIPLIST_DEBUG_LOGGING)
     endif()

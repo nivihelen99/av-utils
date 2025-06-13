@@ -9,6 +9,14 @@
 #include <functional>
 #include <type_traits>
 
+// Helper to check if a type is std::pair
+template<typename>
+struct is_std_pair_impl : std::false_type {};
+template<typename T1, typename T2>
+struct is_std_pair_impl<std::pair<T1, T2>> : std::true_type {};
+template<typename T>
+constexpr bool is_std_pair_v = is_std_pair_impl<std::remove_cv_t<T>>::value;
+
 /**
  * @brief A generic frequency counter, similar to Python's collections.Counter
  * @tparam T The type of elements to count (must be hashable)
@@ -48,7 +56,9 @@ public:
                     const KeyEqual& equal = KeyEqual{})
         : counts_(bucket_count, hash, equal) {}
 
-    Counter(std::initializer_list<T> init) {
+    template <typename SfinaeDummy = void>
+    Counter(std::initializer_list<T> init,
+            typename std::enable_if_t<std::is_void_v<SfinaeDummy> && !is_std_pair_v<T>>* = nullptr) {
         counts_.reserve(init.size());
         for (const auto& val : init) {
             add(val);
@@ -315,8 +325,18 @@ public:
 template<typename InputIt>
 Counter(InputIt, InputIt) -> Counter<typename std::iterator_traits<InputIt>::value_type>;
 
-template<typename T>
-Counter(std::initializer_list<T>) -> Counter<T>;
+template<
+    typename T_Actual, // This is the type deduced for the elements of initializer_list, becomes Counter's T
+    typename SfinaeDummy = void // Match the constructor's template parameter SfinaeDummy
+>
+Counter(
+    std::initializer_list<T_Actual> init,
+    // The SFINAE condition must use T_Actual, as this is what's being checked
+    typename std::enable_if_t<
+        std::is_void_v<SfinaeDummy> &&
+        !is_std_pair_v<T_Actual>  // Check properties of the deduced type T_Actual
+    >* = nullptr
+) -> Counter<T_Actual>;
 
 template<typename T>
 Counter(std::initializer_list<std::pair<T, int>>) -> Counter<T>;

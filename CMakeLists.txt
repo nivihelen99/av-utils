@@ -18,6 +18,13 @@ target_include_directories(variant_vector INTERFACE
 )
 # This makes sure anyone linking against variant_vector gets 'include' in their include path.
 
+# --- Counter Library (Header-Only) ---
+add_library(Counter INTERFACE)
+add_library(cpp_library::Counter ALIAS Counter) # Modern CMake alias
+target_include_directories(Counter INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 # Enable testing (should be global)
 enable_testing()
 
@@ -29,7 +36,7 @@ foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
         set(EXECUTABLE_NAME "example_${BASE_NAME}")
         add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
         # Link common libraries if needed by examples
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector)
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter)
     endif()
 endforeach()
 
