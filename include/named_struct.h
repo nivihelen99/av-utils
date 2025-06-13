@@ -22,13 +22,23 @@ struct StringLiteral {
     }
 };
 
+// Field mutability options
+enum class FieldMutability {
+    Mutable,
+    Immutable
+};
+
 // Represents a single field in our NamedStruct
-template <StringLiteral Name, typename Type>
+template <StringLiteral Name, typename Type, FieldMutability Mut = FieldMutability::Mutable>
 struct Field {
     using type = Type;
     static constexpr const char* name = Name.value;
     static constexpr std::string_view name_view = Name;
-    Type value;
+    static constexpr FieldMutability mutability = Mut;
+    
+    // Use const for immutable fields
+    using storage_type = std::conditional_t<Mut == FieldMutability::Immutable, const Type, Type>;
+    storage_type value;
     
     // Default constructor
     Field() = default;
@@ -98,7 +108,36 @@ struct NamedStruct : Fields... {
         return std::get<I>(std::make_tuple(Fields::name...));
     }
     
-    // Number of fields
+    // Setters for mutable fields only
+    template <size_t I, typename U>
+    void set(U&& value) {
+        static_assert(I < sizeof...(Fields), "Field index out of bounds");
+        using FieldType = std::tuple_element_t<I, std::tuple<Fields...>>;
+        static_assert(FieldType::mutability == FieldMutability::Mutable, "Cannot modify immutable field");
+        get<I>() = std::forward<U>(value);
+    }
+    
+    template <StringLiteral Name, typename U>
+    void set(U&& value) {
+        constexpr size_t index = find_field_index<Name, Fields...>();
+        static_assert(index < sizeof...(Fields), "Field name not found");
+        set<index>(std::forward<U>(value));
+    }
+    
+    // Check if field is mutable
+    template <size_t I>
+    static constexpr bool is_mutable() {
+        static_assert(I < sizeof...(Fields), "Field index out of bounds");
+        using FieldType = std::tuple_element_t<I, std::tuple<Fields...>>;
+        return FieldType::mutability == FieldMutability::Mutable;
+    }
+    
+    template <StringLiteral Name>
+    static constexpr bool is_mutable() {
+        constexpr size_t index = find_field_index<Name, Fields...>();
+        static_assert(index < sizeof...(Fields), "Field name not found");
+        return is_mutable<index>();
+    }
     static constexpr size_t size() {
         return sizeof...(Fields);
     }
@@ -149,7 +188,9 @@ auto get(NamedStruct<Fields...>&& ns) {
     using name = NamedStruct<__VA_ARGS__>;
 
 // A helper for defining fields
-#define FIELD(name, type) Field<name, type>
+#define FIELD(name, type) Field<name, type, FieldMutability::Mutable>
+#define IMMUTABLE_FIELD(name, type) Field<name, type, FieldMutability::Immutable>
+#define MUTABLE_FIELD(name, type) Field<name, type, FieldMutability::Mutable>
 
 // --- Utility Functions ---
 
