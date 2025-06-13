@@ -2,46 +2,60 @@
 
 #include "named_struct.h"
 
-// Define a Point struct
-NAMED_STRUCT(Point, FIELD("x", int), FIELD("y", int));
 
-// Define a Person struct
+// Fully mutable (like Python dataclass with default settings)
+NAMED_STRUCT(Point, 
+    FIELD("x", int), 
+    FIELD("y", int)
+);
+
+// Mixed mutability
 NAMED_STRUCT(Person, 
-    FIELD("name", std::string), 
-    FIELD("age", int), 
-    FIELD("height", double)
+    IMMUTABLE_FIELD("id", int),        // Cannot be changed after creation
+    MUTABLE_FIELD("name", std::string), // Can be changed
+    MUTABLE_FIELD("age", int)          // Can be changed
+);
+
+// Fully immutable (like Python namedtuple)
+NAMED_STRUCT(ImmutablePoint, 
+    IMMUTABLE_FIELD("x", int), 
+    IMMUTABLE_FIELD("y", int)
 );
 
 int main() {
-    // Create instances
-    Point p1{10, 20};
-    Point p2(30, 40);
+    // Mutable structs
+    Point p{10, 20};
+    p.get<0>() = 30;              // Direct modification
+    p.set<"y">(40);               // Using setter
+    std::cout << "Modified point: " << p << std::endl; // {30, 40}
     
-    Person john{"John Doe", 30, 5.9};
+    // Mixed mutability
+    Person john{1, "John Doe", 30};
+    john.set<"name">("Jane Doe");  // OK - mutable field
+    john.set<"age">(31);           // OK - mutable field
+    // john.set<"id">(2);          // ERROR - immutable field
     
-    // Access by index
-    std::cout << "p1.x = " << p1.get<0>() << std::endl;
-    std::cout << "p1.y = " << p1.get<1>() << std::endl;
+    // Check mutability at compile time
+    static_assert(Person::is_mutable<"name">());  // true
+    static_assert(!Person::is_mutable<"id">());   // false
     
-    // Access by name
-    std::cout << "john's name = " << john.get<"name">() << std::endl;
-    std::cout << "john's age = " << john.get<"age">() << std::endl;
+    // Immutable structs
+    ImmutablePoint ip{100, 200};
+    // ip.get<0>() = 300;          // ERROR - const value
+    // ip.set<"x">(300);           // ERROR - immutable field
     
-    // Structured binding support
-    auto [x, y] = p1;
-    auto [name, age, height] = john;
+    // But you can still read values
+    std::cout << "Immutable point: " << ip << std::endl;
+    auto [x, y] = ip;  // Structured binding still works
     
-    // Pretty printing
-    std::cout << "Point: " << p1 << std::endl;
-    std::cout << "Person: " << john << std::endl;
+    // DataClass-like behavior
+    Point p1{1, 2};
+    Point p2{1, 2};
+    Point p3{3, 4};
     
-    // JSON serialization
-    std::cout << "Point JSON: " << to_json(p1) << std::endl;
-    std::cout << "Person JSON: " << to_json(john) << std::endl;
-    
-    // Comparison
-    Point p3{10, 20};
-    std::cout << "p1 == p3: " << (p1 == p3) << std::endl;
+    std::cout << "p1 == p2: " << (p1 == p2) << std::endl; // true
+    std::cout << "p1 == p3: " << (p1 == p3) << std::endl; // false
+    std::cout << "p1 < p3: " << (p1 < p3) << std::endl;   // true
     
     return 0;
 }
