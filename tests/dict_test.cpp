@@ -304,12 +304,12 @@ TEST_F(DictTest, Emplace) {
 }
 
 TEST_F(DictTest, SetDefault) {
-    Value& val1 = d_string_int.setdefault("zeta", 6);
+    pydict::dict<std::string, int>::mapped_type& val1 = d_string_int.setdefault("zeta", 6);
     EXPECT_EQ(val1, 6);
     EXPECT_EQ(d_string_int.at("zeta"), 6);
     EXPECT_EQ(d_string_int.size(), 1);
 
-    Value& val2 = d_string_int.setdefault("zeta", 60); // Key exists
+    pydict::dict<std::string, int>::mapped_type& val2 = d_string_int.setdefault("zeta", 60); // Key exists
     EXPECT_EQ(val2, 6); // Original value
     EXPECT_EQ(d_string_int.at("zeta"), 6);
     EXPECT_EQ(d_string_int.size(), 1);
@@ -743,8 +743,8 @@ TEST_F(DictTest, MoveOperationsEfficiency) {
     for (int i = 0; i < 1000; ++i) {
         d1[std::to_string(i)] = i;
     }
-    size_t original_cap_storage = d1.storage_.bucket_count(); // Example, not a direct capacity measure
-    size_t original_cap_order = d1.insertion_order_.capacity();
+    // size_t original_cap_storage = d1.storage_.bucket_count(); // Example, not a direct capacity measure
+    // size_t original_cap_order = d1.insertion_order_.capacity();
 
 
     pydict::dict<std::string, int> d2 = std::move(d1);
@@ -794,10 +794,5 @@ int main(int argc, char **argv) {
 // Ensure Value is defined for setdefault test.
 // If Value is not default constructible, setdefault without a value will fail to compile.
 // In our case, int and std::string are default constructible. MyStruct is also made so.
-using Value = int;
-// This using Value = int; seems out of place here. It was for a comment in setdefault.
-// Removing it as it's not needed for compilation here and might confuse.
 // The setdefault test uses d_string_int which has Value=int.
 // The test with MyStruct also explicitly provides a default or uses its default constructor.
-
-```

@@ -559,6 +559,11 @@ public:
         os << "}";
         return os;
     }
+
+    // Friend declaration for non-member swap
+    friend void swap(dict<Key, Value, Hash, KeyEqual, Allocator>& lhs, dict<Key, Value, Hash, KeyEqual, Allocator>& rhs)
+        noexcept(noexcept(std::swap(lhs.storage_, rhs.storage_)) &&
+                 noexcept(std::swap(lhs.insertion_order_, rhs.insertion_order_)));
 };
 
 // Deduction guides for C++17
@@ -573,12 +578,9 @@ dict(InputIt, InputIt) -> dict<
 // and if Hash and KeyEqual are swappable.
 // For standard types, this generally means noexcept.
 template<typename K, typename V, typename H, typename KE, typename A>
-void swap(dict<K, V, H, KE, A>& lhs, dict<K, V, H, KE, A>& rhs) noexcept(
-    std::allocator_traits<A>::propagate_on_container_swap::value ||
-    std::allocator_traits<A>::is_always_equal::value
-    // Assuming Hash and KeyEqual are nothrow swappable, which is typical.
-    // Add more conditions for H and KE if they have complex swap behavior.
-) {
+void swap(dict<K, V, H, KE, A>& lhs, dict<K, V, H, KE, A>& rhs)
+    noexcept(noexcept(std::swap(lhs.storage_, rhs.storage_)) &&
+             noexcept(std::swap(lhs.insertion_order_, rhs.insertion_order_))) {
     using std::swap;
     swap(lhs.storage_, rhs.storage_);
     swap(lhs.insertion_order_, rhs.insertion_order_);
