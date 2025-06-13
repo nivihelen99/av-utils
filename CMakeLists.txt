@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(DataStructuresExamples)
 
+find_package(Threads REQUIRED)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
@@ -22,12 +24,22 @@ enable_testing()
 # Automatically define executables for examples
 file(GLOB EXAMPLE_SOURCES "examples/*.cpp")
 foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
-    get_filename_component(BASE_NAME ${SOURCE_FILE} NAME_WE)
-    set(EXECUTABLE_NAME "example_${BASE_NAME}")
-    add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
-    # Link common libraries if needed by examples
-    target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector)
+    if(NOT "${SOURCE_FILE}" STREQUAL "examples/use_spsc.cpp")
+        get_filename_component(BASE_NAME ${SOURCE_FILE} NAME_WE)
+        set(EXECUTABLE_NAME "example_${BASE_NAME}")
+        add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
+        # Link common libraries if needed by examples
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector)
+    endif()
 endforeach()
+
+# --- SPSC Queue Example ---
+add_executable(use_spsc_example examples/use_spsc.cpp)
+target_include_directories(use_spsc_example PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_link_libraries(use_spsc_example PRIVATE Threads::Threads)
+
 
 # Google Test
 include(FetchContent)

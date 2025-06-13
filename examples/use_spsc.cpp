@@ -233,5 +233,10 @@ void custom_type_example() {
 
 int main()
 {
+    basic_usage_example();
+    performance_benchmark();
+    memory_ordering_comparison();
+    custom_type_example();
 
+    return 0;
 }
