@@ -4,6 +4,7 @@
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include <functional> // Added for std::function
 #include <cstddef>
 #include <new>
 #include <bit>
@@ -150,10 +151,11 @@ private:
         void operator()(slot* ptr) const {
             if (ptr) {
                 // Destroy any remaining constructed objects
+                value_allocator val_alloc; // Create an lvalue instance
                 for (size_type i = 0; i < count; ++i) {
                     if (ptr[i].ready.load(std::memory_order_relaxed)) {
                         std::allocator_traits<value_allocator>::destroy(
-                            value_allocator{}, ptr[i].data());
+                            val_alloc, ptr[i].data()); // Pass the lvalue
                     }
                 }
                 
