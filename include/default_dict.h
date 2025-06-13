@@ -31,6 +31,8 @@ public:
     using const_reference = const value_type&;
     using pointer = typename std::allocator_traits<Allocator>::pointer;
     using const_pointer = typename std::allocator_traits<Allocator>::const_pointer;
+    // Use the actual underlying type directly as container_type is private and defined later
+    using node_type = typename std::unordered_map<Key, Value, Hash, KeyEqual, Allocator>::node_type;
 
 private:
     using container_type = std::unordered_map<Key, Value, Hash, KeyEqual, Allocator>;
@@ -326,6 +328,35 @@ public:
         swap(default_factory_, other.default_factory_);
     }
 
+    node_type extract(const Key& key) {
+        // No default factory involvement here, as extract removes the node.
+        return container_.extract(key);
+    }
+
+    // Merge operations
+    // For merging from another defaultdict with potentially different DefaultFactory and Allocator
+    template<typename OtherDF, typename OtherAlloc>
+    void merge(defaultdict<Key, Value, OtherDF, Hash, KeyEqual, OtherAlloc>& source) {
+        container_.merge(source.container_);
+    }
+
+    template<typename OtherDF, typename OtherAlloc>
+    void merge(defaultdict<Key, Value, OtherDF, Hash, KeyEqual, OtherAlloc>&& source) {
+        container_.merge(std::move(source.container_));
+    }
+
+    // For merging from std::unordered_map with potentially different Allocator
+    // Note: Hash and KeyEqual must be compatible for std::unordered_map::merge.
+    template<typename OtherAlloc>
+    void merge(std::unordered_map<Key, Value, Hash, KeyEqual, OtherAlloc>& source) {
+        container_.merge(source);
+    }
+
+    template<typename OtherAlloc>
+    void merge(std::unordered_map<Key, Value, Hash, KeyEqual, OtherAlloc>&& source) {
+        container_.merge(std::move(source));
+    }
+
     // Lookup
     size_type count(const Key& key) const {
         return container_.count(key);
@@ -465,16 +496,29 @@ public:
 // Non-member functions
 
 // Comparison operators
-template<typename Key, typename Value, typename DF1, typename Hash, typename KeyEqual, typename Alloc>
-bool operator==(const defaultdict<Key, Value, DF1, Hash, KeyEqual, Alloc>& lhs,
-                const defaultdict<Key, Value, DF1, Hash, KeyEqual, Alloc>& rhs) {
-    return lhs.size() == rhs.size() && 
-           std::equal(lhs.begin(), lhs.end(), rhs.begin());
+template<typename Key, typename Value, typename DF, typename Hash, typename KeyEqual, typename Alloc>
+bool operator==(const defaultdict<Key, Value, DF, Hash, KeyEqual, Alloc>& lhs,
+                const defaultdict<Key, Value, DF, Hash, KeyEqual, Alloc>& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    // Note: This assumes that lhs.get_default_factory() and rhs.get_default_factory()
+    // do not need to be compared for equality of the defaultdict objects.
+    // If factory equality matters, that logic would need to be added,
+    // but it's complex as factories can be lambdas or function pointers.
+    // Standard map equality typically only cares about key-value pairs.
+    for (const auto& p_lhs : lhs) { // Iterates using defaultdict's custom iterator
+        auto it_rhs = rhs.find(p_lhs.first); // Uses defaultdict::find
+        if (it_rhs == rhs.end() || !(p_lhs.second == it_rhs->second)) {
+            return false;
+        }
+    }
+    return true;
 }
 
-template<typename Key, typename Value, typename DF1, typename Hash, typename KeyEqual, typename Alloc>
-bool operator!=(const defaultdict<Key, Value, DF1, Hash, KeyEqual, Alloc>& lhs,
-                const defaultdict<Key, Value, DF1, Hash, KeyEqual, Alloc>& rhs) {
+template<typename Key, typename Value, typename DF, typename Hash, typename KeyEqual, typename Alloc>
+bool operator!=(const defaultdict<Key, Value, DF, Hash, KeyEqual, Alloc>& lhs,
+                const defaultdict<Key, Value, DF, Hash, KeyEqual, Alloc>& rhs) {
     return !(lhs == rhs);
 }
 
@@ -525,11 +569,9 @@ auto zero_factory() {
     return []() -> Value { return Value{0}; };
 }
 
-template<typename Value>
-auto list_factory() {
-    static_assert(std::default_initializable<Value>, 
-                 "Value type must be default constructible for list factory");
-    return []() -> Value { return Value{}; };
+// Factory function for std::string (returns empty string)
+inline auto string_factory() {
+    return []() -> std::string { return std::string{}; };
 }
 
 } // namespace std_ext

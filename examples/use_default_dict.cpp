@@ -6,7 +6,7 @@
 #include <memory>
 
 #include "default_dict.h"
-use namespace std_ext;
+using namespace std_ext;
 
 
 void demonstrate_basic_usage() {
@@ -31,7 +31,7 @@ void demonstrate_vector_defaultdict() {
     
     // Vector defaultdict for grouping
     std_ext::defaultdict<std::string, std::vector<int>> groups(
-        std_ext::list_factory<std::vector<int>>()
+        std_ext::default_factory<std::vector<int>>()
     );
     
     groups["evens"].push_back(2);
@@ -109,3 +109,11 @@ void demonstrate_memory_management() {
     std::cout << "\n";
 }
 
+int main() {
+    demonstrate_basic_usage();
+    demonstrate_vector_defaultdict();
+    demonstrate_custom_factory();
+    demonstrate_stl_compatibility();
+    demonstrate_memory_management();
+    return 0;
+}
