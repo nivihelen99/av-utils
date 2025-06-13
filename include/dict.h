@@ -20,6 +20,22 @@ template<typename Key, typename Value,
 class dict {
 public:
     // Type aliases for STL compatibility
+    // Iterator invalidation:
+    // - General: Iterators are invalidated if a rehash occurs. A rehash can be triggered by insertions
+    //   (insert, emplace, operator[], setdefault) that increase the size beyond the current capacity times load_factor.
+    //   Explicit calls to rehash() or reserve() can also cause invalidation.
+    // - erase(key): Invalidates iterators and references to the erased element.
+    //   Additionally, because erase uses a swap-and-pop mechanism on insertion_order_ to maintain O(1) complexity,
+    //   an iterator pointing to the element that was previously at the end of the insertion order and got swapped
+    //   into the erased element's position will now point to a different element (the one it was swapped with).
+    //   Effectively, iterators to the erased element, the (previously) last element (if it was moved), and end()
+    //   iterators might be invalidated or changed.
+    // - clear(): Invalidates all iterators.
+    // - insert/emplace/operator[]/setdefault: If a rehash occurs, all iterators are invalidated.
+    //   If no rehash occurs, iterators are not invalidated. References might be invalidated if
+    //   insertion_order_ (std::vector) reallocates. Since new elements are added to the end of
+    //   insertion_order_, this can cause reallocation.
+
     using key_type = Key;
     using mapped_type = Value;
     using value_type = std::pair<const Key, Value>;
@@ -63,6 +79,7 @@ private:
 
 public:
     // Iterator implementation for ordered traversal
+    // Note: For iterator invalidation rules, see comments at the top of the dict class definition.
     class iterator {
     private:
         dict* dict_ptr_;
@@ -135,6 +152,7 @@ public:
     
     class const_iterator {
     private:
+        // Note: For iterator invalidation rules, see comments at the top of the dict class definition.
         const dict* dict_ptr_;
         size_type index_;
         
@@ -223,11 +241,21 @@ public:
     
     // Copy and move constructors
     dict(const dict& other) = default;
-    dict(dict&& other) noexcept = default;
+    // Move constructor: noexcept if underlying moves are noexcept.
+    // std::unordered_map and std::vector move operations are noexcept if their allocators are noexcept
+    // or propagate on move assignment. Default allocator moves are noexcept.
+    dict(dict&& other) noexcept(
+        std::is_nothrow_move_constructible<storage_type>::value &&
+        std::is_nothrow_move_constructible<order_type>::value
+    ) = default;
     
     // Assignment operators
     dict& operator=(const dict& other) = default;
-    dict& operator=(dict&& other) noexcept = default;
+    // Move assignment operator: similar noexcept conditions as move constructor.
+    dict& operator=(dict&& other) noexcept(
+        std::is_nothrow_move_assignable<storage_type>::value &&
+        std::is_nothrow_move_assignable<order_type>::value
+    ) = default;
     dict& operator=(std::initializer_list<value_type> init) {
         clear();
         for (const auto& pair : init) {
@@ -240,13 +268,13 @@ public:
     ~dict() = default;
     
     // Iterators
-    iterator begin() { return iterator(this, 0); }
-    const_iterator begin() const { return const_iterator(this, 0); }
-    const_iterator cbegin() const { return const_iterator(this, 0); }
+    iterator begin() noexcept { return iterator(this, 0); }
+    const_iterator begin() const noexcept { return const_iterator(this, 0); }
+    const_iterator cbegin() const noexcept { return const_iterator(this, 0); }
     
-    iterator end() { return iterator(this, insertion_order_.size()); }
-    const_iterator end() const { return const_iterator(this, insertion_order_.size()); }
-    const_iterator cend() const { return const_iterator(this, insertion_order_.size()); }
+    iterator end() noexcept { return iterator(this, insertion_order_.size()); }
+    const_iterator end() const noexcept { return const_iterator(this, insertion_order_.size()); }
+    const_iterator cend() const noexcept { return const_iterator(this, insertion_order_.size()); }
     
     // Capacity
     bool empty() const noexcept { return storage_.empty(); }
@@ -300,11 +328,15 @@ public:
     }
     
     // Modifiers
+    // clear: Invalidates all iterators.
     void clear() noexcept {
         storage_.clear();
         insertion_order_.clear();
     }
     
+    // insert: If a rehash occurs, all iterators are invalidated.
+    // If no rehash occurs, iterators are not invalidated. References might be invalidated if
+    // insertion_order_ (std::vector) reallocates.
     std::pair<iterator, bool> insert(const value_type& value) {
         auto it = storage_.find(value.first);
         if (it != storage_.end()) {
@@ -316,6 +348,7 @@ public:
         return {iterator(this, insertion_order_.size() - 1), true};
     }
     
+    // insert (move version): Same invalidation rules as const value_type& version.
     std::pair<iterator, bool> insert(value_type&& value) {
         auto it = storage_.find(value.first);
         if (it != storage_.end()) {
@@ -328,12 +361,18 @@ public:
         return {iterator(this, insertion_order_.size() - 1), true};
     }
     
+    // emplace: Same invalidation rules as insert.
     template<typename... Args>
     std::pair<iterator, bool> emplace(Args&&... args) {
-        auto temp_pair = value_type(std::forward<Args>(args)...);
+        // Note: This implementation of emplace creates a temporary pair and then moves it.
+        // A more direct emplace would construct the value in place in the map and then add key to order.
+        // However, the current structure with separate map and vector makes direct emplacement complex.
+        auto temp_pair = value_type(std::forward<Args>(args)...); // This might throw if pair construction throws
         return insert(std::move(temp_pair));
     }
     
+    // erase: Invalidates iterators and references to the erased element.
+    // Also invalidates iterators to the element that was swapped with the erased element (the previously last element).
     size_type erase(const Key& key) {
         auto it = storage_.find(key);
         if (it == storage_.end()) {
@@ -352,7 +391,7 @@ public:
             throw std::out_of_range("dict::pop: key not found");
         }
         
-        Value value = std::move(it->second.first);
+        Value value = std::move(it->second.first); // This move could potentially throw for complex Value types, though typically not for std::move
         remove_from_order(key);
         storage_.erase(it);
         return value;
@@ -364,13 +403,42 @@ public:
             return default_value;
         }
         
-        Value value = std::move(it->second.first);
+        Value value = std::move(it->second.first);  // Potential throw
         remove_from_order(key);
         storage_.erase(it);
         return value;
     }
+
+    // popitem: Removes and returns the last inserted item (LIFO).
+    // Throws std::out_of_range if the dictionary is empty.
+    // Invalidates iterators to the removed element and the end() iterator.
+    std::pair<Key, Value> popitem() {
+        if (insertion_order_.empty()) {
+            throw std::out_of_range("dict::popitem: dictionary is empty");
+        }
+
+        Key key_to_pop = insertion_order_.back();
+
+        auto storage_it = storage_.find(key_to_pop);
+        // This check should ideally not be needed if insertion_order_ and storage_ are always consistent.
+        // However, it's a good safeguard.
+        if (storage_it == storage_.end()) {
+            // This indicates an internal inconsistency. For robustness, handle it.
+            // Though, with current logic, this path should not be hit if dict is not empty.
+            insertion_order_.pop_back(); // Try to correct insertion_order_
+            throw std::runtime_error("dict::popitem: internal inconsistency, key not found in storage");
+        }
+
+        Value value_to_pop = std::move(storage_it->second.first); // Potential throw
+
+        storage_.erase(storage_it);
+        insertion_order_.pop_back(); // This invalidates end iterators and iterators to the popped element.
+
+        return {key_to_pop, std::move(value_to_pop)}; // Key is copied, value is moved.
+    }
     
     // Python-like setdefault method
+    // setdefault: If an element is inserted, same invalidation rules as insert. Otherwise, no invalidation.
     Value& setdefault(const Key& key, const Value& default_value = Value{}) {
         auto it = storage_.find(key);
         if (it != storage_.end()) {
@@ -427,16 +495,18 @@ public:
     }
     
     // Hash policy
-    float load_factor() const { return storage_.load_factor(); }
-    float max_load_factor() const { return storage_.max_load_factor(); }
-    void max_load_factor(float ml) { storage_.max_load_factor(ml); }
-    void rehash(size_type count) { storage_.rehash(count); }
-    void reserve(size_type count) { storage_.reserve(count); }
+    float load_factor() const noexcept { return storage_.load_factor(); }
+    float max_load_factor() const noexcept { return storage_.max_load_factor(); }
+    void max_load_factor(float ml) { storage_.max_load_factor(ml); } // std::unordered_map::max_load_factor(float) is not noexcept
+    // rehash: Invalidates all iterators if rehash occurs.
+    void rehash(size_type count) { storage_.rehash(count); } // Can throw (e.g. std::bad_alloc)
+    // reserve: Invalidates all iterators if rehash occurs.
+    void reserve(size_type count) { storage_.reserve(count); } // Can throw (e.g. std::bad_alloc)
     
     // Observers
-    hasher hash_function() const { return storage_.hash_function(); }
-    key_equal key_eq() const { return storage_.key_eq(); }
-    allocator_type get_allocator() const { return storage_.get_allocator(); }
+    hasher hash_function() const noexcept { return storage_.hash_function(); }
+    key_equal key_eq() const noexcept { return storage_.key_eq(); }
+    allocator_type get_allocator() const noexcept { return storage_.get_allocator(); }
     
     // Python-like methods for getting keys, values, items
     std::vector<Key> keys() const {
@@ -478,7 +548,7 @@ public:
     }
     
     // Stream output operator
-    friend std::ostream& operator<<(std::ostream& os, const dict& d) {
+    friend std::ostream& operator<<(std::ostream& os, const dict& d) { // Not typically noexcept due to stream operations
         os << "{";
         bool first = true;
         for (const auto& key : d.insertion_order_) {
@@ -496,10 +566,26 @@ template<typename InputIt>
 dict(InputIt, InputIt) -> dict<
     typename std::iterator_traits<InputIt>::value_type::first_type,
     typename std::iterator_traits<InputIt>::value_type::second_type
->;
+>; // This deduction guide might need SFINAE or concepts to be more robust for non-pair value_types
+
+// Swaps two dict objects.
+// noexcept if the allocator supports noexcept swap and propagates on swap,
+// and if Hash and KeyEqual are swappable.
+// For standard types, this generally means noexcept.
+template<typename K, typename V, typename H, typename KE, typename A>
+void swap(dict<K, V, H, KE, A>& lhs, dict<K, V, H, KE, A>& rhs) noexcept(
+    std::allocator_traits<A>::propagate_on_container_swap::value ||
+    std::allocator_traits<A>::is_always_equal::value
+    // Assuming Hash and KeyEqual are nothrow swappable, which is typical.
+    // Add more conditions for H and KE if they have complex swap behavior.
+) {
+    using std::swap;
+    swap(lhs.storage_, rhs.storage_);
+    swap(lhs.insertion_order_, rhs.insertion_order_);
+}
 
 template<typename Key, typename Value>
-dict(std::initializer_list<std::pair<Key, Value>>) -> dict<Key, Value>;
+dict(std::initializer_list<std::pair<Key, Value>>) -> dict<Key, Value>; // Similarly, might need constraints
 
 } // namespace pydict
 
