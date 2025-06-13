@@ -202,6 +202,17 @@ public:
     int age;
     
     Person(std::string n, int a) : name(std::move(n)), age(a) {}
+
+    // Default constructor
+    Person() = default;
+
+    // For sorting and tie-breaking in Counter::most_common
+    bool operator<(const Person& other) const {
+        if (name != other.name) {
+            return name < other.name;
+        }
+        return age < other.age;
+    }
     
     bool operator==(const Person& other) const {
         return name == other.name && age == other.age;
