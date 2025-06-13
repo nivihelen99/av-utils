@@ -1,3 +1,6 @@
+// This file demonstrates basic usage of the pydict::dict class.
+// For comprehensive unit tests, please see tests/dict_test.cpp.
+
 #include <iostream>
 #include <string>
 #include <cassert>
