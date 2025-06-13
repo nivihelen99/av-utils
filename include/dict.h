@@ -561,7 +561,7 @@ public:
     }
 
     // Friend declaration for non-member swap
-    friend void swap(dict<Key, Value, Hash, KeyEqual, Allocator>& lhs, dict<Key, Value, Hash, KeyEqual, Allocator>& rhs)
+    friend void swap<>(dict<Key, Value, Hash, KeyEqual, Allocator>& lhs, dict<Key, Value, Hash, KeyEqual, Allocator>& rhs)
         noexcept(noexcept(std::swap(lhs.storage_, rhs.storage_)) &&
                  noexcept(std::swap(lhs.insertion_order_, rhs.insertion_order_)));
 };
