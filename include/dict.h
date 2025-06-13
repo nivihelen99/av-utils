@@ -54,8 +54,13 @@ public:
 
 // private: // Access specifier for members comes after friend declaration as per standard practice
     // Internal storage combining hash map for O(1) access and vector for insertion order
-    using storage_type = std::unordered_map<Key, std::pair<Value, size_type>, Hash, KeyEqual, Allocator>;
-    using order_type = std::vector<Key>;
+    // Rebind the provided allocator to the map's actual value type
+    using rebound_allocator = typename std::allocator_traits<Allocator>::template rebind_alloc<
+        std::pair<const Key, std::pair<Value, size_type>>
+    >;
+    using storage_type = std::unordered_map<Key, std::pair<Value, size_type>, Hash, KeyEqual, rebound_allocator>;
+    using order_type = std::vector<Key>; // This could also use a rebound allocator if Key is complex
+                                         // but for std::vector, the default allocator for Key is usually fine.
     
     storage_type storage_;
     order_type insertion_order_;
