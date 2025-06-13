@@ -40,9 +40,15 @@ struct Field {
     // Use const for immutable fields
     using storage_type = std::conditional_t<Mut == FieldMutability::Immutable, const Type, Type>;
     storage_type value;
+
+    static constexpr Type get_default_value() {
+        // For now, we rely on Type being default constructible.
+        // More advanced would be to allow specifying a default in FIELD macro.
+        return Type{};
+    }
     
     // Default constructor
-    constexpr Field() = default;
+    constexpr Field() : value(get_default_value()) {}
     
     // Constructor from value
     template <typename U>
@@ -60,13 +66,39 @@ constexpr size_t find_field_index() {
     return index;
 }
 
+// NOTE ON STRUCTURED BINDINGS (especially for g++ 13.1.0 and similar versions):
+// Direct structured binding (e.g., auto [x,y] = named_struct_instance;) has shown
+// to be unreliable with this NamedStruct implementation on certain compilers
+// (like g++ 13.1.0), potentially due to compiler bugs when handling
+// template argument deduction for variadic packs, type aliases, and NTTPs within
+// std::tuple_size/std::tuple_element specializations, or during the structured
+// binding process itself.
+//
+// RECOMMENDED ALTERNATIVE for decomposition:
+// Use the .as_tuple() method and, if needed, apply structured bindings to the
+// resulting std::tuple. However, even this indirect approach has shown issues
+// on affected compilers in some contexts.
+//
+// SAFEST ALTERNATIVE for field access:
+// Use direct member access:
+//   my_instance.get<"field_name">()
+//   my_instance.get<index>()
+//
+// Or, for converting to a tuple and accessing its elements manually:
+//   auto t = my_instance.as_tuple();
+//   auto x = std::get<0>(t);
+//   auto y = std::get<1>(t);
+//
+// Custom std::tuple_size, std::tuple_element, and ADL get() functions for NamedStruct
+// have been removed to avoid these compiler issues.
+
 // The core NamedStruct template, built on a variadic pack of Fields
 template <typename... Fields>
 struct NamedStruct : Fields... {
     static_assert(sizeof...(Fields) > 0, "NamedStruct must have at least one field");
     
     // Default constructor
-    constexpr NamedStruct() = default;
+    constexpr NamedStruct() : Fields()... {}
     
     // Constructor to initialize all fields by position
     template <typename... Args>
@@ -156,37 +188,6 @@ struct NamedStruct : Fields... {
         return std::make_tuple(std::move(static_cast<Fields&>(*this).value)...);
     }
 };
-
-// Structured binding support - these need to be in std namespace
-namespace std {
-    template <typename... Fields>
-    struct tuple_size<NamedStruct<Fields...>>
-        : integral_constant<size_t, sizeof...(Fields)> {};
-
-    template <size_t I, typename... Fields>
-    struct tuple_element<I, NamedStruct<Fields...>> {
-        // The type of the Ith element, derived from the non-const version of get<I>().
-        // Structured binding rules should handle cv-qualification of the source object
-        // and correctly initialize variables of this 'decayed' type.
-        using type = std::decay_t<decltype(std::declval<NamedStruct<Fields...>>().template get<I>())>;
-    };
-} // namespace std
-
-// ADL-friendly get function for structured bindings - global namespace versions
-template <size_t I, typename... Fields>
-constexpr auto& get(NamedStruct<Fields...>& ns) {
-    return ns.template get<I>();
-}
-
-template <size_t I, typename... Fields>
-constexpr const auto& get(const NamedStruct<Fields...>& ns) { // Restored to return const auto&
-    return ns.template get<I>();
-}
-
-template <size_t I, typename... Fields>
-constexpr auto get(NamedStruct<Fields...>&& ns) { // Returns rvalue reference or value
-    return std::move(ns).template get<I>();
-}
 
 // A helper to make defining NamedStructs easier
 #define NAMED_STRUCT(name, ...) \
