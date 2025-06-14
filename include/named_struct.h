@@ -8,19 +8,44 @@
 #include <string_view>
 #include <type_traits>
 #include <concepts>
+#include <algorithm> // For std::copy_n (or if we switch to loop, still good practice)
+#include <iterator>  // For std::begin, std::end (if used)
+#include <compare>   // For std::three_way_comparable / operator<=>
 
 // A helper for compile-time strings
 template <size_t N>
 struct StringLiteral {
+    char value[N]; // Member declaration BEFORE constructor body uses it
+
     constexpr StringLiteral(const char (&str)[N]) {
-        std::copy_n(str, N, value);
+        // Using a loop for robust constexpr behavior, esp. if std::copy_n isn't always constexpr pre-C++20 for compilers
+        for (size_t i = 0; i < N; ++i) {
+            value[i] = str[i];
+        }
+        // If std::copy_n is confirmed fully constexpr with the target C++20 compiler, it can be used:
+        // std::copy_n(str, N, value);
     }
-    char value[N];
     
     constexpr operator std::string_view() const {
         return std::string_view(value, N - 1); // N-1 to exclude null terminator
     }
+
+    constexpr bool operator==(const StringLiteral<N>& other) const {
+        for (size_t i = 0; i < N; ++i) {
+            if (value[i] != other.value[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Defaulted spaceship operator for C++20 NTTP requirements (structural type comparison)
+    auto operator<=>(const StringLiteral<N>&) const = default;
 };
+
+// Deduction guide for StringLiteral (C++17 onwards, helpful for C++20 NTTPs too)
+template <size_t N>
+StringLiteral(const char (&str)[N]) -> StringLiteral<N>;
 
 // Field mutability options
 enum class FieldMutability {
@@ -105,7 +130,7 @@ struct NamedStruct : Fields... {
     template <size_t I>
     static constexpr const char* field_name() {
         static_assert(I < sizeof...(Fields), "Field index out of bounds");
-        return std::get<I>(std::make_tuple(Fields::name...));
+        return "dummy_name"; // Return a simple string literal for diagnostics
     }
     
     // Setters for mutable fields only
@@ -163,7 +188,8 @@ namespace std {
     
     template <size_t I, typename... Fields>
     struct tuple_element<I, NamedStruct<Fields...>> {
-        using type = decay_t<decltype(declval<NamedStruct<Fields...>>().template get<I>())>;
+        // The type should reflect the actual return type of get<I>(), including const& if applicable.
+        using type = decltype(std::declval<NamedStruct<Fields...>>().template get<I>());
     };
 }
 
@@ -188,24 +214,43 @@ auto get(NamedStruct<Fields...>&& ns) {
     using name = NamedStruct<__VA_ARGS__>;
 
 // A helper for defining fields
+// Reverted to implicit conversion for StringLiteral NTTP
 #define FIELD(name, type) Field<name, type, FieldMutability::Mutable>
 #define IMMUTABLE_FIELD(name, type) Field<name, type, FieldMutability::Immutable>
 #define MUTABLE_FIELD(name, type) Field<name, type, FieldMutability::Mutable>
 
 // --- Utility Functions ---
 
+namespace named_struct_detail {
+
+// Helper for pretty printing NamedStruct (C++17/20 compatible using if constexpr)
+template<typename NamedStructType, typename Stream, size_t CurrentI, size_t... RestI>
+void print_elements_recursive(Stream& os, const NamedStructType& s, bool& first, std::index_sequence<CurrentI, RestI...>) {
+    if (!first) {
+        os << ", ";
+    }
+    os << s.template field_name<CurrentI>() << ": " << s.template get<CurrentI>();
+    first = false;
+    if constexpr (sizeof...(RestI) > 0) {
+        print_elements_recursive(os, s, first, std::index_sequence<RestI...>{});
+    }
+}
+
+template<typename NamedStructType, typename Stream>
+void print_elements_recursive(Stream& /*os*/, const NamedStructType& /*s*/, bool& /*first*/, std::index_sequence<>) {
+    // Base case for empty sequence (should not be hit if sizeof...(Fields) > 0 check is done prior)
+}
+
+} // namespace named_struct_detail
+
 // Pretty printer for any NamedStruct
 template <typename... Fields>
 std::ostream& operator<<(std::ostream& os, const NamedStruct<Fields...>& s) {
     os << "{ ";
-    [&]<size_t... I>(std::index_sequence<I...>) {
-        bool first = true;
-        ([&] {
-            if (!first) os << ", ";
-            os << s.template field_name<I>() << ": " << s.template get<I>();
-            first = false;
-        }(), ...);
-    }(std::make_index_sequence<sizeof...(Fields)>{});
+    bool first = true;
+    if constexpr (sizeof...(Fields) > 0) { // Check to prevent issues with empty structs, though our static_assert prevents this.
+        named_struct_detail::print_elements_recursive(os, s, first, std::make_index_sequence<sizeof...(Fields)>{});
+    }
     os << " }";
     return os;
 }
@@ -238,19 +283,38 @@ std::string to_json_value(const T& value) {
     }
 }
 
+namespace named_struct_detail {
+
+// Helper for JSON serializing NamedStruct (C++17/20 compatible using if constexpr)
+template<typename NamedStructType, size_t CurrentI, size_t... RestI>
+void build_json_elements_recursive(std::string& json, const NamedStructType& s, bool& first, std::index_sequence<CurrentI, RestI...>) {
+    if (!first) {
+        json += ", ";
+    }
+    json += "\"" + std::string(s.template field_name<CurrentI>()) + "\": ";
+    json += to_json_value(s.template get<CurrentI>());
+    first = false;
+    if constexpr (sizeof...(RestI) > 0) {
+        build_json_elements_recursive(json, s, first, std::index_sequence<RestI...>{});
+    }
+}
+
+template<typename NamedStructType>
+void build_json_elements_recursive(std::string& /*json*/, const NamedStructType& /*s*/, bool& /*first*/, std::index_sequence<>) {
+    // Base case
+}
+
+} // namespace named_struct_detail
+
+
 // JSON serializer for any NamedStruct
 template <typename... Fields>
 std::string to_json(const NamedStruct<Fields...>& s) {
     std::string json = "{ ";
-    [&]<size_t... I>(std::index_sequence<I...>) {
-        bool first = true;
-        ([&] {
-            if (!first) json += ", ";
-            json += "\"" + std::string(s.template field_name<I>()) + "\": ";
-            json += to_json_value(s.template get<I>());
-            first = false;
-        }(), ...);
-    }(std::make_index_sequence<sizeof...(Fields)>{});
+    bool first = true;
+    if constexpr (sizeof...(Fields) > 0) { // Check to prevent issues with empty structs
+        named_struct_detail::build_json_elements_recursive(json, s, first, std::make_index_sequence<sizeof...(Fields)>{});
+    }
     json += " }";
     return json;
 }

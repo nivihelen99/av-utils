@@ -64,6 +64,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     if(TEST_FILE STREQUAL "variant_vector_test.cpp" OR TEST_FILE STREQUAL "use_variant_vector.cpp")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::variant_vector)
     endif()
+
     # For use_variant_vector, gtest_discover_tests might not be appropriate if it has no tests.
     # However, to keep the loop simple, we call it. It will just find 0 tests for that target.
     gtest_discover_tests(${TEST_NAME})
