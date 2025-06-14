@@ -5,6 +5,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <functional> // Added for std::hash
 #include <string_view>
 #include <type_traits>
 #include <concepts>
@@ -39,14 +40,20 @@ struct Field {
     // Use const for immutable fields
     using storage_type = std::conditional_t<Mut == FieldMutability::Immutable, const Type, Type>;
     storage_type value;
+
+    static constexpr Type get_default_value() {
+        // For now, we rely on Type being default constructible.
+        // More advanced would be to allow specifying a default in FIELD macro.
+        return Type{};
+    }
     
     // Default constructor
-    Field() = default;
+    constexpr Field() : value(get_default_value()) {}
     
     // Constructor from value
     template <typename U>
     requires std::convertible_to<U, Type>
-    Field(U&& val) : value(std::forward<U>(val)) {}
+    constexpr Field(U&& val) : value(std::forward<U>(val)) {}
 };
 
 // Helper to find field index by name
@@ -59,43 +66,69 @@ constexpr size_t find_field_index() {
     return index;
 }
 
+// NOTE ON STRUCTURED BINDINGS (especially for g++ 13.1.0 and similar versions):
+// Direct structured binding (e.g., auto [x,y] = named_struct_instance;) has shown
+// to be unreliable with this NamedStruct implementation on certain compilers
+// (like g++ 13.1.0), potentially due to compiler bugs when handling
+// template argument deduction for variadic packs, type aliases, and NTTPs within
+// std::tuple_size/std::tuple_element specializations, or during the structured
+// binding process itself.
+//
+// RECOMMENDED ALTERNATIVE for decomposition:
+// Use the .as_tuple() method and, if needed, apply structured bindings to the
+// resulting std::tuple. However, even this indirect approach has shown issues
+// on affected compilers in some contexts.
+//
+// SAFEST ALTERNATIVE for field access:
+// Use direct member access:
+//   my_instance.get<"field_name">()
+//   my_instance.get<index>()
+//
+// Or, for converting to a tuple and accessing its elements manually:
+//   auto t = my_instance.as_tuple();
+//   auto x = std::get<0>(t);
+//   auto y = std::get<1>(t);
+//
+// Custom std::tuple_size, std::tuple_element, and ADL get() functions for NamedStruct
+// have been removed to avoid these compiler issues.
+
 // The core NamedStruct template, built on a variadic pack of Fields
 template <typename... Fields>
 struct NamedStruct : Fields... {
     static_assert(sizeof...(Fields) > 0, "NamedStruct must have at least one field");
     
     // Default constructor
-    NamedStruct() = default;
+    constexpr NamedStruct() : Fields()... {}
     
     // Constructor to initialize all fields by position
     template <typename... Args>
     requires (sizeof...(Args) == sizeof...(Fields)) && 
              (std::convertible_to<Args, typename Fields::type> && ...)
-    NamedStruct(Args&&... args) : Fields{std::forward<Args>(args)}... {}
+    constexpr NamedStruct(Args&&... args) : Fields{std::forward<Args>(args)}... {}
     
     // Get a field by its index - returns the value directly
     template <size_t I>
-    auto& get() {
+    constexpr auto& get() {
         static_assert(I < sizeof...(Fields), "Field index out of bounds");
         return std::get<I>(std::tie(static_cast<Fields&>(*this).value...));
     }
     
     template <size_t I>
-    const auto& get() const {
+    constexpr const auto& get() const {
         static_assert(I < sizeof...(Fields), "Field index out of bounds");
         return std::get<I>(std::tie(static_cast<const Fields&>(*this).value...));
     }
     
     // Get a field by its name - returns the value directly
     template <StringLiteral Name>
-    auto& get() {
+    constexpr auto& get() {
         constexpr size_t index = find_field_index<Name, Fields...>();
         static_assert(index < sizeof...(Fields), "Field name not found");
         return get<index>();
     }
     
     template <StringLiteral Name>
-    const auto& get() const {
+    constexpr const auto& get() const {
         constexpr size_t index = find_field_index<Name, Fields...>();
         static_assert(index < sizeof...(Fields), "Field name not found");
         return get<index>();
@@ -155,33 +188,6 @@ struct NamedStruct : Fields... {
         return std::make_tuple(std::move(static_cast<Fields&>(*this).value)...);
     }
 };
-
-// Structured binding support - these need to be in std namespace
-namespace std {
-    template <typename... Fields>
-    struct tuple_size<NamedStruct<Fields...>> : integral_constant<size_t, sizeof...(Fields)> {};
-    
-    template <size_t I, typename... Fields>
-    struct tuple_element<I, NamedStruct<Fields...>> {
-        using type = decay_t<decltype(declval<NamedStruct<Fields...>>().template get<I>())>;
-    };
-}
-
-// ADL-friendly get function for structured bindings
-template <size_t I, typename... Fields>
-auto& get(NamedStruct<Fields...>& ns) {
-    return ns.template get<I>();
-}
-
-template <size_t I, typename... Fields>
-const auto& get(const NamedStruct<Fields...>& ns) {
-    return ns.template get<I>();
-}
-
-template <size_t I, typename... Fields>
-auto get(NamedStruct<Fields...>&& ns) {
-    return std::move(ns).template get<I>();
-}
 
 // A helper to make defining NamedStructs easier
 #define NAMED_STRUCT(name, ...) \
@@ -271,6 +277,46 @@ template <typename... Fields>
 bool operator<(const NamedStruct<Fields...>& lhs, const NamedStruct<Fields...>& rhs) {
     return lhs.as_tuple() < rhs.as_tuple();
 }
+
+// Greater than
+template <typename... Fields>
+bool operator>(const NamedStruct<Fields...>& lhs, const NamedStruct<Fields...>& rhs) {
+    return rhs < lhs;
+}
+
+// Less than or equal to
+template <typename... Fields>
+bool operator<=(const NamedStruct<Fields...>& lhs, const NamedStruct<Fields...>& rhs) {
+    return !(rhs < lhs); // Using !(rhs < lhs) is equivalent to lhs < rhs || lhs == rhs
+}
+
+// Greater than or equal to
+template <typename... Fields>
+bool operator>=(const NamedStruct<Fields...>& lhs, const NamedStruct<Fields...>& rhs) {
+    return !(lhs < rhs); // Using !(lhs < rhs) is equivalent to lhs > rhs || lhs == rhs
+}
+
+// --- Hashing Support ---
+namespace std {
+    template <typename... Fields>
+    struct hash<NamedStruct<Fields...>> {
+        size_t operator()(const NamedStruct<Fields...>& s) const {
+            size_t seed = 0;
+            // Helper lambda to combine hashes
+            auto hash_combiner = [&](const auto& value) {
+                using ValueType = std::decay_t<decltype(value)>;
+                seed ^= std::hash<ValueType>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            };
+
+            // Iterate over fields and apply combiner
+            [&]<size_t... I>(std::index_sequence<I...>) {
+                (hash_combiner(s.template get<I>()), ...);
+            }(std::make_index_sequence<sizeof...(Fields)>{});
+
+            return seed;
+        }
+    };
+} // namespace std
 
 #endif // NAMED_STRUCT_HPP
 
