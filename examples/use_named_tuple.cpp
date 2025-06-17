@@ -31,16 +31,16 @@ int main() {
     // Creating a Person.
     // The type `person_fields::ID` is used for lookup.
     Person p(101, "Alex", "Chen");
-    std::cout << "Person ID: " << p.get<person_fields::ID>() << std::endl;
+    std::cout << "Person ID: " << p.get<person_fields::ID>() << '\n';
 
     // Creating a Product.
     // The type `product_fields::ID` is used for lookup.
     Product prd(987654321L, "Super Gadget", 299.99);
-    std::cout << "Product ID: " << prd.get<product_fields::ID>() << std::endl;
+    std::cout << "Product ID: " << prd.get<product_fields::ID>() << '\n';
 
     // Modifying the product's price
     prd.get<product_fields::Price>() = 249.99;
-    std::cout << "New Product Price: $" << prd.get<product_fields::Price>() << std::endl;
+    std::cout << "New Product Price: $" << prd.get<product_fields::Price>() << '\n';
 
     return 0;
 }

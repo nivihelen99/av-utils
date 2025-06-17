@@ -206,7 +206,7 @@ public:
                     }
                     if(!already_marked_inactive) {
                         // If it wasn't just marked inactive in this batch, then it's an error.
-                         // Consider logging: std::cerr << "Rule ID " << op.rule_id_to_delete << " not found for deletion in batch." << std::endl;
+                         // Consider logging: std::cerr << "Rule ID " << op.rule_id_to_delete << " not found for deletion in batch." << '\n';
                         return false; // Abort batch
                     }
                 }

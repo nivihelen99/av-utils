@@ -10,10 +10,10 @@ int main() {
     const uint32_t vrfRed = 1;
     const uint32_t vrfBlue = 2;
 
-    std::cout << "=== Setting up Policy-Based Routing with VRFs ===" << std::endl;
+    std::cout << "=== Setting up Policy-Based Routing with VRFs ===" << '\n';
     
     // Adding routes to vrfRed
-    std::cout << "\n--- Configuring VRF Red (" << vrfRed << ") ---" << std::endl;
+    std::cout << "\n--- Configuring VRF Red (" << vrfRed << ") ---" << '\n';
     // Basic route for 10.0.0.0/16 in vrfRed
     PolicyRule policyRed1_base;
     policyRed1_base.priority = 100;
@@ -41,7 +41,7 @@ int main() {
     manager.addRoute(vrfRed, "10.0.0.0", 16, policyRed2_http, attrsRed2_http);
 
     // Adding routes to vrfBlue
-    std::cout << "\n--- Configuring VRF Blue (" << vrfBlue << ") ---" << std::endl;
+    std::cout << "\n--- Configuring VRF Blue (" << vrfBlue << ") ---" << '\n';
     // Basic route for 10.0.0.0/16 in vrfBlue (same prefix, different NH)
     PolicyRule policyBlue1_base;
     policyBlue1_base.priority = 100;
@@ -65,7 +65,7 @@ int main() {
     manager.addRoute(vrfBlue, "8.8.8.8", 32, policyBlue2_dns, attrsBlue2_dns);
 
     // Routes for the Global VRF (vrfGlobal, e.g. for BGP-like and TE routes)
-    std::cout << "\n--- Configuring Global VRF (" << vrfGlobal << ") ---" << std::endl;
+    std::cout << "\n--- Configuring Global VRF (" << vrfGlobal << ") ---" << '\n';
     // BGP-like route for 172.16.0.0/16 in Global VRF
     PolicyRule policyGlobal_bgp;
     policyGlobal_bgp.priority = 100;
@@ -162,7 +162,7 @@ int main() {
     manager.addRoute(vrfGlobal, "0.0.0.0", 0, policy_match_ef_global, attrs_route_ef_global);
 
     // --- New ToS Specific Policies and Routes for 90.0.0.0/8 in Global VRF ---
-    std::cout << "\n--- Configuring ToS-specific routes for 90.0.0.0/8 in Global VRF (" << vrfGlobal << ") ---" << std::endl;
+    std::cout << "\n--- Configuring ToS-specific routes for 90.0.0.0/8 in Global VRF (" << vrfGlobal << ") ---" << '\n';
     std::string tos_test_prefix = "90.0.0.0";
     uint8_t tos_test_prefix_len = 8;
 
@@ -195,11 +195,11 @@ int main() {
 
 
     // Display routes for all configured VRFs
-    std::cout << "\n=== Displaying All Configured Routing Tables ===" << std::endl;
+    std::cout << "\n=== Displaying All Configured Routing Tables ===" << '\n';
     manager.displayAllRoutes(); // Using displayAllRoutes to show all VRF tables
     
     // Simulate Packets for VRF Red
-    std::cout << "\n\n=== Packet Lookups for VRF Red (" << vrfRed << ") ===" << std::endl;
+    std::cout << "\n\n=== Packet Lookups for VRF Red (" << vrfRed << ") ===" << '\n';
     // Regular packet to 10.0.5.5 in vrfRed (should use 192.168.1.1)
     manager.simulatePacket(vrfRed, "10.10.10.10", "10.0.5.5", 12345, 443, 6);
     // HTTP traffic from 192.168.100.50 to 10.0.5.5 in vrfRed (should use 192.168.2.1)
@@ -211,7 +211,7 @@ int main() {
 
 
     // Simulate Packets for VRF Blue
-    std::cout << "\n\n=== Packet Lookups for VRF Blue (" << vrfBlue << ") ===" << std::endl;
+    std::cout << "\n\n=== Packet Lookups for VRF Blue (" << vrfBlue << ") ===" << '\n';
     // Regular packet to 10.0.5.5 in vrfBlue (should use 172.16.1.1)
     manager.simulatePacket(vrfBlue, "10.10.10.10", "10.0.5.5", 12345, 443, 6);
     // DNS packet to 8.8.8.8 in vrfBlue (should use 172.16.2.1)
@@ -219,31 +219,31 @@ int main() {
 
 
     // Simulate Packets for Global VRF (vrfGlobal)
-    std::cout << "\n\n=== Packet Lookups for Global VRF (" << vrfGlobal << ") ===" << std::endl;
+    std::cout << "\n\n=== Packet Lookups for Global VRF (" << vrfGlobal << ") ===" << '\n';
     // Traffic to TE-enabled destination 203.0.113.100 (should prefer 10.1.1.1)
     manager.simulatePacket(vrfGlobal, "1.1.1.1", "203.0.113.100", 12345, 443, 17);
     
-    std::cout << "\n--- ECMP Test in Global VRF ---" << std::endl;
+    std::cout << "\n--- ECMP Test in Global VRF ---" << '\n';
     std::string ecmpTargetIpStr = "77.77.0.100";
     manager.simulatePacket(vrfGlobal, "1.2.3.4", ecmpTargetIpStr, 1001, 80, 6);
     manager.simulatePacket(vrfGlobal, "5.6.7.8", ecmpTargetIpStr, 1001, 80, 6);
     manager.simulatePacket(vrfGlobal, "55.55.55.5", ecmpTargetIpStr, 3000, 80, 6); // Should match specific policy
 
-    std::cout << "\n--- ToS/DSCP based routing in Global VRF ---" << std::endl;
+    std::cout << "\n--- ToS/DSCP based routing in Global VRF ---" << '\n';
     // EF Traffic in Global VRF (should use 10.200.1.1) - Existing test, good for verification
     manager.simulatePacket(vrfGlobal, "192.168.100.10", "10.250.1.1", 1000, 2000, 6, 0xb8);
     // Best Effort traffic to a general IP, not matching specific Global VRF policies (likely no route if no default in Global)
     // This will now be handled by the 0.0.0.0/0 tos 0xb8 if tos is 0xb8, or default 0.0.0.0/0 if no other default exists
     manager.simulatePacket(vrfGlobal, "192.168.100.11", "10.250.1.2", 1000, 2000, 6, 0x00);
     
-    std::cout << "\n--- Simulating Specific DSCP Test Route in Global VRF ---" << std::endl;
+    std::cout << "\n--- Simulating Specific DSCP Test Route in Global VRF ---" << '\n';
     // This existing test for 192.168.70.0/24 has dscp = 0x1A set on its RouteAttributes, but the policy itself doesn't filter on ToS.
     // The packet simulation here doesn't specify a ToS, so packet.tos will be 0.
     // The policy policy_dscp_test_global has policy.tos = 0. This means it will match.
     manager.simulatePacket(vrfGlobal, "10.10.10.10", "192.168.70.5", 1234, 5678, 6); // Packet ToS = 0
 
     // --- New ToS Specific Packet Simulations for 90.0.0.0/8 in Global VRF ---
-    std::cout << "\n\n=== ToS-Specific Packet Lookups for 90.0.0.0/8 in Global VRF (" << vrfGlobal << ") ===" << std::endl;
+    std::cout << "\n\n=== ToS-Specific Packet Lookups for 90.0.0.0/8 in Global VRF (" << vrfGlobal << ") ===" << '\n';
     std::string tos_target_ip = "90.1.2.3";
     // Packet with ToS 0xC0 (Critical) -> should use 10.90.1.1
     manager.simulatePacket(vrfGlobal, "200.1.1.1", tos_target_ip, 1001, 80, 6, 0xC0);
@@ -255,7 +255,7 @@ int main() {
     manager.simulatePacket(vrfGlobal, "200.1.1.4", tos_target_ip, 1004, 80, 6, 0xA0);
 
 
-    std::cout << "\n\nFinal Routing Tables (All VRFs):" << std::endl;
+    std::cout << "\n\nFinal Routing Tables (All VRFs):" << '\n';
     manager.displayAllRoutes(); // Display all VRF tables at the end
     
     return 0;

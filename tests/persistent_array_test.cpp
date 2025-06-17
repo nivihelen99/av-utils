@@ -1005,8 +1005,8 @@ TEST_F(PersistentArrayTest, BenchmarkVersionCreationCopy) {
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-    std::cout << std::endl << "[          ] [ PERF ] BenchmarkVersionCreationCopy (" << array_size << " elements, "
-              << num_iterations << " copy ops): " << duration.count() << " ms" << std::endl;
+    std::cout << '\n' << "[          ] [ PERF ] BenchmarkVersionCreationCopy (" << array_size << " elements, "
+              << num_iterations << " copy ops): " << duration.count() << " ms" << '\n';
     SUCCEED() << "Benchmark finished. Timing: " << duration.count() << " ms.";
 }
 
@@ -1042,8 +1042,8 @@ TEST_F(PersistentArrayTest, BenchmarkCoWModification) {
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-    std::cout << std::endl << "[          ] [ PERF ] BenchmarkCoWModification (" << array_size << " elements, "
-              << num_iterations << " CoW ops): " << duration.count() << " ms" << std::endl;
+    std::cout << '\n' << "[          ] [ PERF ] BenchmarkCoWModification (" << array_size << " elements, "
+              << num_iterations << " CoW ops): " << duration.count() << " ms" << '\n';
     SUCCEED() << "Benchmark finished. Timing: " << duration.count() << " ms.";
 }
 
@@ -1066,8 +1066,8 @@ TEST_F(PersistentArrayTest, BenchmarkReadAccess) {
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
-    std::cout << std::endl << "[          ] [ PERF ] BenchmarkReadAccess (" << array_size << " elements, "
-              << num_iterations << " read ops): " << duration.count() << " ms" << std::endl;
+    std::cout << '\n' << "[          ] [ PERF ] BenchmarkReadAccess (" << array_size << " elements, "
+              << num_iterations << " read ops): " << duration.count() << " ms" << '\n';
     // Use value_sink to show it's "used"
     if (value_sink == -12345) { /* Unlikely, just to use it */ }
     SUCCEED() << "Benchmark finished. Timing: " << duration.count() << " ms.";

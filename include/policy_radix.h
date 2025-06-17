@@ -138,7 +138,7 @@ public:
         
         // std::cout << "Added policy route: " << prefix << "/" << (int)prefixLen
         //           << " -> " << ipIntToString(attrs.nextHop)
-        //           << " (priority: " << policy.priority << ")" << std::endl; // Removed cout
+        //           << " (priority: " << policy.priority << ")" << '\n'; // Removed cout
     }
     
     // Lookup with policy-based routing (refined for LPM and policy application)
@@ -217,7 +217,7 @@ public:
     }
 
     void displayRoutes() const { // Made const
-        std::cout << "\n=== Policy-Based Routing Table ===" << std::endl;
+        std::cout << "\n=== Policy-Based Routing Table ===" << '\n';
         std::cout << std::left
                   << std::setw(18) << "Route Prefix"
                   << std::setw(15) << "Next Hop" 
@@ -229,8 +229,8 @@ public:
                   << std::setw(12) << "RateLimit"   // Added RateLimit column
                   << std::setw(12) << "BurstSize"   // Added BurstSize column
                   << std::setw(9) << "SetDSCP"
-                  << " Policy Details" << std::endl;
-        std::cout << std::string(160, '-') << std::endl; // Adjusted width +24 for new columns + some spacing
+                  << " Policy Details" << '\n';
+        std::cout << std::string(160, '-') << '\n'; // Adjusted width +24 for new columns + some spacing
         displayRoutesHelper(root.get(), 0, 0, ""); // Initial call with empty path string
     }
     
@@ -242,7 +242,7 @@ public:
             packet.srcIP = ipStringToInt(srcIPStr);
             packet.dstIP = ipStringToInt(dstIPStr);
         } catch (const std::runtime_error& e) {
-            std::cerr << "Error creating packet: " << e.what() << std::endl;
+            std::cerr << "Error creating packet: " << e.what() << '\n';
             return;
         }
         packet.srcPort = srcPort;
@@ -251,16 +251,16 @@ public:
         packet.tos = tos;
         packet.flowLabel = flowLabel;
         
-        std::cout << "\n=== Packet Lookup Simulation ===" << std::endl;
+        std::cout << "\n=== Packet Lookup Simulation ===" << '\n';
         std::cout << "Packet: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
                   << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
                   << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
-                  << ", FlowLabel=" << flowLabel << std::endl;
+                  << ", FlowLabel=" << flowLabel << '\n';
         
         auto selectedRouteOpt = selectEcmpPathUsingFlowHash(packet); // Using new ECMP selection
         
         if (!selectedRouteOpt) {
-            std::cout << "  No matching route found." << std::endl;
+            std::cout << "  No matching route found." << '\n';
             return;
         }
 
@@ -270,15 +270,15 @@ public:
                   << ", LP: " << selectedRoute.localPref
                   << ", MED: " << selectedRoute.med
                   << ", Tag: " << selectedRoute.tag
-                  << ")" << std::endl;
+                  << ")" << '\n';
         std::cout << "  Applying DSCP: 0x" << std::hex << (int)selectedRoute.dscp << std::dec
-                  << " (Value: " << (int)selectedRoute.dscp << ")" << std::endl;
+                  << " (Value: " << (int)selectedRoute.dscp << ")" << '\n';
         // Display Rate Limiting Information
-        std::cout << "  Rate Limit: " << selectedRoute.rateLimitBps << " bps, Burst: " << selectedRoute.burstSizeBytes << " bytes" << std::endl;
+        std::cout << "  Rate Limit: " << selectedRoute.rateLimitBps << " bps, Burst: " << selectedRoute.burstSizeBytes << " bytes" << '\n';
 
          auto ecmpCandidates = getEqualCostPaths(packet);
          if (ecmpCandidates.size() > 1) {
-             std::cout << "  ECMP candidates considered for this flow (" << ecmpCandidates.size() << "):" << std::endl;
+             std::cout << "  ECMP candidates considered for this flow (" << ecmpCandidates.size() << "):" << '\n';
              size_t flowHashIndex = generateFlowHash(packet) % ecmpCandidates.size();
              for(size_t i = 0; i < ecmpCandidates.size(); ++i) {
                  const auto& path = ecmpCandidates[i];
@@ -289,7 +289,7 @@ public:
                 if (i == flowHashIndex) {
                     std::cout << " [*SELECTED* by flow hash]";
                 }
-                std::cout << std::endl;
+                std::cout << '\n';
              }
          }
     }
@@ -476,7 +476,7 @@ private:
                 if (policyDetailsStr.length() > 2) { // Contains more than "[]"
                      std::cout << policyDetailsStr;
                 }
-                std::cout << std::endl;
+                std::cout << '\n';
             }
         }
         
@@ -540,20 +540,20 @@ public:
     void displayRoutes(uint32_t vrfId) const {
         const PolicyRoutingTree* table = getVrfTable(vrfId, false);
         if (table) {
-            std::cout << "\n--- Routing Table for VRF ID: " << vrfId << " ---" << std::endl;
+            std::cout << "\n--- Routing Table for VRF ID: " << vrfId << " ---" << '\n';
             table->displayRoutes();
         } else {
-            std::cout << "\n--- VRF ID: " << vrfId << " not found or has no routes ---" << std::endl;
+            std::cout << "\n--- VRF ID: " << vrfId << " not found or has no routes ---" << '\n';
         }
     }
 
     void displayAllRoutes() const {
         if (vrfTables.empty()) {
-            std::cout << "\n--- No VRFs configured ---" << std::endl;
+            std::cout << "\n--- No VRFs configured ---" << '\n';
             return;
         }
         for (const auto& pair : vrfTables) {
-            std::cout << "\n--- Routing Table for VRF ID: " << pair.first << " ---" << std::endl;
+            std::cout << "\n--- Routing Table for VRF ID: " << pair.first << " ---" << '\n';
             pair.second->displayRoutes();
         }
     }
@@ -563,15 +563,15 @@ public:
                        uint8_t tos = 0, uint32_t flowLabel = 0) {
         PolicyRoutingTree* table = getVrfTable(vrfId, false); // Don't create VRF on simulation if it doesn't exist
         if (table) {
-            std::cout << "\n=== Simulating Packet in VRF ID: " << vrfId << " ===" << std::endl;
+            std::cout << "\n=== Simulating Packet in VRF ID: " << vrfId << " ===" << '\n';
             table->simulatePacket(srcIPStr, dstIPStr, srcPort, dstPort, protocol, tos, flowLabel);
         } else {
-            std::cout << "\n=== VRF ID: " << vrfId << " not found for packet simulation. Packet dropped. ===" << std::endl;
+            std::cout << "\n=== VRF ID: " << vrfId << " not found for packet simulation. Packet dropped. ===" << '\n';
             // Optionally, print packet details here too
             std::cout << "Packet Details: SrcIP=" << srcIPStr << ", DstIP=" << dstIPStr
                       << ", SrcPort=" << srcPort << ", DstPort=" << dstPort
                       << ", Proto=" << (int)protocol << ", ToS=0x" << std::hex << (int)tos << std::dec
-                      << ", FlowLabel=" << flowLabel << std::endl;
+                      << ", FlowLabel=" << flowLabel << '\n';
         }
     }
 };

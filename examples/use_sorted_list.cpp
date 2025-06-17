@@ -8,13 +8,13 @@
 #define ASSERT(condition) \
     do { \
         if (!(condition)) { \
-            std::cerr << "Assertion failed: " << #condition << " at line " << __LINE__ << std::endl; \
+            std::cerr << "Assertion failed: " << #condition << " at line " << __LINE__ << '\n'; \
             std::abort(); \
         } \
     } while (0)
 
 #define TEST_SECTION(name) \
-    std::cout << "\n=== Testing " << name << " ===" << std::endl
+    std::cout << "\n=== Testing " << name << " ===" << '\n'
 
 void test_basic_operations() {
     TEST_SECTION("Basic Operations");
@@ -51,7 +51,7 @@ void test_basic_operations() {
         // Expected
     }
     
-    std::cout << "Basic operations: PASSED" << std::endl;
+    std::cout << "Basic operations: PASSED" << '\n';
 }
 
 void test_duplicates() {
@@ -76,7 +76,7 @@ void test_duplicates() {
     ASSERT(sl.count(10) == 3);
     ASSERT(sl.count(99) == 0);
     
-    std::cout << "Duplicate values: PASSED" << std::endl;
+    std::cout << "Duplicate values: PASSED" << '\n';
 }
 
 void test_search_operations() {
@@ -116,7 +116,7 @@ void test_search_operations() {
         // Expected
     }
     
-    std::cout << "Search operations: PASSED" << std::endl;
+    std::cout << "Search operations: PASSED" << '\n';
 }
 
 void test_deletion() {
@@ -149,7 +149,7 @@ void test_deletion() {
         // Expected
     }
     
-    std::cout << "Deletion operations: PASSED" << std::endl;
+    std::cout << "Deletion operations: PASSED" << '\n';
 }
 
 void test_range_operations() {
@@ -174,7 +174,7 @@ void test_range_operations() {
     auto empty_range = sl.range(25, 30);
     ASSERT(empty_range.empty());
     
-    std::cout << "Range operations: PASSED" << std::endl;
+    std::cout << "Range operations: PASSED" << '\n';
 }
 
 void test_custom_comparator() {
@@ -217,7 +217,7 @@ void test_custom_comparator() {
     ASSERT(str_list[0].substr(0, 5) == "apple" || str_list[0].substr(0, 5) == "Apple");
     ASSERT(str_list[2].substr(0, 6) == "BANANA" || str_list[2].substr(0, 6) == "banana");
     
-    std::cout << "Custom comparator: PASSED" << std::endl;
+    std::cout << "Custom comparator: PASSED" << '\n';
 }
 
 void test_iterators() {
@@ -251,7 +251,7 @@ void test_iterators() {
     std::vector<int> expected_reverse = {9, 8, 5, 3, 2, 1};
     ASSERT(reverse_result == expected_reverse);
     
-    std::cout << "Iterator support: PASSED" << std::endl;
+    std::cout << "Iterator support: PASSED" << '\n';
 }
 
 void test_edge_cases() {
@@ -291,7 +291,7 @@ void test_edge_cases() {
     ASSERT(single_sl.empty());
     ASSERT(single_sl.size() == 0);
     
-    std::cout << "Edge cases: PASSED" << std::endl;
+    std::cout << "Edge cases: PASSED" << '\n';
 }
 
 void test_initializer_list() {
@@ -306,7 +306,7 @@ void test_initializer_list() {
     ASSERT(sl[3] == 15);
     ASSERT(sl[4] == 20);
     
-    std::cout << "Initializer list: PASSED" << std::endl;
+    std::cout << "Initializer list: PASSED" << '\n';
 }
 
 void test_comparison_operators() {
@@ -324,7 +324,7 @@ void test_comparison_operators() {
     ASSERT(sl1 <= sl2);
     ASSERT(sl1 >= sl2);
     
-    std::cout << "Comparison operators: PASSED" << std::endl;
+    std::cout << "Comparison operators: PASSED" << '\n';
 }
 
 void test_move_operations() {
@@ -345,7 +345,7 @@ void test_move_operations() {
     // Original strings should be moved from (empty or unspecified state)
     // We can't assert their exact state, but they should be valid for destruction
     
-    std::cout << "Move operations: PASSED" << std::endl;
+    std::cout << "Move operations: PASSED" << '\n';
 }
 
 void performance_test() {
@@ -367,8 +367,8 @@ void performance_test() {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
-    std::cout << "Inserted " << N << " elements in " << duration.count() << " microseconds" << std::endl;
-    std::cout << "Final size: " << sl.size() << std::endl;
+    std::cout << "Inserted " << N << " elements in " << duration.count() << " microseconds" << '\n';
+    std::cout << "Final size: " << sl.size() << '\n';
     
     // Verify it's still sorted
     for (size_t i = 1; i < sl.size(); ++i) {
@@ -386,14 +386,14 @@ void performance_test() {
     end = std::chrono::high_resolution_clock::now();
     duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
     
-    std::cout << "Performed 1000 searches in " << duration.count() << " microseconds" << std::endl;
-    std::cout << "Found " << found_count << " elements" << std::endl;
+    std::cout << "Performed 1000 searches in " << duration.count() << " microseconds" << '\n';
+    std::cout << "Found " << found_count << " elements" << '\n';
     
-    std::cout << "Performance test: COMPLETED" << std::endl;
+    std::cout << "Performance test: COMPLETED" << '\n';
 }
 
 int main() {
-    std::cout << "Running SortedList<T> tests..." << std::endl;
+    std::cout << "Running SortedList<T> tests..." << '\n';
     
     test_basic_operations();
     test_duplicates();
@@ -408,19 +408,19 @@ int main() {
     test_move_operations();
     performance_test();
     
-    std::cout << "\n🎉 All tests passed! SortedList<T> implementation is working correctly." << std::endl;
+    std::cout << "\n🎉 All tests passed! SortedList<T> implementation is working correctly." << '\n';
     
     // Example usage from requirements
-    std::cout << "\n=== Example Usage ===" << std::endl;
+    std::cout << "\n=== Example Usage ===" << '\n';
     SortedList<int> sl;
     sl.insert(10);
     sl.insert(5);
     sl.insert(20);
 
-    std::cout << sl[0] << ", " << sl[1] << ", " << sl[2] << std::endl;  // 5, 10, 20
+    std::cout << sl[0] << ", " << sl[1] << ", " << sl[2] << '\n';  // 5, 10, 20
 
     if (sl.contains(10)) {
-        std::cout << "Found 10 at index " << sl.index_of(10) << std::endl;
+        std::cout << "Found 10 at index " << sl.index_of(10) << '\n';
     }
 
     auto subset = sl.range(6, 25);  // returns [10, 20]
@@ -428,7 +428,7 @@ int main() {
     for (const auto& val : subset) {
         std::cout << val << " ";
     }
-    std::cout << std::endl;
+    std::cout << '\n';
     
     return 0;
 }

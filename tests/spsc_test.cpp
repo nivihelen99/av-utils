@@ -583,24 +583,24 @@ struct MyData {
 
     // Default constructor
     MyData(int i = 0, std::string n = "") : id(i), name(std::move(n)) {
-        // std::cout << "MyData Param/Default Constructor: " << name << " (id: " << id << ")" << std::endl;
+        // std::cout << "MyData Param/Default Constructor: " << name << " (id: " << id << ")" << '\n';
     }
 
     // Copy constructor
     MyData(const MyData& other) : id(other.id), name(other.name) {
-        // std::cout << "MyData Copy Constructor: " << name << " (id: " << id << ")" << std::endl;
+        // std::cout << "MyData Copy Constructor: " << name << " (id: " << id << ")" << '\n';
     }
 
     // Move constructor
     MyData(MyData&& other) noexcept : id(other.id), name(std::move(other.name)) {
-        // std::cout << "MyData Move Constructor (from id: " << other.id << " to id: " << id << ", name: " << name << ")" << std::endl;
+        // std::cout << "MyData Move Constructor (from id: " << other.id << " to id: " << id << ", name: " << name << ")" << '\n';
         other.id = 0; // Reset moved-from object
         // other.name.clear(); // Optionally clear string
     }
 
     // Copy assignment
     MyData& operator=(const MyData& other) {
-        // std::cout << "MyData Copy Assignment: " << other.name << " (id: " << other.id << ") to this id: " << id << std::endl;
+        // std::cout << "MyData Copy Assignment: " << other.name << " (id: " << other.id << ") to this id: " << id << '\n';
         if (this != &other) {
             id = other.id;
             name = other.name;
@@ -610,7 +610,7 @@ struct MyData {
 
     // Move assignment
     MyData& operator=(MyData&& other) noexcept {
-        // std::cout << "MyData Move Assignment (from id: " << other.id << " to this id: " << id << ", name: " << other.name << ")" << std::endl;
+        // std::cout << "MyData Move Assignment (from id: " << other.id << " to this id: " << id << ", name: " << other.name << ")" << '\n';
         if (this != &other) {
             id = other.id;
             name = std::move(other.name);
@@ -622,7 +622,7 @@ struct MyData {
 
     // Destructor (optional, default is fine, but for debugging)
     // ~MyData() {
-    //    std::cout << "MyData Destructor: " << name << " (id: " << id << ")" << std::endl;
+    //    std::cout << "MyData Destructor: " << name << " (id: " << id << ")" << '\n';
     // }
 
     bool operator==(const MyData& other) const {

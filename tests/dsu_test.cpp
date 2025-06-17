@@ -1234,7 +1234,7 @@ TEST(DSUPerformance, GenericDSULargeScaleOperations) {
 
     std::cout << "[ INFO     ] GenericDSU " << num_elements << " elements, "
               << num_unions << " unions, " << num_elements << " finds took: "
-              << duration.count() << " ms." << std::endl;
+              << duration.count() << " ms." << '\n';
     SUCCEED();
 }
 
@@ -1258,6 +1258,6 @@ TEST(DSUPerformance, FastDSULargeScaleOperations) {
 
     std::cout << "[ INFO     ] FastDSU " << num_elements << " elements, "
               << num_unions << " unions, " << num_elements << " finds took: "
-              << duration.count() << " ms." << std::endl;
+              << duration.count() << " ms." << '\n';
     SUCCEED();
 }

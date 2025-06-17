@@ -87,7 +87,7 @@ public:
 
     SkipListNode(T val, int level) : value(val), node_level(level) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Node Ctor] Value: " << value_to_log_string(get_comparable_value(val)) << ", Level: " << level << ", Addr: " << this << std::endl;
+        std::cout << "[Node Ctor] Value: " << value_to_log_string(get_comparable_value(val)) << ", Level: " << level << ", Addr: " << this << '\n';
 #endif
         forward = new std::atomic<SkipListNode<T>*>[level + 1];
         for (int i = 0; i <= level; ++i) {
@@ -97,7 +97,7 @@ public:
 
     ~SkipListNode() {
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Node Dtor] Value: " << value_to_log_string(get_comparable_value(value)) << ", Level: " << node_level << ", Addr: " << this << ", Deleting forward: " << forward << std::endl;
+        std::cout << "[Node Dtor] Value: " << value_to_log_string(get_comparable_value(value)) << ", Level: " << node_level << ", Addr: " << this << ", Deleting forward: " << forward << '\n';
 #endif
         delete[] forward;
     }
@@ -239,7 +239,7 @@ private:
 
         SkipListNode<T>* allocate(T value, int level) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Alloc] Requesting node for value: " << value_to_log_string(get_comparable_value(value)) << ", Level: " << level << std::endl;
+            std::cout << "[Pool Alloc] Requesting node for value: " << value_to_log_string(get_comparable_value(value)) << ", Level: " << level << '\n';
 #endif
             SkipListNode<T>* node_ptr = nullptr;
             std::vector<SkipListNode<T>*>& tl_cache = get_thread_local_cache();
@@ -251,7 +251,7 @@ private:
                 // No need to call node_ptr->~SkipListNode<T>(); here.
                 new (node_ptr) SkipListNode<T>(value, level); // Construct in place
 #ifdef SKIPLIST_DEBUG_LOGGING
-                std::cout << "[Pool Alloc] Allocated node (from thread-local cache, reconstructed) at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+                std::cout << "[Pool Alloc] Allocated node (from thread-local cache, reconstructed) at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
                 return node_ptr;
             }
@@ -263,12 +263,12 @@ private:
                                                                std::memory_order_release,
                                                                std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Popped from global free list: " << node_ptr << std::endl;
+                    std::cout << "[Pool Alloc] Popped from global free list: " << node_ptr << '\n';
 #endif
                     node_ptr->~SkipListNode<T>();
                     new (node_ptr) SkipListNode<T>(value, level);
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
                     return node_ptr;
                 }
@@ -282,19 +282,19 @@ private:
                                                                std::memory_order_release,
                                                                std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Popped from global free list (under lock): " << node_ptr << std::endl;
+                    std::cout << "[Pool Alloc] Popped from global free list (under lock): " << node_ptr << '\n';
 #endif
                     node_ptr->~SkipListNode<T>();
                     new (node_ptr) SkipListNode<T>(value, level);
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
                     return node_ptr;
                 }
             }
 
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Alloc] Allocating new block." << std::endl;
+            std::cout << "[Pool Alloc] Allocating new block." << '\n';
 #endif
             char* new_block_char_array = new char[BLOCK_SIZE * sizeof(SkipListNode<T>)];
             blocks_.emplace_back(std::unique_ptr<char[]>(new_block_char_array));
@@ -315,12 +315,12 @@ private:
                                                                std::memory_order_release,
                                                                std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Popped from free list (after new block): " << node_ptr << std::endl;
+                    std::cout << "[Pool Alloc] Popped from free list (after new block): " << node_ptr << '\n';
 #endif
                     node_ptr->~SkipListNode<T>();
                     new (node_ptr) SkipListNode<T>(value, level);
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+                    std::cout << "[Pool Alloc] Allocated node at: " << node_ptr << " for value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
                     return node_ptr;
                 }
@@ -330,14 +330,14 @@ private:
 
         void deallocate(SkipListNode<T>* node) {
     #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Dealloc] Deallocating node: " << node << (node ? " with value " + value_to_log_string(get_comparable_value(node->value)) : "") << std::endl;
+            std::cout << "[Pool Dealloc] Deallocating node: " << node << (node ? " with value " + value_to_log_string(get_comparable_value(node->value)) : "") << '\n';
     #endif
             if (!node) return;
 
         // Destruct the current object's state (e.g. its forward array)
             node->~SkipListNode<T>();
     #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Dealloc] Called destructor for node: " << node << std::endl;
+            std::cout << "[Pool Dealloc] Called destructor for node: " << node << '\n';
     #endif
 
         // Try to add to thread-local cache first
@@ -345,26 +345,26 @@ private:
         if (tl_cache.size() < THREAD_LOCAL_CACHE_MAX_SIZE) {
             tl_cache.push_back(node); // Add raw, destructed node to cache
     #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Dealloc] Added destructed node " << node << " to thread-local cache. Cache size: " << tl_cache.size() << std::endl;
+            std::cout << "[Pool Dealloc] Added destructed node " << node << " to thread-local cache. Cache size: " << tl_cache.size() << '\n';
     #endif
             return;
         }
 
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Pool Dealloc] Thread-local cache full. Adding to global free list." << std::endl;
+        std::cout << "[Pool Dealloc] Thread-local cache full. Adding to global free list." << '\n';
     #endif
         // Reconstruct as dummy node for the global free list (as it uses forward[0])
             try {
             new (node) SkipListNode<T>(T{}, 0); // Default construct T, level 0
             } catch (const std::bad_alloc& e) {
-                std::cerr << "MemoryPool: Failed to reconstruct node as dummy for free list: " << e.what() << ". Memory leak." << std::endl;
+                std::cerr << "MemoryPool: Failed to reconstruct node as dummy for free list: " << e.what() << ". Memory leak." << '\n';
             return; // Avoid adding a partially constructed node to free list
             } catch (...) {
-                 std::cerr << "MemoryPool: Unknown exception during dummy node reconstruction. Memory leak." << std::endl;
+                 std::cerr << "MemoryPool: Unknown exception during dummy node reconstruction. Memory leak." << '\n';
                 return;
             }
     #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Pool Dealloc] Reconstructed as dummy node: " << node << std::endl;
+            std::cout << "[Pool Dealloc] Reconstructed as dummy node: " << node << '\n';
     #endif
 
         // Add to global CAS-based free list
@@ -375,7 +375,7 @@ private:
                                                                  std::memory_order_release,
                                                              std::memory_order_acquire)); // Acquire on success to sync with other CAS ops
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Pool Dealloc] Pushed node " << node << " to global free list." << std::endl;
+        std::cout << "[Pool Dealloc] Pushed node " << node << " to global free list." << '\n';
     #endif
         }
     };
@@ -440,7 +440,7 @@ public:
 
     int randomLevel() {
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[RandomLevel] Generating level." << std::endl;
+        std::cout << "[RandomLevel] Generating level." << '\n';
 #endif
         int level = 0;
         thread_local static std::mt19937 rng{std::random_device{}()};
@@ -449,7 +449,7 @@ public:
             level++;
         }
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[RandomLevel] Generated level: " << level << std::endl;
+        std::cout << "[RandomLevel] Generated level: " << level << '\n';
 #endif
         return level;
     }
@@ -457,7 +457,7 @@ public:
     bool insert(T value) {
         this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Insert] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+        std::cout << "[Insert] Value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
         if (this->finger_ == nullptr) {
             this->finger_ = header;
@@ -513,7 +513,7 @@ public:
             // Element not found, insert it
             int newLevel = randomLevel();
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Insert] New node level: " << newLevel << std::endl;
+            std::cout << "[Insert] New node level: " << newLevel << '\n';
 #endif
 
             if (newLevel > localCurrentLevel) {
@@ -528,7 +528,7 @@ public:
 
             SkipListNode<T>* newNode = allocate_node(value, newLevel);
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Insert] Allocated newNode: " << newNode << std::endl;
+            std::cout << "[Insert] Allocated newNode: " << newNode << '\n';
 #endif
 
             for (int i = 0; i <= newLevel; i++) {
@@ -536,18 +536,18 @@ public:
                 SkipListNode<T>* succ = pred->forward[i].load(std::memory_order_acquire);
                 newNode->forward[i].store(succ, std::memory_order_relaxed);
 #ifdef SKIPLIST_DEBUG_LOGGING
-                std::cout << "[Insert] Level " << i << ": pred=" << pred << ", succ=" << succ << ", newNode->forward[i]=" << newNode->forward[i].load() << std::endl;
+                std::cout << "[Insert] Level " << i << ": pred=" << pred << ", succ=" << succ << ", newNode->forward[i]=" << newNode->forward[i].load() << '\n';
 #endif
 
                 while (!pred->forward[i].compare_exchange_weak(succ, newNode, std::memory_order_release, std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Insert] CAS failed for level " << i << ", retrying. pred=" << pred << " current_succ=" << succ << std::endl;
+                    std::cout << "[Insert] CAS failed for level " << i << ", retrying. pred=" << pred << " current_succ=" << succ << '\n';
 #endif
                     succ = pred->forward[i].load(std::memory_order_acquire); // Re-fetch successor
                     newNode->forward[i].store(succ, std::memory_order_relaxed); // Reset newNode's forward pointer for the next attempt
                 }
 #ifdef SKIPLIST_DEBUG_LOGGING
-                std::cout << "[Insert] CAS successful for level " << i << std::endl;
+                std::cout << "[Insert] CAS successful for level " << i << '\n';
 #endif
             }
             if (update[0] != nullptr) {
@@ -570,7 +570,7 @@ public:
     bool search(T value) const {
         this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Search] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+        std::cout << "[Search] Value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
         if (this->finger_ == nullptr) {
             this->finger_ = header;
@@ -600,13 +600,13 @@ public:
         for (int i = start_level; i >= 0; i--) {
             SkipListNode<T>* next_node = current_search_node->forward[i].load(std::memory_order_acquire);
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Search] Level " << i << ": current_search_node=" << current_search_node << ", next_node=" << next_node << std::endl;
+            std::cout << "[Search] Level " << i << ": current_search_node=" << current_search_node << ", next_node=" << next_node << '\n';
 #endif
             while (next_node != nullptr && key_compare_(get_comparable_value(next_node->value), get_comparable_value(value))) {
                 current_search_node = next_node;
                 next_node = current_search_node->forward[i].load(std::memory_order_acquire);
 #ifdef SKIPLIST_DEBUG_LOGGING
-                std::cout << "[Search] Level " << i << " (inner loop): current_search_node=" << current_search_node << ", next_node=" << next_node << std::endl;
+                std::cout << "[Search] Level " << i << " (inner loop): current_search_node=" << current_search_node << ", next_node=" << next_node << '\n';
 #endif
             }
             if (i == 0) {
@@ -619,7 +619,7 @@ public:
         // bool result = (found_node != nullptr && get_comparable_value(found_node->value) == get_comparable_value(value));
         bool result = (found_node != nullptr && !key_compare_(get_comparable_value(found_node->value), get_comparable_value(value)) && !key_compare_(get_comparable_value(value), get_comparable_value(found_node->value)));
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Search] Found node: " << found_node << ", Result: " << (result ? "true" : "false") << std::endl;
+        std::cout << "[Search] Found node: " << found_node << ", Result: " << (result ? "true" : "false") << '\n';
 #endif
         return result;
     }
@@ -627,7 +627,7 @@ public:
     bool remove(T value) {
         this->finger_ = this->header;
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Remove] Value: " << value_to_log_string(get_comparable_value(value)) << std::endl;
+        std::cout << "[Remove] Value: " << value_to_log_string(get_comparable_value(value)) << '\n';
 #endif
         if (this->finger_ == nullptr) {
             this->finger_ = header;
@@ -679,7 +679,7 @@ public:
 
         SkipListNode<T>* target_node = update[0]->forward[0].load(std::memory_order_acquire);
 #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Remove] Found target_node: " << target_node << (target_node ? " with value " + value_to_log_string(get_comparable_value(target_node->value)) : "") << std::endl;
+        std::cout << "[Remove] Found target_node: " << target_node << (target_node ? " with value " + value_to_log_string(get_comparable_value(target_node->value)) : "") << '\n';
 #endif
 
         // if (target_node != nullptr && get_comparable_value(target_node->value) == get_comparable_value(value))
@@ -690,7 +690,7 @@ public:
                     continue;
                 }
 #ifdef SKIPLIST_DEBUG_LOGGING
-                std::cout << "[Remove] Unlinking at level " << i << ": pred=" << pred << ", target_node->forward[i]=" << target_node->forward[i].load() << std::endl;
+                std::cout << "[Remove] Unlinking at level " << i << ": pred=" << pred << ", target_node->forward[i]=" << target_node->forward[i].load() << '\n';
 #endif
 
                 SkipListNode<T>* succ_of_target = target_node->forward[i].load(std::memory_order_relaxed);
@@ -700,13 +700,13 @@ public:
                                                            std::memory_order_release,
                                                            std::memory_order_relaxed)) {
 #ifdef SKIPLIST_DEBUG_LOGGING
-                    std::cout << "[Remove] Unlinked at level " << i << std::endl;
+                    std::cout << "[Remove] Unlinked at level " << i << '\n';
 #endif
                 } else {
                 }
             }
 #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Remove] Calling deallocate for target_node: " << target_node << std::endl;
+            std::cout << "[Remove] Calling deallocate for target_node: " << target_node << '\n';
 #endif
             deallocate_node(target_node);
 
@@ -744,7 +744,7 @@ public:
         KeyType key_to_find = get_comparable_value(value_to_insert_or_assign);
 
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[InsertOrAssign] Value: " << value_to_log_string(value_to_insert_or_assign) << " (Key: " << value_to_log_string(key_to_find) << ")" << std::endl;
+        std::cout << "[InsertOrAssign] Value: " << value_to_log_string(value_to_insert_or_assign) << " (Key: " << value_to_log_string(key_to_find) << ")" << '\n';
     #endif
 
         if (this->finger_ == nullptr) {
@@ -813,7 +813,7 @@ public:
         if (node_to_check != nullptr && !key_compare_(get_comparable_value(node_to_check->value), key_to_find) && !key_compare_(key_to_find, get_comparable_value(node_to_check->value))) {
             // Key found, assign new value
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[InsertOrAssign] Key found. Assigning value to node: " << node_to_check << std::endl;
+            std::cout << "[InsertOrAssign] Key found. Assigning value to node: " << node_to_check << '\n';
         #endif
             // This assignment needs to be concurrency-safe if values can be updated by multiple threads.
             // For simple types, direct assignment might be okay if reads/writes are atomic or data races are acceptable for the value part.
@@ -846,7 +846,7 @@ public:
         } else {
             // Key not found, insert new node (logic from `insert` method)
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[InsertOrAssign] Key not found. Inserting new node." << std::endl;
+            std::cout << "[InsertOrAssign] Key not found. Inserting new node." << '\n';
         #endif
             int newLevel = randomLevel();
             if (newLevel > localCurrentLevel) {
@@ -863,7 +863,7 @@ public:
 
             SkipListNode<T>* newNode = allocate_node(value_to_insert_or_assign, newLevel);
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[InsertOrAssign] Allocated newNode: " << newNode << " with level " << newLevel << std::endl;
+            std::cout << "[InsertOrAssign] Allocated newNode: " << newNode << " with level " << newLevel << '\n';
         #endif
 
             for (int i = 0; i <= newLevel; i++) {
@@ -875,13 +875,13 @@ public:
                 SkipListNode<T>* succ = pred->forward[i].load(std::memory_order_acquire);
                 newNode->forward[i].store(succ, std::memory_order_relaxed);
             #ifdef SKIPLIST_DEBUG_LOGGING
-                // std::cout << "[InsertOrAssign] Linking Level " << i << ": pred=" << pred << ", succ=" << succ << ", newNode->fwd=" << newNode->forward[i].load() << std::endl;
+                // std::cout << "[InsertOrAssign] Linking Level " << i << ": pred=" << pred << ", succ=" << succ << ", newNode->fwd=" << newNode->forward[i].load() << '\n';
             #endif
                 // CAS to link newNode into the list
                 // Need to retry if pred->forward[i] changed (succ is stale)
                 while (!pred->forward[i].compare_exchange_weak(succ, newNode, std::memory_order_release, std::memory_order_relaxed)) {
                 #ifdef SKIPLIST_DEBUG_LOGGING
-                    // std::cout << "[InsertOrAssign] CAS failed for level " << i << ", retrying. pred=" << pred << " current_succ=" << succ << std::endl;
+                    // std::cout << "[InsertOrAssign] CAS failed for level " << i << ", retrying. pred=" << pred << " current_succ=" << succ << '\n';
                 #endif
                     // Re-fetch successor for CAS retry
                     // And potentially re-traverse from pred if pred itself is too far back now (though less likely at this stage)
@@ -893,7 +893,7 @@ public:
                     newNode->forward[i].store(succ, std::memory_order_relaxed); // Reset newNode's forward pointer for the next attempt
                 }
             #ifdef SKIPLIST_DEBUG_LOGGING
-                // std::cout << "[InsertOrAssign] CAS successful for level " << i << std::endl;
+                // std::cout << "[InsertOrAssign] CAS successful for level " << i << '\n';
             #endif
             }
 
@@ -909,7 +909,7 @@ public:
     iterator find(const KeyType& key_to_find) {
         this->finger_ = this->header;
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Find] Key: " << value_to_log_string(key_to_find) << std::endl;
+        std::cout << "[Find] Key: " << value_to_log_string(key_to_find) << '\n';
     #endif
         if (this->finger_ == nullptr) {
             this->finger_ = header;
@@ -946,13 +946,13 @@ public:
             SkipListNode<T>* next_node = current_search_node->forward[i].load(std::memory_order_acquire);
         #ifdef SKIPLIST_DEBUG_LOGGING
             // This log can be verbose, consider if it's essential for find
-            // std::cout << "[Find] Level " << i << ": current_search_node=" << current_search_node << ", next_node=" << next_node << std::endl;
+            // std::cout << "[Find] Level " << i << ": current_search_node=" << current_search_node << ", next_node=" << next_node << '\n';
         #endif
             while (next_node != nullptr && key_compare_(get_comparable_value(next_node->value), key_to_find)) {
                 current_search_node = next_node;
                 next_node = current_search_node->forward[i].load(std::memory_order_acquire);
             #ifdef SKIPLIST_DEBUG_LOGGING
-                // std::cout << "[Find] Level " << i << " (inner loop): current_search_node=" << current_search_node << ", next_node=" << next_node << std::endl;
+                // std::cout << "[Find] Level " << i << " (inner loop): current_search_node=" << current_search_node << ", next_node=" << next_node << '\n';
             #endif
             }
             if (i == 0) {
@@ -969,12 +969,12 @@ public:
 
         if (found_node != nullptr && !key_compare_(get_comparable_value(found_node->value), key_to_find) && !key_compare_(key_to_find, get_comparable_value(found_node->value))) {
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Find] Found node: " << found_node << " with key " << value_to_log_string(key_to_find) << std::endl;
+            std::cout << "[Find] Found node: " << found_node << " with key " << value_to_log_string(key_to_find) << '\n';
         #endif
             return iterator(found_node);
         } else {
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Find] Key " << value_to_log_string(key_to_find) << " not found." << std::endl;
+            std::cout << "[Find] Key " << value_to_log_string(key_to_find) << " not found." << '\n';
         #endif
             return end();
         }
@@ -983,7 +983,7 @@ public:
     const_iterator find(const KeyType& key_to_find) const {
         this->finger_ = this->header;
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Find const] Key: " << value_to_log_string(key_to_find) << std::endl;
+        std::cout << "[Find const] Key: " << value_to_log_string(key_to_find) << '\n';
     #endif
         // Const version should not modify finger_.
         // However, finger_ is mutable.
@@ -1029,12 +1029,12 @@ public:
 
         if (found_node != nullptr && !key_compare_(get_comparable_value(found_node->value), key_to_find) && !key_compare_(key_to_find, get_comparable_value(found_node->value))) {
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Find const] Found node: " << found_node << " with key " << value_to_log_string(key_to_find) << std::endl;
+            std::cout << "[Find const] Found node: " << found_node << " with key " << value_to_log_string(key_to_find) << '\n';
         #endif
             return const_iterator(found_node);
         } else {
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Find const] Key " << value_to_log_string(key_to_find) << " not found." << std::endl;
+            std::cout << "[Find const] Key " << value_to_log_string(key_to_find) << " not found." << '\n';
         #endif
             return cend(); // Use cend() for const_iterator
         }
@@ -1042,14 +1042,14 @@ public:
 
     void clear() {
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Clear] Clearing all elements from the skiplist." << std::endl;
+        std::cout << "[Clear] Clearing all elements from the skiplist." << '\n';
     #endif
 
         SkipListNode<T>* current = header->forward[0].load(std::memory_order_acquire);
         while (current != nullptr) {
             SkipListNode<T>* next = current->forward[0].load(std::memory_order_relaxed); // Relaxed is fine as we are clearing and no other thread should be modifying this path concurrently in a way that affects us just getting the next pointer for deletion.
         #ifdef SKIPLIST_DEBUG_LOGGING
-            std::cout << "[Clear] Deallocating node with value: " << value_to_log_string(current->value) << " (Key: " << value_to_log_string(get_comparable_value(current->value)) << ")" << std::endl;
+            std::cout << "[Clear] Deallocating node with value: " << value_to_log_string(current->value) << " (Key: " << value_to_log_string(get_comparable_value(current->value)) << ")" << '\n';
         #endif
             deallocate_node(current);
             current = next;
@@ -1068,12 +1068,12 @@ public:
         this->finger_ = header;
 
     #ifdef SKIPLIST_DEBUG_LOGGING
-        std::cout << "[Clear] Skiplist cleared. Current level set to 0." << std::endl;
+        std::cout << "[Clear] Skiplist cleared. Current level set to 0." << '\n';
     #endif
     }
 
     void display() const {
-        std::cout << "\n=== Skip List Structure ===" << std::endl;
+        std::cout << "\n=== Skip List Structure ===" << '\n';
         int localCurrentLevel = currentLevel.load(std::memory_order_acquire);
 
         for (int i = localCurrentLevel; i >= 0; i--) {
@@ -1084,9 +1084,9 @@ public:
                 std::cout << value_to_log_string(node->value) << " -> ";
                 node = node->forward[i].load(std::memory_order_acquire);
             }
-            std::cout << "NULL" << std::endl;
+            std::cout << "NULL" << '\n';
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
 
     void printValues() const {
@@ -1097,7 +1097,7 @@ public:
             std::cout << value_to_log_string(node->value) << " ";
             node = node->forward[0].load(std::memory_order_acquire);
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
 
     bool empty() const {
