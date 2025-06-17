@@ -471,7 +471,7 @@ public:
      */
     void print_debug_info() const {
         std::cout << "Array size: " << size() 
-                  << ", Reference count: " << use_count() << std::endl;
+                  << ", Reference count: " << use_count() << '\n';
     }
     ///@}
 

@@ -65,7 +65,7 @@ namespace std {
 // --- End of MyData Struct and Utilities ---
 
 int main() {
-    std::cout << "--- SkipList with Custom Struct (std::pair<const int, MyData>) Example ---" << std::endl;
+    std::cout << "--- SkipList with Custom Struct (std::pair<const int, MyData>) Example ---" << '\n';
 
     SkipList<std::pair<const int, MyData>> sl;
 
@@ -73,55 +73,55 @@ int main() {
     MyData val2(2, "Bob", 88.0, true);
     MyData val3(3, "Charlie", 92.0, false);
 
-    std::cout << "\nInserting items..." << std::endl;
+    std::cout << "\nInserting items..." << '\n';
     sl.insert({val1.id, val1});
     sl.insert({val2.id, val2});
     sl.insert({val3.id, val3});
     sl.display();
 
-    std::cout << "\nSearching for items..." << std::endl;
-    std::cout << "Search for key 2 (Bob): " << (sl.search({2, MyData()}) ? "Found" : "Not Found") << std::endl;
-    std::cout << "Search for key 4 (Non-existent): " << (sl.search({4, MyData()}) ? "Found" : "Not Found") << std::endl;
+    std::cout << "\nSearching for items..." << '\n';
+    std::cout << "Search for key 2 (Bob): " << (sl.search({2, MyData()}) ? "Found" : "Not Found") << '\n';
+    std::cout << "Search for key 4 (Non-existent): " << (sl.search({4, MyData()}) ? "Found" : "Not Found") << '\n';
 
-    std::cout << "\nUsing find for key 1 (Alice)..." << std::endl;
+    std::cout << "\nUsing find for key 1 (Alice)..." << '\n';
     auto it_alice = sl.find(1);
     if (it_alice != sl.end()) {
-        std::cout << "Found: Key=" << it_alice->first << ", Value=" << value_to_log_string(it_alice->second) << std::endl;
+        std::cout << "Found: Key=" << it_alice->first << ", Value=" << value_to_log_string(it_alice->second) << '\n';
         it_alice->second.name = "Alicia Updated";
         it_alice->second.score = 96.88;
-        std::cout << "Modified Alice's data: " << value_to_log_string(it_alice->second) << std::endl;
+        std::cout << "Modified Alice's data: " << value_to_log_string(it_alice->second) << '\n';
     } else {
-        std::cout << "Key 1 not found." << std::endl;
+        std::cout << "Key 1 not found." << '\n';
     }
     sl.display();
 
-    std::cout << "\nUsing insert_or_assign..." << std::endl;
+    std::cout << "\nUsing insert_or_assign..." << '\n';
     MyData val2_updated(2, "Robert (Bob)", 89.55, true);
     auto result_bob = sl.insert_or_assign({val2_updated.id, val2_updated});
     std::cout << "Key 2 action: " << (result_bob.second ? "Inserted" : "Assigned")
-              << ", Value: " << value_to_log_string(result_bob.first->second) << std::endl;
+              << ", Value: " << value_to_log_string(result_bob.first->second) << '\n';
     sl.display();
 
     MyData val4(4, "David", 75.25, true);
     auto result_david = sl.insert_or_assign({val4.id, val4});
     std::cout << "Key 4 action: " << (result_david.second ? "Inserted" : "Assigned")
-              << ", Value: " << value_to_log_string(result_david.first->second) << std::endl;
+              << ", Value: " << value_to_log_string(result_david.first->second) << '\n';
     sl.display();
 
-    std::cout << "\nIterating through skiplist:" << std::endl;
+    std::cout << "\nIterating through skiplist:" << '\n';
     for (const auto& pair_entry : sl) {
-        std::cout << "Key: " << pair_entry.first << ", Value: " << value_to_log_string(pair_entry.second) << std::endl;
+        std::cout << "Key: " << pair_entry.first << ", Value: " << value_to_log_string(pair_entry.second) << '\n';
     }
 
-    std::cout << "\nRemoving item with key 3 (Charlie)..." << std::endl;
+    std::cout << "\nRemoving item with key 3 (Charlie)..." << '\n';
     sl.remove({3, MyData()});
     sl.display();
 
-    std::cout << "\nClearing skiplist..." << std::endl;
+    std::cout << "\nClearing skiplist..." << '\n';
     sl.clear();
     sl.display();
-    std::cout << "Size after clear: " << sl.size() << std::endl;
+    std::cout << "Size after clear: " << sl.size() << '\n';
 
-    std::cout << "\n--- Example End ---" << std::endl;
+    std::cout << "\n--- Example End ---" << '\n';
     return 0;
 }

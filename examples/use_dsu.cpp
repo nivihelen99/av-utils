@@ -19,7 +19,7 @@ int main() {
         dsu.makeSet(person);
     }
 
-    std::cout << "Initial sets: " << dsu.countSets() << std::endl;
+    std::cout << "Initial sets: " << dsu.countSets() << '\n';
 
     // Form friendships (unions)
     (void)dsu.unionSets("Alice", "Bob");
@@ -27,8 +27,8 @@ int main() {
     (void)dsu.unionSets("Alice", "Charlie"); // Now Alice, Bob, Charlie, David are connected
 
     std::cout << "After forming friendships: " << dsu.countSets() << " groups\n";
-    std::cout << "Alice and David are " << (dsu.connected("Alice", "David") ? "connected" : "not connected") << std::endl;
-    std::cout << "Alice's group size: " << dsu.size("Alice") << std::endl;
+    std::cout << "Alice and David are " << (dsu.connected("Alice", "David") ? "connected" : "not connected") << '\n';
+    std::cout << "Alice's group size: " << dsu.size("Alice") << '\n';
 
     // Print all friendship groups
     auto allSets = dsu.getAllSets();
@@ -38,7 +38,7 @@ int main() {
         for (const auto& person : allSets[i]) {
             std::cout << person << " ";
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
 
     std::cout << "\n2. Fast DSU with integers (Graph algorithms):\n";
@@ -46,16 +46,16 @@ int main() {
     // Test cycle detection
     std::vector<std::pair<int, int>> edges1 = {{0, 1}, {1, 2}, {2, 3}, {3, 4}}; // Requires <vector> and <utility> (for std::pair)
     // <utility> is often implicitly included but good to be aware. disjoint_set_union.h includes <vector>.
-    std::cout << "Graph 1 has cycle: " << (DSUApplications::hasCycle(5, edges1) ? "Yes" : "No") << std::endl;
+    std::cout << "Graph 1 has cycle: " << (DSUApplications::hasCycle(5, edges1) ? "Yes" : "No") << '\n';
 
     std::vector<std::pair<int, int>> edges2 = {{0, 1}, {1, 2}, {2, 0}, {3, 4}};
-    std::cout << "Graph 2 has cycle: " << (DSUApplications::hasCycle(5, edges2) ? "Yes" : "No") << std::endl;
+    std::cout << "Graph 2 has cycle: " << (DSUApplications::hasCycle(5, edges2) ? "Yes" : "No") << '\n';
 
     // Test connected components
     std::cout << "Connected components in graph 1: "
-              << DSUApplications::countConnectedComponents(5, edges1) << std::endl;
+              << DSUApplications::countConnectedComponents(5, edges1) << '\n';
     std::cout << "Connected components in graph 2: "
-              << DSUApplications::countConnectedComponents(5, edges2) << std::endl;
+              << DSUApplications::countConnectedComponents(5, edges2) << '\n';
 
     // Test Kruskal's MST
     std::cout << "\n3. Minimum Spanning Tree (Kruskal's Algorithm):\n";
@@ -74,7 +74,7 @@ int main() {
         std::cout << edge.u << " -- " << edge.v << " (weight: " << edge.weight << ")\n";
         totalWeight += edge.weight;
     }
-    std::cout << "Total MST weight: " << totalWeight << std::endl;
+    std::cout << "Total MST weight: " << totalWeight << '\n';
 
     // Performance test
     std::cout << "\n4. Performance test:\n";
@@ -97,7 +97,7 @@ int main() {
 
     std::cout << "150,000 operations on 100,000 elements took: "
               << duration.count() << " microseconds\n";
-    std::cout << "Final number of sets: " << perfDSU.countSets() << std::endl;
+    std::cout << "Final number of sets: " << perfDSU.countSets() << '\n';
 
     return 0;
 }

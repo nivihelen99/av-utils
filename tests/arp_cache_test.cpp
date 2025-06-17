@@ -217,7 +217,7 @@ TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
     auto current_time = std::chrono::steady_clock::now();
     EXPECT_CALL(*cache_, send_arp_request(ip1_))
         .WillOnce(testing::InvokeWithoutArgs([]() {
-            std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (first call)." << std::endl;
+            std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (first call)." << '\n';
         }));
     cache_->age_entries(current_time);
     testing::Mock::VerifyAndClearExpectations(&(*cache_)); // Restore this
@@ -230,7 +230,7 @@ TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
         current_time += wait_duration + std::chrono::milliseconds(100);
         EXPECT_CALL(*cache_, send_arp_request(ip1_))
             .WillOnce(testing::InvokeWithoutArgs([k]() { // Capture k for unique message
-                std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (loop k=" << k << ")." << std::endl;
+                std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (loop k=" << k << ")." << '\n';
             }));
         cache_->age_entries(current_time);
         testing::Mock::VerifyAndClearExpectations(&(*cache_));

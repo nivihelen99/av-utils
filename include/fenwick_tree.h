@@ -130,7 +130,7 @@ public:
         for (int i = 1; i <= n; i++) {
             std::cout << tree[i] << " ";
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
     
     /**
@@ -143,7 +143,7 @@ public:
         for (int i = 0; i < n; i++) {
             std::cout << get(i) << " ";
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
 };
 

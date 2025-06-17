@@ -29,7 +29,7 @@ NAMED_STRUCT(ImmutablePoint,
     // Point p{10, 20};
     // p.get<0>() = 30;              // Direct modification
     // p.set<"y">(40);               // Using setter
-    // std::cout << "Modified point: " << p << std::endl; // {30, 40}
+    // std::cout << "Modified point: " << p << '\n'; // {30, 40}
     
     // Mixed mutability
     // Person john{1, "John Doe", 30};
@@ -47,7 +47,7 @@ NAMED_STRUCT(ImmutablePoint,
     // ip.set<"x">(300);           // ERROR - immutable field
     
     // But you can still read values
-    // std::cout << "Immutable point: " << ip << std::endl; // Comment this out
+    // std::cout << "Immutable point: " << ip << '\n'; // Comment this out
     // auto [x, y] = ip;  // Structured binding still works - Keep this line
     // (void)x; // Suppress unused variable warning
     // (void)y; // Suppress unused variable warning
@@ -57,9 +57,9 @@ NAMED_STRUCT(ImmutablePoint,
     // Point p2{1, 2};
     // Point p3{3, 4};
     
-    // std::cout << "p1 == p2: " << (p1 == p2) << std::endl; // true
-    // std::cout << "p1 == p3: " << (p1 == p3) << std::endl; // false
-    // std::cout << "p1 < p3: " << (p1 < p3) << std::endl;   // true
+    // std::cout << "p1 == p2: " << (p1 == p2) << '\n'; // true
+    // std::cout << "p1 == p3: " << (p1 == p3) << '\n'; // false
+    // std::cout << "p1 < p3: " << (p1 < p3) << '\n';   // true
     
 //     return 0;
 // }

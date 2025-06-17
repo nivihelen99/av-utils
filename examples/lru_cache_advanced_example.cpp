@@ -7,14 +7,14 @@
 auto expensive_function = make_cached<int, int>([](int x) -> int {
     // Simulate expensive computation
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    std::cout << "Computing " << x << " * " << x << std::endl;
+    std::cout << "Computing " << x << " * " << x << '\n';
     return x * x;
 }, 128);
 
 // Example 2: Using the macro for cleaner syntax
 CACHED_FUNCTION(square_function, int, int, 64, {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    std::cout << "Computing square of " << arg << std::endl;
+    std::cout << "Computing square of " << arg << '\n';
     return arg * arg;
 });
 
@@ -50,12 +50,12 @@ public:
     std::string get_user_data(const std::string& user_id) {
         // Check cache first
         if (auto cached = query_cache_.get(user_id)) {
-            std::cout << "Cache hit for user: " << user_id << std::endl;
+            std::cout << "Cache hit for user: " << user_id << '\n';
             return *cached;
         }
         
         // Simulate database query
-        std::cout << "Database query for user: " << user_id << std::endl;
+        std::cout << "Database query for user: " << user_id << '\n';
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         std::string user_data = "UserData:" + user_id;
         
@@ -72,7 +72,7 @@ public:
         auto stats = query_cache_.get_stats();
         std::cout << "Cache stats - Hits: " << stats.hits 
                   << ", Misses: " << stats.misses 
-                  << ", Hit rate: " << (stats.hit_rate() * 100) << "%" << std::endl;
+                  << ", Hit rate: " << (stats.hit_rate() * 100) << "%" << '\n';
     }
 };
 
@@ -104,47 +104,47 @@ public:
 };
 
 int main() {
-    std::cout << "=== LRU Cache Examples ===" << std::endl;
+    std::cout << "=== LRU Cache Examples ===" << '\n';
     
     // Example 1: Using decorator-like cached function
-    std::cout << "\n1. Decorator-like usage:" << std::endl;
+    std::cout << "\n1. Decorator-like usage:" << '\n';
     auto start = std::chrono::high_resolution_clock::now();
-    std::cout << "First call result: " << expensive_function(5) << std::endl;
+    std::cout << "First call result: " << expensive_function(5) << '\n';
     auto mid = std::chrono::high_resolution_clock::now();
-    std::cout << "Second call result: " << expensive_function(5) << std::endl;
+    std::cout << "Second call result: " << expensive_function(5) << '\n';
     auto end = std::chrono::high_resolution_clock::now();
     
     auto first_duration = std::chrono::duration_cast<std::chrono::milliseconds>(mid - start);
     auto second_duration = std::chrono::duration_cast<std::chrono::microseconds>(end - mid);
     
-    std::cout << "First call took: " << first_duration.count() << "ms" << std::endl;
-    std::cout << "Second call took: " << second_duration.count() << "μs" << std::endl;
+    std::cout << "First call took: " << first_duration.count() << "ms" << '\n';
+    std::cout << "Second call took: " << second_duration.count() << "μs" << '\n';
     
     auto stats = expensive_function.cache_stats();
-    std::cout << "Cache hit rate: " << (stats.hit_rate() * 100) << "%" << std::endl;
+    std::cout << "Cache hit rate: " << (stats.hit_rate() * 100) << "%" << '\n';
     
     // Example 1b: Using macro syntax
-    std::cout << "\n1b. Macro syntax:" << std::endl;
-    std::cout << "square_function(4) = " << square_function(4) << std::endl;
-    std::cout << "square_function(4) = " << square_function(4) << " (cached)" << std::endl;
+    std::cout << "\n1b. Macro syntax:" << '\n';
+    std::cout << "square_function(4) = " << square_function(4) << '\n';
+    std::cout << "square_function(4) = " << square_function(4) << " (cached)" << '\n';
     
     // Example 2: Recursive fibonacci
-    std::cout << "\n2. Recursive Fibonacci with caching:" << std::endl;
+    std::cout << "\n2. Recursive Fibonacci with caching:" << '\n';
     FibonacciCalculator fib_calc;
     
     start = std::chrono::high_resolution_clock::now();
-    std::cout << "fib(40) = " << fib_calc.calculate(40) << std::endl;
+    std::cout << "fib(40) = " << fib_calc.calculate(40) << '\n';
     end = std::chrono::high_resolution_clock::now();
     auto fib_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
-    std::cout << "Calculation took: " << fib_duration.count() << "ms" << std::endl;
-    std::cout << "Cache size: " << fib_calc.cache_size() << std::endl;
+    std::cout << "Calculation took: " << fib_duration.count() << "ms" << '\n';
+    std::cout << "Cache size: " << fib_calc.cache_size() << '\n';
     
     auto fib_stats = fib_calc.get_stats();
-    std::cout << "Fibonacci cache hit rate: " << (fib_stats.hit_rate() * 100) << "%" << std::endl;
+    std::cout << "Fibonacci cache hit rate: " << (fib_stats.hit_rate() * 100) << "%" << '\n';
     
     // Example 3: Database service
-    std::cout << "\n3. Database service with caching:" << std::endl;
+    std::cout << "\n3. Database service with caching:" << '\n';
     DatabaseService db;
     db.get_user_data("user123");  // Cache miss
     db.get_user_data("user123");  // Cache hit
@@ -153,7 +153,7 @@ int main() {
     db.print_cache_stats();
     
     // Example 4: Generic cache wrapper
-    std::cout << "\n4. Generic cache wrapper:" << std::endl;
+    std::cout << "\n4. Generic cache wrapper:" << '\n';
     auto slow_computation = [](const int& x) -> int {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         return x * x * x;
@@ -163,12 +163,12 @@ int main() {
     
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 5; ++i) {
-        std::cout << "compute(" << i << ") = " << cached_computation.get(i) << std::endl;
+        std::cout << "compute(" << i << ") = " << cached_computation.get(i) << '\n';
     }
     mid = std::chrono::high_resolution_clock::now();
     
     // Call again - should be from cache
-    std::cout << "Calling again (should be cached):" << std::endl;
+    std::cout << "Calling again (should be cached):" << '\n';
     for (int i = 0; i < 5; ++i) {
         cached_computation.get(i);
     }
@@ -177,32 +177,32 @@ int main() {
     auto first_round = std::chrono::duration_cast<std::chrono::milliseconds>(mid - start);
     auto second_round = std::chrono::duration_cast<std::chrono::microseconds>(end - mid);
     
-    std::cout << "First round (computing): " << first_round.count() << "ms" << std::endl;
-    std::cout << "Second round (cached): " << second_round.count() << "μs" << std::endl;
+    std::cout << "First round (computing): " << first_round.count() << "ms" << '\n';
+    std::cout << "Second round (cached): " << second_round.count() << "μs" << '\n';
     
     auto wrapper_stats = cached_computation.get_stats();
-    std::cout << "Wrapper cache hit rate: " << (wrapper_stats.hit_rate() * 100) << "%" << std::endl;
+    std::cout << "Wrapper cache hit rate: " << (wrapper_stats.hit_rate() * 100) << "%" << '\n';
     
     // Example 5: Show memory efficiency
-    std::cout << "\n5. Memory management with eviction:" << std::endl;
+    std::cout << "\n5. Memory management with eviction:" << '\n';
     auto memory_test = make_cached<int, std::string>([](int x) -> std::string {
         return "Result_" + std::to_string(x * x);
     }, 3); // Very small cache to demonstrate eviction
     
     for (int i = 0; i < 6; ++i) {
-        std::cout << "memory_test(" << i << ") = " << memory_test(i) << std::endl;
+        std::cout << "memory_test(" << i << ") = " << memory_test(i) << '\n';
     }
     
-    std::cout << "Cache size after 6 insertions (max=3): " << memory_test.cache_size() << std::endl;
+    std::cout << "Cache size after 6 insertions (max=3): " << memory_test.cache_size() << '\n';
     
     // Test that early items were evicted
-    std::cout << "Re-accessing early items (should recompute):" << std::endl;
-    std::cout << "memory_test(0) = " << memory_test(0) << std::endl;
+    std::cout << "Re-accessing early items (should recompute):" << '\n';
+    std::cout << "memory_test(0) = " << memory_test(0) << '\n';
     
     auto final_stats = memory_test.cache_stats();
     std::cout << "Final stats - Hits: " << final_stats.hits 
               << ", Misses: " << final_stats.misses 
-              << ", Evictions: " << final_stats.evictions << std::endl;
+              << ", Evictions: " << final_stats.evictions << '\n';
     
     return 0;
 }

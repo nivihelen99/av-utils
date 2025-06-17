@@ -303,7 +303,7 @@ public:
                       << ", rank=" << rank.at(root) // Rank of the root
                       << ", set_size=" << setSize.at(root) // Size of the set identified by root
                       << " (direct parent in map: " << parent.at(element) << ")"
-                      << std::endl;
+                      << '\n';
         }
     }
 
@@ -543,7 +543,7 @@ public:
                       << ", rank=" << rank[root]
                       << ", set_size=" << setSize[root]
                       << " (direct parent in vector: " << parent[i] << ")"
-                      << std::endl;
+                      << '\n';
         }
     }
 

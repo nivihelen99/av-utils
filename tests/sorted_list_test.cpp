@@ -213,7 +213,7 @@ TEST(SortedListTest, PerformanceTest) {
     for (int i = 0; i < N; ++i) sl.insert(rand() % (N * 2));
     auto end_insert = std::chrono::high_resolution_clock::now();
     auto duration_insert = std::chrono::duration_cast<std::chrono::microseconds>(end_insert - start_insert);
-    std::cout << "[PERF] Inserted " << sl.size() << " (requested " << N << ") elements in " << duration_insert.count() << " microseconds." << std::endl;
+    std::cout << "[PERF] Inserted " << sl.size() << " (requested " << N << ") elements in " << duration_insert.count() << " microseconds." << '\n';
     for (size_t i = 1; i < sl.size(); ++i) ASSERT_LE(sl[i-1], sl[i]);
     auto start_search = std::chrono::high_resolution_clock::now();
     int found_count = 0;
@@ -223,7 +223,7 @@ TEST(SortedListTest, PerformanceTest) {
     }
     auto end_search = std::chrono::high_resolution_clock::now();
     auto duration_search = std::chrono::duration_cast<std::chrono::microseconds>(end_search - start_search);
-    std::cout << "[PERF] Performed " << num_searches << " searches in " << duration_search.count() << " microseconds. Found " << found_count << " elements." << std::endl;
+    std::cout << "[PERF] Performed " << num_searches << " searches in " << duration_search.count() << " microseconds. Found " << found_count << " elements." << '\n';
     EXPECT_GE(sl.size(), N / 2);
 }
 

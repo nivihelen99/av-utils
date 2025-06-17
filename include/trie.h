@@ -391,12 +391,12 @@ public:
 
         std::ofstream output_file(filename);
         if (!output_file.is_open()) {
-            std::cerr << "Error: Could not open file for saving: " << filename << std::endl;
+            std::cerr << "Error: Could not open file for saving: " << filename << '\n';
             return false;
         }
 
         for (const auto& pair : allWordsWithFreq) {
-            output_file << (pair.first.empty() ? "@@EMPTY@@" : pair.first) << " " << pair.second << std::endl;
+            output_file << (pair.first.empty() ? "@@EMPTY@@" : pair.first) << " " << pair.second << '\n';
         }
 
         output_file.close();
@@ -416,7 +416,7 @@ public:
 
         std::ifstream input_file(filename);
         if (!input_file.is_open()) {
-            std::cerr << "Error: Could not open file for loading: " << filename << std::endl;
+            std::cerr << "Error: Could not open file for loading: " << filename << '\n';
             return false;
         }
 
@@ -465,7 +465,7 @@ public:
                     if (node_found_for_freq_set && path_part_remaining.empty() && target_node && target_node->isEndOfWord) {
                         target_node->frequency = freq_from_file;
                     } else {
-                        // std::cerr << "Warning: Could not accurately set frequency for word '" << word_from_file << "' from file." << std::endl;
+                        // std::cerr << "Warning: Could not accurately set frequency for word '" << word_from_file << "' from file." << '\n';
                     }
                 }
             }
@@ -594,7 +594,7 @@ public: // Public section resumes
         for (const auto& word : allWords) {
             std::cout << word << " ";
         }
-        std::cout << std::endl;
+        std::cout << '\n';
     }
 
 private:

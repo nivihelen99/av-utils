@@ -120,11 +120,11 @@ TEST(SkipListTest, BasicIntOperations) {
 
 // TEST(SkipListTest, BasicIntOperations_MinimalCrashDebug) { // Commented out
 //     SkipList<int> sl;
-//     std::cout << "Minimal Test: Inserting 3" << std::endl;
+//     std::cout << "Minimal Test: Inserting 3" << '\n';
 //     sl.insert(3);
-//     std::cout << "Minimal Test: Searching 3" << std::endl;
+//     std::cout << "Minimal Test: Searching 3" << '\n';
 //     bool found = sl.search(3);
-//     std::cout << "Minimal Test: Searched 3, found=" << found << std::endl;
+//     std::cout << "Minimal Test: Searched 3, found=" << found << '\n';
 //     EXPECT_TRUE(found);
 // }
 

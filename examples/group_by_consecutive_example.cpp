@@ -6,7 +6,7 @@
 
 // Example 1: Basic usage with pairs, similar to the requirement spec
 void example_basic() {
-    std::cout << "--- Example 1: Basic Usage ---" << std::endl;
+    std::cout << "--- Example 1: Basic Usage ---" << '\n';
     std::vector<std::pair<char, int>> data = {
         {'a', 1}, {'a', 2}, {'b', 3}, {'b', 4}, {'a', 5}
     };
@@ -20,14 +20,14 @@ void example_basic() {
         for (const auto& item : group_pair.second) {
             std::cout << "{'" << item.first << "', " << item.second << "} ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]" << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 // Example 2: Grouping integers by their value
 void example_integers() {
-    std::cout << "--- Example 2: Grouping Integers ---" << std::endl;
+    std::cout << "--- Example 2: Grouping Integers ---" << '\n';
     std::vector<int> numbers = {1, 1, 1, 2, 2, 3, 1, 1, 4, 4, 4, 4};
 
     auto groups = utils::group_by_consecutive(numbers.begin(), numbers.end(), [](int val) {
@@ -39,14 +39,14 @@ void example_integers() {
         for (int item : group_pair.second) {
             std::cout << item << " ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]" << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 // Example 3: Grouping strings by their first character
 void example_strings_first_char() {
-    std::cout << "--- Example 3: Grouping Strings by First Character ---" << std::endl;
+    std::cout << "--- Example 3: Grouping Strings by First Character ---" << '\n';
     std::vector<std::string> words = {"apple", "apricot", "banana", "blueberry", "cherry", "fig", "grape"};
 
     auto groups = utils::group_by_consecutive(words, [](const std::string& s) {
@@ -58,14 +58,14 @@ void example_strings_first_char() {
         for (const auto& item : group_pair.second) {
             std::cout << std::quoted(item) << " ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]" << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 // Example 4: Empty input
 void example_empty() {
-    std::cout << "--- Example 4: Empty Input ---" << std::endl;
+    std::cout << "--- Example 4: Empty Input ---" << '\n';
     std::vector<std::pair<char, int>> data = {};
 
     auto groups = utils::group_by_consecutive(data, [](const auto& p) {
@@ -73,16 +73,16 @@ void example_empty() {
     });
 
     if (groups.empty()) {
-        std::cout << "Resulting groups vector is empty, as expected." << std::endl;
+        std::cout << "Resulting groups vector is empty, as expected." << '\n';
     } else {
-        std::cout << "Error: Expected empty groups vector for empty input." << std::endl;
+        std::cout << "Error: Expected empty groups vector for empty input." << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 // Example 5: All items with the same key
 void example_same_key() {
-    std::cout << "--- Example 5: All Items Same Key ---" << std::endl;
+    std::cout << "--- Example 5: All Items Same Key ---" << '\n';
     std::vector<std::pair<char, int>> data = {
         {'x', 10}, {'x', 20}, {'x', 30}
     };
@@ -96,9 +96,9 @@ void example_same_key() {
         for (const auto& item : group_pair.second) {
             std::cout << "{'" << item.first << "', " << item.second << "} ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]" << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 // Example 6: Custom struct and key function
@@ -119,7 +119,7 @@ auto get_category(const MyStruct& s) -> const std::string& {
 }
 
 void example_custom_struct() {
-    std::cout << "--- Example 6: Custom Struct and Key Function ---" << std::endl;
+    std::cout << "--- Example 6: Custom Struct and Key Function ---" << '\n';
     std::vector<MyStruct> items = {
         {1, "A", 10.1}, {2, "A", 12.5}, {3, "B", 20.0},
         {4, "A", 15.3}, {5, "A", 18.7}, {6, "B", 22.1}
@@ -132,9 +132,9 @@ void example_custom_struct() {
         for (const auto& item : group_pair.second) {
             std::cout << item << " ";
         }
-        std::cout << "]" << std::endl;
+        std::cout << "]" << '\n';
     }
-    std::cout << std::endl;
+    std::cout << '\n';
 }
 
 
