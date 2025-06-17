@@ -654,7 +654,7 @@ TEST_F(LRUCacheTest, PutPerfectForwarding) {
     MoveOnlyValue val3(30);
     std::vector<std::pair<int, MoveOnlyValue>> evicted_items;
     LRUCache<int, MoveOnlyValue> cache_with_evict(1,
-        [&](const int& k, MoveOnlyValue& v_ref){ // Note: callback value is V&
+        [&](const int& k, const MoveOnlyValue& v_ref){ // Note: callback value is V&
             // To move out of callback, we'd need V&& or by-value.
             // The current LRUCache on_evict takes (const K&, const V&).
             // For move-only types, this means we can't move *from* the callback's value argument
