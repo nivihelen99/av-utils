@@ -60,7 +60,7 @@ public:
         // Move to front (MRU position)
         move_to_front(it->second);
         ++stats_.hits;
-        return it->second->second;
+        return std::move(it->second->second);
     }
 
     // Template version for perfect forwarding
