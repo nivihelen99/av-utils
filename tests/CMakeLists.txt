@@ -29,9 +29,17 @@ foreach(FILE_PATH ${ALL_TEST_FILES})
     get_filename_component(CURRENT_FILENAME ${FILE_PATH} NAME)
     list(FIND STANDALONE_TEST_FILES ${CURRENT_FILENAME} IS_STANDALONE)
     if(IS_STANDALONE EQUAL -1) # If not found in STANDALONE_TEST_FILES
-        list(APPEND RUN_TESTS_SOURCES_LIST ${FILE_PATH}) # Append the full path
+        # Ensure we don't add the new test file if it's already handled by glob and then explicitly added
+        if(NOT "${CURRENT_FILENAME}" STREQUAL "group_by_consecutive_test.cpp")
+            list(APPEND RUN_TESTS_SOURCES_LIST ${FILE_PATH}) # Append the full path
+        endif()
     endif()
 endforeach()
+
+# Explicitly add the new test file to the run_tests sources
+# This is somewhat redundant if the glob catches it and it's not in STANDALONE_TEST_FILES,
+# but ensures it's included as per specific instructions for the subtask.
+list(APPEND RUN_TESTS_SOURCES_LIST "${CMAKE_CURRENT_SOURCE_DIR}/group_by_consecutive_test.cpp")
 
 add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 
