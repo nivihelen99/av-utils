@@ -7,6 +7,9 @@ project(VariantVectorTests CXX)
 # find_package(GTest REQUIRED) # This is not needed and can conflict with FetchContent
 include(GoogleTest) # For gtest_discover_tests
 
+# Find threads package for std::mutex, std::thread, etc.
+find_package(Threads REQUIRED)
+
 # Define sources for the combined 'run_tests' target
 # Glob all *_test.cpp files, then exclude those meant to be standalone.
 # All .cpp files in tests/ are considered potential test sources.
@@ -38,8 +41,8 @@ add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 # CMAKE_CURRENT_SOURCE_DIR is tests/
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
-# Link GTest to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter)
+# Link GTest and Threads to the test executable
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter Threads::Threads)
 # GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
 # GTest::gmock should provide the necessary gmock functionalities.
 
@@ -54,7 +57,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock)
+    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock Threads::Threads)
     if(TEST_NAME STREQUAL "counter_test")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::Counter)
     endif()

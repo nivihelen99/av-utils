@@ -36,11 +36,13 @@ foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
         set(EXECUTABLE_NAME "example_${BASE_NAME}")
         add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
         # Link common libraries if needed by examples
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter)
+        # Added Threads::Threads for examples that might use threading features from components like LRUCache
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter Threads::Threads)
     endif()
 endforeach()
 
 # --- SPSC Queue Example ---
+# This example already links Threads::Threads, so the change above is consistent.
 add_executable(use_spsc_example examples/use_spsc.cpp)
 target_include_directories(use_spsc_example PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
