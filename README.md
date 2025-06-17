@@ -1,774 +1,92 @@
-# OptimizedTCAM Library
+This repository contains a collection of various C++ data structures and libraries. Many of these components are header-only, allowing for easy integration into your projects. The repository also includes examples and tests to demonstrate usage and verify functionality.
 
-The `OptimizedTCAM` is a C++ library designed for high-speed packet classification. It provides functionalities for adding rules with wildcard matching, performing lookups, and managing the rule set through features like atomic batch updates, conflict detection, shadow/redundant rule elimination, rule aging, and backup/restore capabilities. The library also includes observability features to inspect rule statistics, memory usage, and lookup performance.
+## Highlighted Categories/Components
 
-## Core Concepts
+This section provides an overview of some of the key categories and components available in this repository.
 
-### Rule Definition
-Rules are defined using the `OptimizedTCAM::WildcardFields` struct, which specifies criteria for source/destination IP addresses (with masks), source/destination port ranges (exact, wildcard, or min-max range), protocol (with mask), and Ethernet type (with mask). Each rule is associated with a priority and an action.
+### Core Data Structures
+This category includes fundamental and advanced data structures for efficient data storage and retrieval. It features various tree and list structures (e.g., `skiplist.h`, `trie.h`, `fenwick_tree.h`), associative containers (e.g., `bimap.h`, `dict.h`), and specialized arrays (e.g., `persist_array.h`).
 
-The primary method for adding individual rules is `add_rule_with_ranges(const WildcardFields& fields, int priority, int action)`. This method handles the internal representation, including management of port range IDs, sorts rules by priority and specificity, and rebuilds optimized lookup structures.
+### Caching Libraries
+These components offer various caching mechanisms to improve performance by storing frequently accessed data. A key example is the `lru_cache.h`, which implements a Least Recently Used (LRU) cache.
 
-## Key Features & API
+### Networking Utilities
+This category includes utilities specifically designed for networking applications, such as MAC address manipulation (`MacAddress.h`, `mac_parse.h`), ARP and ND cache implementations (`arp_cache.h`, `nd_cache.h`), and topic-based filtering (`topic_filter.h`).
 
-### Atomic Batch Updates
-- `update_rules_atomic(const RuleUpdateBatch& batch)`: Allows for adding and/or deleting multiple rules in a single, atomic operation. This is the preferred method for bulk changes to ensure TCAM consistency and trigger a single rebuild of optimized lookup structures. Rule operations (add or delete) are defined using the `OptimizedTCAM::RuleOperation` struct and its nested `Type` enum.
+### Language/Utility Extensions
+These components extend C++ with useful general-purpose utilities and language-like features. This includes containers with default values (`default_dict.h`), value/error type handling (`expected.h`), named struct/tuple utilities (`named_struct.h`, `named_tuple.h`), thread-safe queues (`spsc.h`), and undo/redo functionality (`undo.h`).
 
-### Conflict Detection
-- `detect_conflicts() const`: Identifies rules within the TCAM that have overlapping matching conditions but different actions. Returns a `std::vector` of `OptimizedTCAM::Conflict` objects, where each object details the indices of the conflicting rule pair.
+## General Usage
 
-### Shadow Rule Elimination
-- `eliminate_shadowed_rules(bool dry_run)`: Detects and can deactivate rules that are completely covered (shadowed) by higher-priority (or more specific, if priorities are equal) rules that have different actions.
-  - If `dry_run` is `true`, it only reports the IDs of rules that would be identified as shadowed.
-  - If `dry_run` is `false`, it deactivates these shadowed rules and then triggers a rebuild of the optimized lookup structures.
+Most components in this repository are header-only. To use them, simply include the relevant `.h` file in your C++ source code. For example, to use the `bimap` component, you would add:
 
-### Redundant Rule Compaction
-- `compact_redundant_rules(bool trigger_rebuild = false)`: Detects rules that are identical to, or subsets of, higher-priority (or more specific) rules that share the *same* action.
-  - Marks such redundant rules as inactive.
-  - If `trigger_rebuild` is `true`, it rebuilds optimized lookup structures, which effectively removes the inactive rules from active consideration.
-
-### Rule Aging
-- `age_rules(std::chrono::steady_clock::duration max_age, AgeCriteria criteria)`: Marks rules as inactive based on their age, according to the specified `criteria`. This method only marks rules as inactive and does not automatically trigger a rebuild of optimized structures.
-  - `OptimizedTCAM::AgeCriteria::CREATION_TIME`: Ages out rules whose `creation_time` is older than `max_age` relative to the current time.
-  - `OptimizedTCAM::AgeCriteria::LAST_HIT_TIME`: Ages out rules whose `last_hit_timestamp` is older than `max_age` relative to the current time. Rules that have never been hit (i.e., `last_hit_timestamp` is at epoch) are not aged out by this specific criterion.
-
-### Backup and Restore
-- `backup_rules(std::ostream& stream) const`: Serializes all currently active rules to the provided `std::ostream`. The format is a simple line-based text representation, with each rule's fields space-separated. Port ranges are encoded with mode characters (`E` for exact, `W` for wildcard, `R` for range).
-- `restore_rules(std::istream& stream)`: Clears all existing rules and port range definitions from the TCAM. It then parses rule data from the provided `std::istream` (expected to be in the format generated by `backup_rules`) and adds these rules to the TCAM using an atomic batch operation. Returns `true` on successful parsing and restoration, `false` otherwise (leaving the TCAM empty).
-
-### Observability & Statistics
-The TCAM provides several methods to inspect its state and performance:
-- `get_rule_stats(uint64_t rule_id) const`: Returns an `std::optional<RuleStats>` containing detailed statistics for a specific rule if found (hit count, timestamps, active status, etc.).
-- `get_all_rule_stats() const`: Returns a `std::vector<RuleStats>` for all rules currently in the TCAM structure (both active and inactive).
-- `get_rule_utilization() const`: Returns a `RuleUtilizationMetrics` struct, providing insights into rule usage (total, active, inactive, hit counts, percentage hit).
-- `get_lookup_latency_metrics() const`: Returns an `AggregatedLatencyMetrics` struct with min, max, and average lookup latency information gathered from `lookup_single` calls.
-- `get_memory_usage_stats() const`: Provides an approximation of memory usage by different internal TCAM components.
-- `lookup_single(const std::vector<uint8_t>& packet, std::vector<std::string>* debug_trace_log = nullptr) const`: The primary lookup function. It can optionally populate a vector of strings with a detailed trace of the lookup process, including which internal lookup strategies were attempted and rule matching steps.
-
-# ARPCache (`arp_cache.h`)
-
-The `ARPCache` class implements an ARP (Address Resolution Protocol) cache for IPv4. It's responsible for mapping IP addresses to MAC addresses within a local network segment. The implementation includes standard ARP entry management, as well as advanced features like gratuitous ARP detection, proxy ARP, and fast failover using backup MAC addresses.
-
-## Features & API
-
-### Core Functionality
-- **Adding Entries**: `add_entry(uint32_t ip, const std::array<uint8_t, 6>& mac)` adds or updates an ARP entry.
-- **Lookup**: `lookup(uint32_t ip, std::array<uint8_t, 6>& mac_out)` attempts to resolve an IP address to a MAC address. Returns `true` if found and MAC is considered usable (REACHABLE or DELAY state after failover), `false` otherwise (triggering an ARP request for INCOMPLETE or STALE entries without immediate failover).
-- **Aging**: `age_entries()` periodically called to transition entries through states (e.g., REACHABLE -> STALE, INCOMPLETE probe timeouts).
-
-### Gratuitous ARP & IP Conflict Detection
-- When `add_entry` is called for an IP address already in the cache but with a *different* MAC address, a warning is logged to `stderr`. This behavior helps in detecting potential IP address conflicts on the network, often signaled by gratuitous ARP packets from a new host claiming an existing IP.
-
-### Proxy ARP
-- The cache can be configured to act as a proxy ARP agent for specified subnets.
-- `add_proxy_subnet(uint32_t prefix, uint32_t mask)`: Configures a subnet (e.g., `192.168.10.0` with mask `255.255.255.0`) for which the device will answer ARP requests with its own MAC address.
-- **Use Case**: Allows devices in different physical segments (but same logical subnet from the requester's view) to communicate, or for a router to answer on behalf of hosts on another network. When a lookup occurs for an IP within a configured proxy subnet and the IP is not in the cache, the `ARPCache` will return the device's own MAC address.
-
-### Fast Failover
-- `ARPEntry` can store a list of backup MAC addresses for a given IP.
-- `add_backup_mac(uint32_t ip, const std::array<uint8_t, 6>& backup_mac)`: Adds a backup MAC address for an existing IP entry.
-- **Failover Logic**:
-    - **In `lookup`**: If the primary MAC address for an IP is in a STALE, PROBE, or DELAY state (indicating potential unreachability), and backup MACs are available, the cache will immediately promote the first backup MAC to be the primary. The old primary MAC is demoted to the backup list. The new primary is marked as REACHABLE. This provides rapid failover.
-    - **In `age_entries`**: If an entry in the INCOMPLETE or PROBE state fails its maximum number of ARP request probes (`MAX_PROBES`), the cache will attempt to switch to the next available backup MAC. The new backup becomes the primary and is marked REACHABLE. If no backups are available, the entry is removed.
-
-### ARP Entry States
-An ARP entry can be in one of the following states:
-- `INCOMPLETE`: Resolution is in progress; an ARP request has been sent.
-- `REACHABLE`: The MAC address has been recently confirmed.
-- `STALE`: Reachability is unknown (exceeded `REACHABLE_TIME`); will verify on next send.
-- `PROBE`: Actively sending ARP requests to verify a previously known MAC address (typically after STALE or DELAY).
-- `DELAY`: A short period after STALE before sending the first probe, allowing upper layers to use the MAC while probing starts.
-
-### Usage Example (Conceptual)
 ```cpp
-#include "arp_cache.h" // Assuming ARPCache is in this header
-#include <iostream>
-
-// Assume device_mac, ip_to_resolve, primary_mac, backup_mac are defined
-// std::array<uint8_t, 6> device_mac = {...};
-// ARPCache cache(device_mac);
-// cache.add_entry(ip_to_resolve, primary_mac);
-// cache.add_backup_mac(ip_to_resolve, backup_mac);
-
-// ... time passes, primary_mac becomes STALE or fails probes ...
-
-// std::array<uint8_t, 6> resolved_mac;
-// if (cache.lookup(ip_to_resolve, resolved_mac)) {
-//   // resolved_mac might be backup_mac if failover occurred
-//   std::cout << "Resolved MAC: ... " << std::endl;
-// }
+#include "bimap.h"
 ```
+Ensure that your build system (e.g., CMake, Makefile) is configured to correctly resolve the include paths for these headers. For example, you might add the directory containing these headers to your include search paths.
 
-# NDCache (`nd_cache.h`)
+The `examples/` directory contains various code samples that demonstrate how to integrate and use these components. These examples can serve as a practical guide for getting started.
 
-The `NDCache` class implements a Neighbor Discovery (ND) cache for IPv6. Neighbor Discovery Protocol (NDP, RFC 4861) is used by IPv6 nodes to discover other nodes on the same link, determine their link-layer addresses, find routers, and maintain reachability information. This cache supports key ND mechanisms including SLAAC, DAD, and fast failover.
+## Building and Testing
 
-## Features & API
-
-### Core IPv6 Neighbor Discovery Principles
-- **Address Resolution**: Similar to ARP for IPv4, ND resolves IPv6 addresses to link-layer addresses (MAC addresses). Uses Neighbor Solicitation (NS) and Neighbor Advertisement (NA) messages.
-- **Router Discovery**: Nodes discover routers on the link using Router Solicitation (RS) and Router Advertisement (RA) messages.
-- **Reachability Tracking (NUD)**: Neighbor Unreachability Detection ensures that paths to neighbors are still valid.
-
-### SLAAC (Stateless Address Autoconfiguration)
-- `process_router_advertisement(const RAInfo& ra_info)`: Processes information from Router Advertisements.
-- If an RA contains prefix information with the 'Autonomous' (A) flag set, `NDCache` uses this prefix to generate a global IPv6 address.
-- `configure_address_slaac(const PrefixEntry& prefix_entry)`: Combines the received prefix (typically /64) with an interface identifier (generated using EUI-64 from the device's MAC address) to form a complete IPv6 address.
-- DAD is then performed on this newly generated address before it can be used.
-
-### DAD (Duplicate Address Detection)
-- **Importance**: Before an IPv6 address (link-local or global via SLAAC/DHCPv6) can be assigned to an interface, DAD must be performed to ensure no other node on the link is already using that address.
-- `start_dad(const ipv6_addr_t& address_to_check)`: Initiates DAD for a given address.
-- **Process**:
-    - The cache sends Neighbor Solicitation messages for the address being checked (target address = address being checked, source address = unspecified ::).
-    - If another node replies with a Neighbor Advertisement for that address, a duplicate is detected, and DAD fails (`process_dad_failure`).
-    - If an NS is received for the same address from another node also performing DAD (source address ::), DAD also fails.
-    - If no conflicting NAs or NSs are received after a certain number of probes, DAD succeeds (`process_dad_success`), and the address is considered unique and usable.
-- DAD is automatically performed for the link-local address upon `NDCache` initialization and for addresses generated via SLAAC.
-
-### Fast Failover
-- Similar to `ARPCache`, `NDEntry` can store a list of backup MAC addresses for an IPv6 neighbor.
-- `add_backup_mac(const ipv6_addr_t& ipv6, const mac_addr_t& backup_mac)`: Adds a backup MAC for an IPv6 entry.
-- **Failover Logic**:
-    - **In `lookup`**: If the primary MAC for an IPv6 neighbor is STALE, PROBE, or DELAY, and backups exist, the first backup is promoted to primary, marked REACHABLE, and the old primary is demoted.
-    - **In `age_entries`**: If NUD fails for the primary MAC (INCOMPLETE or PROBE states exceed max solicitations), a backup MAC is promoted if available. Otherwise, the entry is removed.
-
-### ND Entry States
-An ND entry can be in one of these states (similar to ARP, defined in RFC 4861):
-- `INCOMPLETE`: Address resolution is in progress (NS sent).
-- `REACHABLE`: Forward path recently confirmed (e.g., by NA).
-- `STALE`: Reachability unknown (exceeded `reachable_time`); will verify on next send.
-- `DELAY`: Waiting before sending the first probe to a STALE neighbor.
-- `PROBE`: Actively sending unicast NS probes to verify reachability of a STALE neighbor.
-- `PERMANENT`: Manually configured entry, does not age out.
-
-### Usage Example (Conceptual)
-```cpp
-#include "nd_cache.h" // Assuming NDCache is in this header
-#include <iostream>
-
-// Assume device_mac, router_ra_data, neighbor_ip, primary_mac, backup_mac are defined
-// mac_addr_t device_mac = {...};
-// ExampleNDCache cache(device_mac); // ExampleNDCache might have mock send functions
-
-// // DAD for link-local runs on construction & age_entries calls
-// while(!cache.is_link_local_dad_completed()) { cache.age_entries(); /* sleep */ }
-
-// // Simulate receiving an RA
-// // NDCache::RAInfo ra_data = parse_my_ra_packet_data(...);
-// // cache.process_router_advertisement(ra_data);
-// // This would trigger SLAAC and DAD for new global addresses.
-// // Run cache.age_entries() to drive DAD for SLAAC addresses.
-
-// // Adding a neighbor and backup
-// // cache.add_entry(neighbor_ip, primary_mac, NDCacheState::REACHABLE);
-// // cache.add_backup_mac(neighbor_ip, backup_mac);
-
-// // ... time passes, primary_mac becomes STALE or fails NUD ...
-
-// // mac_addr_t resolved_mac;
-// // if (cache.lookup(neighbor_ip, resolved_mac)) {
-// //   // resolved_mac might be backup_mac if failover occurred
-// // }
-```
-
-# PersistentArray (persist_array.h)
-
-## Introduction
-`PersistentArray` is a C++ template class that implements a persistent array with copy-on-write (CoW) semantics. It allows for efficient versioning, where modifications create new versions of the array without altering existing ones. Underlying data is shared between versions whenever possible to save memory and copying time, with actual data duplication (copy-on-write) occurring only when a shared version is modified.
-
-The `PersistentArray` is header-only, provided in `persist_array.h`.
-
-## Key Features
-- **Copy-on-Write (CoW)**: Data is shared between array versions until a modification occurs. This optimizes memory usage by avoiding unnecessary data duplication.
-- **Persistence**: Original versions of the array remain unchanged when copies are modified, preserving history.
-- **Efficient Version Creation**:
-    - Creating a new reference to an existing version (e.g., copy construction or assignment) is an O(1) operation.
-    - Modifications that require a new data segment (because the current data is shared) incur an O(N) cost for copying the data, where N is the number of elements.
-- **Standard Array Operations**: Supports common array operations like `set` (element modification), `get` (element access via `operator[]` or `at()`), `push_back`, `pop_back`, `insert`, `erase`, `size`, and `empty`.
-- **In-Place Operations**: Offers optional in-place modification methods (e.g., `set_inplace`, `push_back_inplace`). These modify the current array instance directly but will perform a copy-on-write if the underlying data is shared, thus preserving other versions.
-- **Iterator Support**: Provides `const_iterator` (compatible with `std::vector<T>::const_iterator`) for easy traversal using range-based for loops or standard `begin()`/`end()` patterns.
-- **Templated**: `PersistentArray<T>` can be used with any element type `T` that is at least CopyConstructible. For operations like `insert` or `erase` that modify the collection's structure, `T` should meet the full requirements for elements in `std::vector`.
-- **Memory Management**: Utilizes `std::shared_ptr` for automatic memory management of the underlying data segments, simplifying resource handling.
-
-## Getting Started
-
-To use `PersistentArray`, include the header file:
-```cpp
-#include "persist_array.h"
-```
-
-### Basic Construction Examples:
-- **Default Constructor (empty array)**:
-  ```cpp
-  PersistentArray<int> arr_empty;
-  ```
-- **Constructor with Size and Initial Value**:
-  ```cpp
-  PersistentArray<std::string> arr_sized(5, "hello"); // Creates an array of 5 strings, all "hello"
-  ```
-- **Constructor with Initializer List**:
-  ```cpp
-  PersistentArray<double> arr_init = {1.0, 2.5, 3.0}; // Creates an array with {1.0, 2.5, 3.0}
-  ```
-
-## Usage Examples
-
-### Element Access and Modification (Copy-on-Write)
-```cpp
-#include "persist_array.h"
-#include <iostream>
-
-int main() {
-    PersistentArray<int> v1 = {10, 20, 30};
-    std::cout << "v1[1]: " << v1[1] << std::endl; // Output: v1[1]: 20
-
-    PersistentArray<int> v2 = v1.set(1, 25); // v1 remains unchanged due to CoW
-
-    // v1 is still {10, 20, 30}
-    // v2 is {10, 25, 30}
-    std::cout << "v1[1] after v2.set: " << v1[1] << std::endl; // Output: v1[1] after v2.set: 20
-    std::cout << "v2[1]: " << v2[1] << std::endl;             // Output: v2[1]: 25
-    return 0;
-}
-```
-
-### Push Back and Iteration
-```cpp
-#include "persist_array.h"
-#include <iostream>
-
-int main() {
-    PersistentArray<char> v_char = {'a', 'b'};
-    PersistentArray<char> v_char_pushed = v_char.push_back('c');
-    // v_char remains {'a', 'b'}
-    // v_char_pushed is {'a', 'b', 'c'}
-
-    std::cout << "Iterating v_char_pushed: ";
-    for (char c : v_char_pushed) {
-        std::cout << c << " ";
-    }
-    std::cout << std::endl; // Output: Iterating v_char_pushed: a b c
-    return 0;
-}
-```
-
-### In-Place Modification
-```cpp
-#include "persist_array.h"
-#include <iostream>
-
-int main() {
-    PersistentArray<int> arr_inplace = {1, 2, 3};
-    // arr_inplace.use_count() is likely 1 here if no other copies exist.
-    std::cout << "arr_inplace before: ";
-    for(int x : arr_inplace) std::cout << x << " ";
-    std::cout << "(use_count: " << arr_inplace.use_count() << ")" << std::endl;
-
-    arr_inplace.set_inplace(0, 100); // Modifies arr_inplace directly as it's unique
-    // arr_inplace is now {100, 2, 3}
-    std::cout << "arr_inplace after set_inplace: ";
-    for(int x : arr_inplace) std::cout << x << " ";
-    std::cout << "(use_count: " << arr_inplace.use_count() << ")" << std::endl;
-
-
-    PersistentArray<int> arr_shared1 = {5, 6, 7};
-    PersistentArray<int> arr_shared2 = arr_shared1; // Data is now shared
-    std::cout << "arr_shared1 use_count (after sharing with arr_shared2): " << arr_shared1.use_count() << std::endl;
-
-    arr_shared2.set_inplace(1, 600); // CoW occurs for arr_shared2
-                                     // arr_shared1 remains {5, 6, 7}
-                                     // arr_shared2 becomes {5, 600, 7}
-
-    std::cout << "arr_shared1 after arr_shared2.set_inplace: ";
-    for(int x : arr_shared1) std::cout << x << " "; // Output: 5 6 7
-    std::cout << "(use_count: " << arr_shared1.use_count() << ")" << std::endl;
-
-    std::cout << "arr_shared2 after its set_inplace: ";
-    for(int x : arr_shared2) std::cout << x << " "; // Output: 5 600 7
-    std::cout << "(use_count: " << arr_shared2.use_count() << ")" << std::endl;
-    return 0;
-}
-```
-
-### Undo Functionality Example (Conceptual)
-The persistent nature of the array makes implementing undo/redo history straightforward.
-```cpp
-#include "persist_array.h"
-#include <vector>
-#include <string>
-#include <iostream>
-
-int main() {
-    std::vector<PersistentArray<std::string>> history;
-    PersistentArray<std::string> current_doc = {"Initial", "content"};
-    history.push_back(current_doc);
-    std::cout << "Version 0: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
-
-
-    current_doc = current_doc.set(1, "edited content");
-    history.push_back(current_doc);
-    std::cout << "Version 1: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
-
-    current_doc = current_doc.push_back("!");
-    history.push_back(current_doc);
-    std::cout << "Version 2 (current): "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
-    // current_doc is {"Initial", "edited content", "!"}
-
-    // Undo:
-    if (history.size() > 1) { // Ensure there's a previous state
-      history.pop_back(); // Remove current state from history log
-      current_doc = history.back(); // Revert to previous state
-    }
-    std::cout << "After Undo 1: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
-    // current_doc is now {"Initial", "edited content"}
-
-    // Undo again:
-    if (history.size() > 1) {
-      history.pop_back();
-      current_doc = history.back();
-    }
-    std::cout << "After Undo 2: "; for(const auto& s : current_doc) std::cout << s << " "; std::cout << std::endl;
-    // current_doc is now {"Initial", "content"}
-    return 0;
-}
-```
-
-## Performance Characteristics (Summary)
-- **Version Creation (Reference Copy)**: O(1) for operations like `PersistentArray<T> v2 = v1;` or assignment, as only a `std::shared_ptr` is copied.
-- **Version Creation (Modification with CoW)**: O(N) for data copying if the underlying data is shared (i.e., `use_count > 1`), plus the cost of the specific modification operation (e.g., `set` is O(1) after copy, `insert`/`erase` can be O(N) after copy). If data is already unique (`use_count == 1`), complexity is that of the underlying `std::vector` operation.
-- **Element Access (`operator[]`, `at`)**: O(1), same as `std::vector`.
-- **Memory Usage**: Scales with the number of unique data segments. Versions that share the same underlying data do not duplicate that data in memory. Each unique version requires memory for its `std::vector` and the `std::shared_ptr` control block. Each instance of `PersistentArray` holds a `std::shared_ptr`.
-- **Thread Safety**: Please refer to the Doxygen comments in `persist_array.h` (specifically, the class-level "Thread Safety" note) for details. In summary, `const` operations are thread-safe for concurrent reads. Modifying operations on the same `PersistentArray` instance require external synchronization.
-
-## API Reference
-Comprehensive API documentation is available as Doxygen-style comments within the `include/persist_array.h` header file.
-Key operations include:
-- **Constructors**: Default, size-based, value-based, initializer list, copy, move.
-- **Element Access**: `operator[]`, `at()`.
-- **Copy-on-Write Modifications**: `set()`, `push_back()`, `pop_back()`, `insert()`, `erase()`.
-- **In-Place Modifications**: `set_inplace()`, `push_back_inplace()`, `pop_back_inplace()`.
-- **Iterators**: `begin()`, `end()` (providing `const_iterator`).
-- **Utilities**: `size()`, `empty()`, `clear()`.
-- **Comparison**: `operator==`, `operator!=`.
-- **Debug**: `use_count()`.
-
-## Dependencies
-- C++11 (or a later standard).
-- Standard Library headers: `<vector>`, `<memory>`, `<stdexcept>`, `<iostream>` (for `print_debug_info`), `<cassert>`.
-- No external library dependencies.
-
-# C++ Data Structures: Skip List and Trie (Existing Content)
-
-## Introduction
-This repository provides header-only C++ implementations of two advanced data structures: a highly concurrent Skip List and a feature-rich Radix Trie, in addition to the OptimizedTCAM library.
-The Skip List and Trie are designed for educational purposes, performance exploration, and practical application in scenarios requiring efficient data management and complex search capabilities.
-
-## Directory Structure
-
-The project is organized as follows:
-
-- \`CMakeLists.txt\`: The main CMake file to configure and build the project.
-- \`include/\`: Contains the header files for the data structures (\`skiplist.h\`, \`trie.h\`, \`policy_radix.h\`). Since these are header-only libraries, you primarily interact with these files.
-- \`examples/\`: Contains example source files (\`example.cpp\`, \`use_policy.cpp\`, \`use_skip.cpp\`) demonstrating how to use the data structures.
-- \`tests/\`: Contains test source files and related data.
-  - \`tests/CMakeLists.txt\`: CMake file specifically for building and running tests using Google Test.
-  - \`tests/trie_test.txt\`: Example test data for the Trie.
-- \`.gitignore\`: Specifies intentionally untracked files that Git should ignore.
-
-## Features Overview
-- **Templated Design**: The Skip List (`SkipList<T>`) is fully templated, allowing storage of various data types, including key-value pairs.
-- **Concurrency (Skip List)**: The Skip List is designed with lock-free principles using `std::atomic` and Compare-And-Swap operations. (Important concurrency considerations and current limitations are detailed in its section).
-- **Efficient Operations**: Both structures offer logarithmic or better average-case time complexity for search, insertion, and deletion.
-- **Advanced Search (Trie)**: The Radix Trie supports exact match, prefix search, suffix search, wildcard search (`?`, `*`), and fuzzy search (Levenshtein distance).
-- **Radix Trie Implementation**: The Trie compresses paths by storing strings on edges, making it space-efficient for certain datasets.
-- **Iterators**: Both data structures provide STL-compatible forward iterators for easy traversal, including support for range-based for loops.
-- **Memory Management (Skip List)**: Includes a custom memory pool for efficient node allocation and reuse in the Skip List.
-- **File I/O (Trie)**: The Trie implementation supports saving to and loading from files.
-
-## How to Compile & Run
-
-This project uses CMake to manage the build process. The data structures themselves are header-only and located in the \`include/\` directory. Examples and tests are provided to demonstrate usage and verify functionality.
+The examples and tests included in this repository are built using CMake.
 
 ### Prerequisites
-- A C++17 compliant compiler (e.g., GCC, Clang, MSVC)
-- CMake (version 3.10 or higher recommended)
 
-### Building the Project (Examples and Tests)
+*   A C++17 compliant compiler (e.g., GCC, Clang, MSVC).
+*   CMake (version 3.10 or higher recommended).
 
-1.  **Clone the repository:**
-    \`\`\`bash
-    git clone <repository_url>
-    cd <repository_directory>
-    \`\`\`
+### Building Examples and Tests
 
-2.  **Configure with CMake:**
-    It's recommended to build in a separate directory (e.g., \`build/\`):
-    \`\`\`bash
+Follow these steps to configure and build the project:
+
+1.  Create a build directory (e.g., `build`) and navigate into it:
+    ```bash
     mkdir build
     cd build
+    ```
+
+2.  Configure the project using CMake:
+    ```bash
     cmake ..
-    \`\`\`
-    This will configure the project and generate build files for your environment (e.g., Makefiles on Linux/macOS, Visual Studio solution on Windows).
+    ```
+    *Note: You might need to specify your compiler if it's not the system default, e.g., `cmake .. -DCMAKE_C_COMPILER=gcc-10 -DCMAKE_CXX_COMPILER=g++-10`.*
 
-3.  **Compile:**
-    \`\`\`bash
+3.  Compile the project:
+    ```bash
     cmake --build .
-    \`\`\`
-    Or, if using Makefiles (after \`cmake ..\`):
-    \`\`\`bash
+    ```
+    Alternatively, on Unix-like systems, you can use `make`:
+    ```bash
     make
-    # To build specific examples:
-    # make arp_cache_example
-    # make nd_cache_example
-    \`\`\`
-    This will compile the example executables (e.g., \`trie_example\`, \`arp_cache_example\`, \`nd_cache_example\`) and the test runner (\`run_tests\`). The executables will typically be found in the \`build/\` directory.
+    ```
 
-### Running Examples
+### Running Examples and Tests
 
-After successful compilation, you can run the examples from the build directory:
-\`\`\`bash
-./trie_example
-./policy_example
-./skip_example
-./arp_cache_example
-./nd_cache_example
-\`\`\`
-*(Note: On Windows, they would be \`.exe\` files, e.g., \`./trie_example.exe\`)*
+After a successful build, the compiled executables for examples and tests will be located in the `build` directory (or a subdirectory within it, depending on the CMake configuration).
 
-### Running Tests
+*   **Running Examples**: Navigate to the directory containing the example executable and run it directly, for example:
+    ```bash
+    ./examples/example_bimap
+    ```
+    *(The exact path and name will depend on how examples are structured and named in the `CMakeLists.txt` file.)*
 
-The tests are compiled into an executable named \`run_tests\`. You can run it from the build directory:
-\`\`\`bash
-./run_tests
-\`\`\`
-Or, using CTest (which is configured by CMake):
-\`\`\`bash
-ctest
-\`\`\`
-CTest will provide a summary of test results.
+*   **Running Tests**: If the project uses CTest (CMake's testing framework), you can run all tests from the build directory:
+    ```bash
+    ctest
+    ```
+    Alternatively, individual test executables might be produced, which can be run directly:
+    ```bash
+    ./tests/run_all_tests
+    ```
+    *(The exact command will depend on how tests are defined in the `CMakeLists.txt` file.)*
 
-## Skip List (`skiplist.h`)
+## Contributing and License
 
-A Skip List is a probabilistic data structure that allows for efficient search, insertion, and deletion operations, typically with an average time complexity of O(log n). It uses multiple levels of linked lists to "skip" over elements, achieving performance comparable to balanced trees while being conceptually simpler and often more amenable to concurrent access.
+### Contributing
 
-### Features & API
+Contributions are welcome! Please feel free to open an issue to report bugs, suggest features, or ask questions. If you'd like to contribute code, please fork the repository and submit a pull request with your changes.
 
-- **Templated `SkipList<T>`**: Can store various data types. For custom types, ensure comparison operators (`<`, `==`) are defined, or use `std::pair` for key-based comparison.
-- **Key-Value Storage**: Natively supports `std::pair<const Key, Value>` as `T`. Comparisons are automatically performed on `Key`. `Key` and `Value` types must be default-constructible if used with the memory pool's default node initialization.
-- **Core Operations**:
-    - `void insert(T value)`: Inserts a value (or key-value pair).
-    - `bool search(T value)`: Searches for a value (or by key if `T` is a pair).
-    - `bool remove(T value)`: Removes a value (or by key if `T` is a pair).
-    - `int size() const`: Returns the number of elements.
-- **Utility Functions**:
-    - `T kthElement(int k) const`: Finds the k-th smallest element (0-indexed). Throws `std::out_of_range` or `std::invalid_argument`.
-    - `std::vector<T> rangeQuery(T minVal, T maxVal) const`: Returns elements in the range `[minVal, maxVal]` (inclusive, comparison by key if `T` is a pair).
-- **Iterators**:
-    - Provides STL-compatible forward iterators:
-        - `iterator begin()`, `iterator end()`
-        - `const_iterator cbegin() const`, `const_iterator cend() const`
-        - `const_iterator begin() const`, `const_iterator end() const`
-    - Supports range-based for loops for easy traversal.
-- **Bulk Operations**:
-    - `void insert_bulk(const std::vector<T>& values)`: Inserts multiple elements. Values are sorted internally first.
-    - `size_t remove_bulk(const std::vector<T>& values)`: Removes multiple elements.
-    - **Note**: These bulk operations are *not atomic* for the entire set of values; they perform individual insertions/deletions.
-- **Performance Optimizations**:
-    - **Memory Pool**: A custom memory manager pre-allocates nodes in blocks and reuses them via a lock-free stack and thread-local caches to reduce allocation overhead.
-    - **Finger Search**: A `thread_local` hint (`thread_local_finger`) remembers the last search position to potentially speed up subsequent localized searches.
+### License
 
-### Usage Examples
-
-#### Basic Integer List
-
-```cpp
-#include "skiplist.h"
-#include <iostream>
-
-int main() {
-    SkipList<int> sl;
-    sl.insert(30);
-    sl.insert(10);
-    sl.insert(20);
-    sl.insert(15);
-
-    sl.display(); // Shows the layered structure
-
-    std::cout << "Search 20: " << (sl.search(20) ? "Found" : "Not found") << std::endl;
-    std::cout << "Search 25: " << (sl.search(25) ? "Found" : "Not found") << std::endl;
-
-    sl.remove(20);
-    std::cout << "Search 20 after removal: " << (sl.search(20) ? "Found" : "Not found") << std::endl;
-    sl.printValues(); // Prints all values in sorted order
-    return 0;
-}
-```
-
-#### Iterator Usage
-
-```cpp
-#include "skiplist.h"
-#include <iostream>
-#include <vector>
-
-int main() {
-    SkipList<int> sl;
-    std::vector<int> data = {50, 10, 80, 30, 60};
-    for (int x : data) {
-        sl.insert(x);
-    }
-
-    std::cout << "Iterating with iterators: ";
-    for (SkipList<int>::iterator it = sl.begin(); it != sl.end(); ++it) {
-        std::cout << *it << " ";
-    }
-    std::cout << std::endl;
-
-    std::cout << "Iterating with range-based for: ";
-    for (int val : sl) {
-        std::cout << val << " ";
-    }
-    std::cout << std::endl;
-    return 0;
-}
-```
-
-#### Key-Value Pair Usage
-
-```cpp
-#include "skiplist.h"
-#include <iostream>
-#include <string>
-#include <utility> // For std::pair
-
-int main() {
-    SkipList<std::pair<const int, std::string>> kv_sl;
-
-    kv_sl.insert({10, "apple"});
-    kv_sl.insert({5, "banana"});
-    kv_sl.insert({20, "cherry"});
-
-    // Search by key (value part of pair can be dummy for search/remove)
-    std::cout << "Search key 5: ";
-    if (kv_sl.search({5, ""})) {
-        // To get the actual value, you'd iterate or use a more complex find method
-        // (Currently, search only returns bool. For full K-V, you might adapt search or use iterators)
-        // For now, let's iterate to find it if simple search confirms existence
-        for (const auto& p : kv_sl) {
-            if (p.first == 5) {
-                std::cout << "Found, value: " << p.second;
-                break;
-            }
-        }
-        std::cout << std::endl;
-    } else {
-        std::cout << "Not found" << std::endl;
-    }
-
-    std::cout << "Iterating through key-value pairs: ";
-    for (const auto& p : kv_sl) {
-        std::cout << "<" << p.first << ":" << p.second << "> ";
-    }
-    std::cout << std::endl;
-
-    kv_sl.display(); // Shows structure with <key:value> format
-    return 0;
-}
-```
-
-### Concurrency Notes
-
-The Skip List implementation in `skiplist.h` is designed with concurrency in mind, utilizing `std::atomic` operations and Compare-And-Swap (CAS) loops for its core logic (`insert()`, `remove()`, `search()`). This aims for a lock-free behavior where threads can operate simultaneously without acquiring traditional locks for most parts of the data structure traversal and modification.
-
-- **Atomic Operations**: Node pointers (`forward`) and the list's `currentLevel` are managed using `std::atomic`.
-- **Random Level Generation**: The `randomLevel()` method, crucial for determining a new node's height, uses `thread_local` random number generators to avoid mutex contention, enhancing scalability.
-- **Memory Pool**: The custom memory pool uses a lock-free stack (`atomic_free_list_head_`) for managing freed nodes, contributing to concurrent performance.
-
-**IMPORTANT WARNINGS & CONSIDERATIONS:**
-
-1.  **Safe Memory Reclamation (SMR)**:
-    - The current implementation **lacks a proper Safe Memory Reclamation (SMR) mechanism** (e.g., Hazard Pointers, Epoch-Based Reclamation, Quiescent State-Based Reclamation).
-    - In the `remove()` operation, once a node is unlinked, its memory is returned to the pool by calling its destructor and then reconstructing it as a "dummy" node for reuse.
-    - **Risk**: If other threads are concurrently traversing the list and hold pointers to this node *just before or during its unlinking and deallocation*, they might subsequently access freed or altered memory. This can lead to use-after-free errors, data corruption, or crashes.
-    - **Status**: Without SMR, the `remove()` operation (and by extension `remove_bulk()`) is **not fully safe** for general concurrent use where nodes are frequently removed and memory is reused. It's safer in scenarios with infrequent removals or where external synchronization guarantees no thread is accessing a node during its removal.
-
-2.  **ABA Problem**:
-    - The Compare-And-Swap (CAS) loops used for linking and unlinking nodes are susceptible to the ABA problem. If a node's pointer `A` is read, then the node is removed, its memory recycled, and a new node allocated at the same address `A` which then becomes part of the list structure again, a CAS operation might incorrectly succeed thinking the state hasn't changed.
-    - SMR techniques or tagged pointers are typical solutions to mitigate the ABA problem, which are not implemented here.
-
-This Skip List is an excellent tool for understanding concurrent data structures but use in production systems with high concurrency on deletion paths would require integrating a robust SMR strategy.
-
-## Trie (`trie.h`)
-
-A Trie, also known as a prefix tree, is a tree-like data structure that stores a dynamic set of strings, typically used for efficient retrieval of words based on their prefixes. This repository implements a **Radix Trie** (also similar to a Patricia Trie), where edges can represent sequences of characters rather than just single characters. This compresses paths and makes the Trie more space-efficient for certain datasets.
-
-### Features & API
-
-- **Radix Trie Structure**: Edges represent strings, compressing common non-branching paths.
-- **Case Sensitivity**: Configurable via the constructor `Trie(bool caseSensitive = true)`. If `false`, all words are normalized to lowercase internally.
-- **Core Operations**:
-    - `void insert(const std::string& word)`: Inserts a word. Handles splitting and merging edges as necessary for the Radix structure.
-    - `bool search(const std::string& word) const`: Checks if an exact word exists in the Trie.
-    - `bool deleteWord(const std::string& word)`: Deletes a word, including merging edges to maintain Radix properties if a node becomes redundant.
-- **Prefix-based Operations**:
-    - `bool startsWith(const std::string& prefix) const`: Checks if any word in the Trie starts with the given prefix.
-    - `std::vector<std::string> getWordsWithPrefix(const std::string& prefix) const`: Returns all words that start with the given prefix.
-- **Suffix-based Operations (via an internal reversed Trie)**:
-    - `bool endsWith(const std::string& suffix) const`: Checks if any word ends with the given suffix.
-    - `std::vector<std::string> getWordsEndingWith(const std::string& suffix) const`: Returns all words ending with the given suffix. This is efficiently implemented by querying an internal, automatically maintained reversed Trie.
-- **Advanced Search Capabilities**:
-    - `std::vector<std::string> wildcardSearch(const std::string& pattern) const`: Performs a wildcard search. Supports `?` to match any single character and `*` to match any sequence of characters (including empty).
-    - `std::vector<std::pair<std::string, int>> fuzzySearch(const std::string& query_word, int max_k) const`: Finds words within a specified Levenshtein distance (`max_k`) of the `query_word`. Returns pairs of `(word, distance)`.
-- **Iterators**:
-    - Provides STL-compatible forward iterators:
-        - `Iterator begin() const`, `Iterator end() const`
-    - Supports range-based for loops for lexicographical traversal of all words.
-- **File I/O**:
-    - `bool saveToFile(const std::string& filename) const`: Saves all words and their frequencies (if tracked) to a file.
-    - `bool loadFromFile(const std::string& filename)`: Loads words (and their frequencies) from a file into the Trie. Note: The `frequency` member in `TrieNode` is updated on `insert`, but `getWordFrequency()` is currently marked as non-functional in the source. The save/load functions do attempt to preserve frequency.
-- **Word Frequency**:
-    - `TrieNode` includes a `frequency` member, incremented on `insert`. `saveToFile` stores this. `loadFromFile` attempts to restore it. (As noted, `getWordFrequency(word)` is not fully implemented).
-
-### Usage Examples
-
-#### Basic Trie Operations
-
-```cpp
-#include "trie.h"
-#include <iostream>
-#include <vector>
-
-int main() {
-    Trie t(false); // Case-insensitive Trie
-
-    t.insert("apple");
-    t.insert("apricot");
-    t.insert("application");
-    t.insert("banana");
-
-    std::cout << "Search 'apple': " << (t.search("Apple") ? "Found" : "Not found") << std::endl;
-    std::cout << "Search 'apply': " << (t.search("apply") ? "Found" : "Not found") << std::endl;
-    std::cout << "Starts with 'app': " << (t.startsWith("App") ? "Yes" : "No") << std::endl;
-
-    std::cout << "Words starting with 'app':" << std::endl;
-    std::vector<std::string> words = t.getWordsWithPrefix("app");
-    for (const std::string& word : words) {
-        std::cout << "- " << word << std::endl;
-    }
-
-    t.deleteWord("apple");
-    std::cout << "Search 'apple' after deletion: " << (t.search("apple") ? "Found" : "Not found") << std::endl;
-    return 0;
-}
-```
-
-#### Iterator Usage
-
-```cpp
-#include "trie.h"
-#include <iostream>
-
-int main() {
-    Trie t;
-    t.insert("cat");
-    t.insert("catch");
-    t.insert("catalog");
-    t.insert("car");
-
-    std::cout << "Words in Trie (using iterators): ";
-    for (const std::string& word : t) { // Range-based for loop
-        std::cout << word << " ";
-    }
-    std::cout << std::endl;
-    return 0;
-}
-```
-
-#### Advanced Search Examples
-
-```cpp
-#include "trie.h"
-#include <iostream>
-#include <vector>
-
-int main() {
-    Trie t;
-    t.insert("apple");
-    t.insert("apply");
-    t.insert("apricot");
-    t.insert("banana");
-    t.insert("bandana");
-    t.insert("boron");
-
-    std::cout << "Wildcard search 'ap?le':" << std::endl;
-    std::vector<std::string> wildcard_results = t.wildcardSearch("ap?le");
-    for (const std::string& word : wildcard_results) {
-        std::cout << "- " << word << std::endl;
-    }
-
-    std::cout << "Wildcard search 'ba*a':" << std::endl;
-    wildcard_results = t.wildcardSearch("ba*a");
-    for (const std::string& word : wildcard_results) {
-        std::cout << "- " << word << std::endl;
-    }
-
-    std::cout << "Fuzzy search for 'aple' (k=1):" << std::endl;
-    std::vector<std::pair<std::string, int>> fuzzy_results = t.fuzzySearch("aple", 1);
-    for (const auto& p : fuzzy_results) {
-        std::cout << "- " << p.first << " (distance " << p.second << ")" << std::endl;
-    }
-    return 0;
-}
-```
-
-#### Suffix and File I/O Examples
-
-```cpp
-#include "trie.h"
-#include <iostream>
-#include <vector>
-
-int main() {
-    Trie t;
-    t.insert("application");
-    t.insert("education");
-    t.insert("creation");
-
-    std::cout << "Ends with 'tion': " << (t.endsWith("tion") ? "Yes" : "No") << std::endl;
-    std::vector<std::string> suffix_words = t.getWordsEndingWith("tion");
-    std::cout << "Words ending with 'tion':" << std::endl;
-    for (const std::string& word : suffix_words) {
-        std::cout << "- " << word << std::endl;
-    }
-
-    // File I/O
-    std::string filename = "trie_data.txt";
-    std::cout << "Saving trie to " << filename << std::endl;
-    t.saveToFile(filename);
-
-    Trie loaded_trie;
-    std::cout << "Loading trie from " << filename << std::endl;
-    loaded_trie.loadFromFile(filename);
-
-    std::cout << "Words in loaded trie:" << std::endl;
-    for (const std::string& word : loaded_trie) {
-        std::cout << "- " << word << std::endl;
-    }
-    return 0;
-}
-```
-
-### Notes
-
-- The Radix Trie structure optimizes space by compressing chains of single-child nodes into single edges labeled with strings.
-- The suffix search capability is facilitated by an internal, automatically managed reversed version of the Trie, providing efficient `endsWith()` and `getWordsEndingWith()` queries.
-- While `TrieNode` tracks `frequency`, the direct `getWordFrequency(word)` method is noted in source as incomplete for Radix Trie. However, frequencies are inserted and saved/loaded.
-
-## Contributing
-
-Contributions to this repository are welcome! If you find any issues or have suggestions for improvements, please feel free to open an issue or submit a pull request.
-
-## License
-
-This project is currently unlicensed. Please refer back for updates on licensing information.
+This project is currently unlicensed. This means you are free to use, modify, and distribute the code, but there are no warranty protections or formal permissions granted.
