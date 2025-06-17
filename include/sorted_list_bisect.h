@@ -161,6 +161,48 @@ public:
         data_.erase(data_.begin() + index);
     }
 
+    template <typename... Args>
+    iterator emplace(Args&&... args) {
+        T value_to_insert(std::forward<Args>(args)...);
+        auto it_pos_non_const = std::lower_bound(data_.begin(), data_.end(), value_to_insert, comp_);
+        auto inserted_it_non_const = data_.insert(it_pos_non_const, std::move(value_to_insert));
+        return std::next(cbegin(), std::distance(data_.begin(), inserted_it_non_const));
+    }
+
+    iterator erase(const_iterator pos) {
+        // Precondition: pos must be a valid dereferenceable iterator.
+        // pos != cend()
+        auto dist = std::distance(cbegin(), pos);
+        auto it_non_const = data_.begin() + dist;
+        auto next_it_non_const = data_.erase(it_non_const);
+        return std::next(cbegin(), std::distance(data_.begin(), next_it_non_const));
+    }
+
+    iterator erase(const_iterator first, const_iterator last) {
+        // Precondition: [first, last) must be a valid range.
+        auto dist_first = std::distance(cbegin(), first);
+        auto it_non_const_first = data_.begin() + dist_first;
+        auto dist_last = std::distance(cbegin(), last);
+        auto it_non_const_last = data_.begin() + dist_last;
+
+        auto next_it_non_const = data_.erase(it_non_const_first, it_non_const_last);
+        return std::next(cbegin(), std::distance(data_.begin(), next_it_non_const));
+    }
+
+    void pop_front() {
+        if (empty()) {
+            throw std::logic_error("SortedList::pop_front: container is empty");
+        }
+        data_.erase(data_.begin());
+    }
+
+    void pop_back() {
+        if (empty()) {
+            throw std::logic_error("SortedList::pop_back: container is empty");
+        }
+        data_.pop_back();
+    }
+
     // Search operations
 
     /**
@@ -181,6 +223,14 @@ public:
     size_type upper_bound(const T& value) const {
         auto it = std::upper_bound(data_.begin(), data_.end(), value, comp_);
         return std::distance(data_.begin(), it);
+    }
+
+    const_iterator find(const T& value) const {
+        const_iterator it = std::lower_bound(data_.begin(), data_.end(), value, comp_);
+        if (it != data_.end() && !comp_(value, *it)) {
+            return it;
+        }
+        return data_.end();
     }
 
     /**
