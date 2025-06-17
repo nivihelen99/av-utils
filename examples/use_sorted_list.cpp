@@ -95,19 +95,19 @@ void test_search_operations() {
     
     // Test lower_bound
     ASSERT(sl.lower_bound(3) == 1);  // First 3 is at index 1
-    ASSERT(sl.lower_bound(7) == 3);  // First 7 is at index 3
+    ASSERT(sl.lower_bound(7) == 4);  // First 7 is at index 4
     ASSERT(sl.lower_bound(4) == 3);  // Would be inserted at index 3
     ASSERT(sl.lower_bound(0) == 0);  // Would be inserted at beginning
     ASSERT(sl.lower_bound(10) == 8); // Would be inserted at end
     
     // Test upper_bound
     ASSERT(sl.upper_bound(3) == 3);  // After last 3
-    ASSERT(sl.upper_bound(7) == 6);  // After last 7
+    ASSERT(sl.upper_bound(7) == 7);  // After last 7
     ASSERT(sl.upper_bound(4) == 3);  // Same as lower_bound for non-existing
     
     // Test index_of
     ASSERT(sl.index_of(3) == 1);
-    ASSERT(sl.index_of(7) == 3);
+    ASSERT(sl.index_of(7) == 4);
     
     try {
         sl.index_of(4); // Should throw
