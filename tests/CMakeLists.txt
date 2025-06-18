@@ -50,7 +50,7 @@ add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
 # Link GTest and Threads to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter Threads::Threads)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter cpp_library::lazy_sorted_merger Threads::Threads)
 # GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
 # GTest::gmock should provide the necessary gmock functionalities.
 
@@ -74,6 +74,10 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     endif()
     if(TEST_FILE STREQUAL "variant_vector_test.cpp" OR TEST_FILE STREQUAL "use_variant_vector.cpp")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::variant_vector)
+    endif()
+    get_filename_component(CURRENT_TEST_FILENAME ${TEST_FILE} NAME) # Get just the filename.cpp
+    if(CURRENT_TEST_FILENAME STREQUAL "lazy_sorted_merger_test.cpp")
+        target_link_libraries(${TEST_NAME} PRIVATE cpp_library::lazy_sorted_merger)
     endif()
     # For use_variant_vector, gtest_discover_tests might not be appropriate if it has no tests.
     # However, to keep the loop simple, we call it. It will just find 0 tests for that target.
