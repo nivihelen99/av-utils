@@ -30,7 +30,10 @@ public:
         : max_size_(other.max_size_),
           cache_items_list_(std::move(other.cache_items_list_)),
           cache_items_map_(std::move(other.cache_items_map_)),
-          on_evict_(std::move(other.on_evict_)) {}
+          on_evict_(std::move(other.on_evict_)),
+          stats_(std::move(other.stats_)) { // Move stats
+            other.stats_ = Stats{}; // Reset moved-from stats
+          }
 
     LRUCache& operator=(LRUCache&& other) noexcept {
         if (this != &other) {
@@ -42,6 +45,8 @@ public:
             cache_items_list_ = std::move(other.cache_items_list_);
             cache_items_map_ = std::move(other.cache_items_map_);
             on_evict_ = std::move(other.on_evict_);
+            stats_ = std::move(other.stats_); // Move stats
+            other.stats_ = Stats{}; // Reset moved-from stats
         }
         return *this;
     }
@@ -60,7 +65,13 @@ public:
         // Move to front (MRU position)
         move_to_front(it->second);
         ++stats_.hits;
-        return std::move(it->second->second);
+        if constexpr (std::is_copy_constructible_v<Value>) {
+            return it->second->second; // Copy for copyable types
+        } else {
+            // For move-only types, this will move from the list,
+            // leaving the list's version in a moved-from state.
+            return std::move(it->second->second);
+        }
     }
 
     // Template version for perfect forwarding
