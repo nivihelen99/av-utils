@@ -25,6 +25,13 @@ target_include_directories(Counter INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+# --- LazySortedMerger Library (Header-Only) ---
+add_library(lazy_sorted_merger INTERFACE)
+add_library(cpp_library::lazy_sorted_merger ALIAS lazy_sorted_merger) # Modern CMake alias
+target_include_directories(lazy_sorted_merger INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 # Enable testing (should be global)
 enable_testing()
 
@@ -37,7 +44,7 @@ foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
         add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
         # Link common libraries if needed by examples
         # Added Threads::Threads for examples that might use threading features from components like LRUCache
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter Threads::Threads)
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter cpp_library::lazy_sorted_merger Threads::Threads)
     endif()
 endforeach()
 
