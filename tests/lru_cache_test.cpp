@@ -389,14 +389,15 @@ TEST_F(LRUCacheTest, CacheMoveSemantics) {
     // We are primarily testing that the *data* moved.
     // If we want to check stats moved, get them from cache2 *before* any 'get' operations on cache2.
     // The current LRUCache implementation moves the stats object.
-    EXPECT_EQ(stats1.hits, stats2.hits); // Should be 0
+    // stats1.hits is 0. cache2 started with 0 hits, then 4 get() calls were made.
+    EXPECT_EQ(4, stats2.hits);
     EXPECT_EQ(stats1.misses, stats2.misses); // Should be 0
     EXPECT_EQ(stats1.evictions, stats2.evictions); // Should be 0
 
     // A get operation on cache2 to ensure it's functional
-    cache2.get(1);
+    cache2.get(1); // This is the 5th get operation on cache2.
     stats2 = cache2.get_stats();
-    EXPECT_EQ(1, stats2.hits);
+    EXPECT_EQ(5, stats2.hits);
 
 
     // Move Assignment
@@ -429,10 +430,11 @@ TEST_F(LRUCacheTest, CacheMoveSemantics) {
     EXPECT_EQ("thirty", cache4.get(30).value());
 
     auto stats4 = cache4.get_stats();
-    // stats3_post_get had 1 hit. The get(10) on cache4 makes it 2 hits.
-    EXPECT_EQ(stats3_post_get.hits + 1, stats4.hits);
-    EXPECT_EQ(stats3_post_get.misses, stats4.misses);
-    EXPECT_EQ(stats3_post_get.evictions, stats4.evictions);
+    // stats3_post_get had 1 hit. cache4 started with 1 hit due to move.
+    // Then, 6 get() calls were made on cache4. So, total 1+6=7 hits.
+    EXPECT_EQ(stats3_post_get.hits + 6, stats4.hits);
+    EXPECT_EQ(stats3_post_get.misses, stats4.misses); // Misses are not affected by these gets
+    EXPECT_EQ(stats3_post_get.evictions, stats4.evictions); // Evictions are not affected
 
 
     // Test that moved-from cache is usable
