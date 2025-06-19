@@ -159,7 +159,7 @@ TEST_F(IDAllocatorTest, ResetTest) {
 }
 
 TEST_F(IDAllocatorTest, EdgeCaseTest) {
-    IDAllocator<int> single_allocator_obj(5, 5);
+    IDAllocator<int> single_allocator_obj(5, 5); 
     EXPECT_EQ(single_allocator_obj.capacity(), 1);
 
     std::optional<int> id = single_allocator_obj.allocate();
@@ -170,8 +170,8 @@ TEST_F(IDAllocatorTest, EdgeCaseTest) {
     EXPECT_EQ(single_allocator_obj.available(), 0);
 
     std::optional<int> id_overflow = single_allocator_obj.allocate();
-
-    bool has_val = id_overflow.has_value();
+              
+    bool has_val = id_overflow.has_value(); 
     // Previous GTest assertion EXPECT_FALSE(id_overflow.has_value()); showed anomalous behavior.
     // Logging has confirmed that id_overflow.has_value() is indeed false at this point.
     // The following check is to programmatically verify this without relying on the problematic GTest macro.
@@ -192,7 +192,7 @@ TEST_F(IDAllocatorTest, EdgeCaseTest) {
     EXPECT_TRUE(single_allocator_obj.is_allocated(5));
     EXPECT_EQ(single_allocator_obj.used(), 1);
     id_overflow = single_allocator_obj.allocate(); // Should fail as 5 is reserved
-    EXPECT_FALSE(id_overflow.has_value());
+    EXPECT_FALSE(id_overflow.has_value()); 
     single_allocator_obj.reset();
 
     IDAllocator<int> allocator(1, 3);
@@ -355,7 +355,7 @@ TEST_F(IDAllocatorTest, AllocateRangeExceedCapacity) {
 
     // next_available_id_ is now 6. Remaining sequential capacity is 10 - 6 + 1 = 5.
     std::optional<int> range3_start = allocator.allocate_range(6);
-    EXPECT_FALSE(range3_start.has_value());
+    EXPECT_FALSE(range3_start.has_value()); 
 }
 
 TEST_F(IDAllocatorTest, AllocateRangeZero) {
@@ -370,7 +370,7 @@ TEST_F(IDAllocatorTest, AllocateRangeOneDefersToAllocate) {
     allocator.allocate(); // Allocates 1
     allocator.allocate(); // Allocates 2
     allocator.allocate(); // Allocates 3 (next_available_id_ is 4 after these)
-
+    
     // Ensure they were allocated before freeing
     ASSERT_TRUE(allocator.is_allocated(1));
     ASSERT_TRUE(allocator.is_allocated(2)); // ID 2 remains allocated
@@ -404,7 +404,7 @@ TEST_F(IDAllocatorTest, AllocateRangeBlockedByUsedId) {
     // V1 allocate_range only tries from next_available_id_ (which is 1).
     // The range 1-5 would include reserved ID 3.
     std::optional<int> range = allocator.allocate_range(5);
-    EXPECT_FALSE(range.has_value());
+    EXPECT_FALSE(range.has_value()); 
 }
 
 
@@ -440,11 +440,11 @@ TEST_F(IDAllocatorTest, ReleaseRangeErrorConditions) {
     allocator.allocate_range(5); // Allocates 1-5. Used: {1,2,3,4,5}. Next: 6.
 
     // Range end (1+6-1 = 6) is within max_id (10), but ID 6 is not allocated.
-    EXPECT_FALSE(allocator.release_range(1, 6));
+    EXPECT_FALSE(allocator.release_range(1, 6)); 
     EXPECT_EQ(allocator.used(), 5); // State should not change
 
     // Range start out of bounds
-    EXPECT_FALSE(allocator.release_range(0, 5));
+    EXPECT_FALSE(allocator.release_range(0, 5)); 
     EXPECT_EQ(allocator.used(), 5);
 
     // Range end out of bounds (actual end 10+5-1 = 14 > 10)
@@ -464,7 +464,7 @@ TEST_F(IDAllocatorTest, ReleaseRangeErrorConditions) {
     EXPECT_FALSE(allocator.is_allocated(1));
 
     // Try to release already partially released range
-    EXPECT_FALSE(allocator.release_range(1, 3));
+    EXPECT_FALSE(allocator.release_range(1, 3)); 
     EXPECT_EQ(allocator.used(), 2);
 
     // Try to release a range where some IDs are allocated, some not (ID 6 not allocated)

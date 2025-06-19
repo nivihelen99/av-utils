@@ -24,15 +24,15 @@ public:
             IDType id_from_freed_pool = freed_ids_.top();
             // Temporarily pop to check. If it's unusable, it stays popped.
             // If it's usable, we'll use it. If not, the loop continues or exits.
-            freed_ids_.pop();
-
+            freed_ids_.pop(); 
+            
             if (used_ids_.count(id_from_freed_pool)) {
                 // This ID was in freed_ids_ but also in used_ids_ (e.g. reserved after being freed).
                 // It's not actually available from the free pool. Continue to check next from freed_ids_.
                 continue;
             }
             // This ID from freed_ids_ is genuinely available.
-            used_ids_.insert(id_from_freed_pool);
+            used_ids_.insert(id_from_freed_pool); 
             return id_from_freed_pool;
         }
 
@@ -54,7 +54,7 @@ public:
         if (id < min_id_ || id > max_id_) {
             return false; // ID out of range
         }
-
+        
         if (used_ids_.erase(id)) { // erase returns number of elements removed
             freed_ids_.push(id);
             return true;
@@ -123,7 +123,7 @@ public:
         if (available_count_in_sequence < static_cast<IDType>(n)) {
             return std::nullopt; // Not enough IDs from range_start to max_id_
         }
-
+        
         // Now it's safe to calculate range_end
         range_end = range_start + static_cast<IDType>(n - 1);
 
@@ -156,7 +156,7 @@ public:
                  return std::nullopt; // Should not happen, means prior logic error
             }
         }
-
+        
         // Update next_available_id_ only if the allocated range started at the old next_available_id_
         // For this V1, current_search_start is always next_available_id_
         if (range_end == max_id_) { // If we allocated up to the very end
@@ -164,7 +164,7 @@ public:
         } else {
              next_available_id_ = range_end + static_cast<IDType>(1);
         }
-
+        
         return range_start;
     }
 
@@ -183,9 +183,9 @@ public:
 
         // Validate basic bounds
         if (start_id < min_id_ || range_end > max_id_ || range_end < start_id) { // range_end < start_id also catches overflow for n>0
-            return false;
+            return false; 
         }
-
+        
         // Validation Pass: Check if all IDs in the range are currently allocated
         for (IDType current_id = start_id; ; ++current_id) {
             if (!used_ids_.count(current_id)) {
@@ -211,7 +211,7 @@ public:
 
         return true;
     }
-
+    
     size_t available() const {
         return capacity() - used();
     }

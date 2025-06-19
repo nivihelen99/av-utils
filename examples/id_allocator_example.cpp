@@ -137,7 +137,7 @@ int main() {
     int free_check_id_int = 0; // Find a free ID if possible
     bool found_free_for_check_int = false;
     // Assuming capacity gives total number of IDs, min_id is 1.
-    for(int i = static_cast<int>(allocator.capacity()); i >= 1; --i) {
+    for(int i = static_cast<int>(allocator.capacity()); i >= 1; --i) { 
         if (!allocator.is_allocated(i)) {
             free_check_id_int = i;
             found_free_for_check_int = true;
@@ -191,7 +191,7 @@ int main() {
 
     std::optional<short> short_id1 = short_allocator.allocate();
     if (short_id1) std::cout << "Allocated short ID: " << *short_id1 << std::endl;
-
+    
     std::optional<short> short_id2 = short_allocator.allocate();
     if (short_id2) std::cout << "Allocated short ID: " << *short_id2 << std::endl;
     print_status(short_allocator);
@@ -271,7 +271,7 @@ int main() {
     }
     print_status(range_allocator);
     std::cout << "----------------------------------------" << std::endl;
-
+    
     std::cout << "Demonstrating allocate_range(1)..." << std::endl;
     std::optional<int> single_alloc_from_range = range_allocator.allocate_range(1); // Should allocate 19
     if (single_alloc_from_range) {
@@ -316,11 +316,11 @@ int main() {
     std::cout << "Release invalid range (100-104): " << (released_invalid_range ? "Success (unexpected)" : "Failure (expected)") << std::endl;
     print_status(range_allocator);
     std::cout << "----------------------------------------" << std::endl;
-
+    
     std::cout << "Attempting to release a range not fully allocated (e.g., ID 2 was re-allocated, try releasing 1-5)..." << std::endl;
     // Assuming ID 1 was re-allocated from the freed pool, 2-5 were part of range1_start and are now free
     // Let's try to release 2-4 (which are free)
-    bool released_not_allocated = range_allocator.release_range(2, 3);
+    bool released_not_allocated = range_allocator.release_range(2, 3); 
     std::cout << "Release range 2-4 (should be free): " << (released_not_allocated ? "Success (unexpected)" : "Failure (expected)") << std::endl;
     print_status(range_allocator);
     std::cout << "----------------------------------------" << std::endl;
