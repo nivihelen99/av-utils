@@ -32,6 +32,13 @@ target_include_directories(lazy_sorted_merger INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+# --- TimerWheel Library (Header-Only) ---
+add_library(timer_wheel INTERFACE)
+add_library(cpp_library::timer_wheel ALIAS timer_wheel)
+target_include_directories(timer_wheel INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+
 # Enable testing (should be global)
 enable_testing()
 
@@ -44,7 +51,7 @@ foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
         add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
         # Link common libraries if needed by examples
         # Added Threads::Threads for examples that might use threading features from components like LRUCache
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter cpp_library::lazy_sorted_merger Threads::Threads)
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter cpp_library::lazy_sorted_merger cpp_library::timer_wheel Threads::Threads)
     endif()
 endforeach()
 
