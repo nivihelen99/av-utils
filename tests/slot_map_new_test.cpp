@@ -208,7 +208,7 @@ TEST_F(SlotMapNewTest, IteratorOperations) {
     ASSERT_EQ(objects.size(), 3);
     size_t count = 0;
     std::vector<std::string> found_types_non_const;
-    for (auto& entry : objects) {
+    for (auto entry : objects) { // Changed from auto& to auto
         ASSERT_TRUE(entry.first.is_valid());
         ASSERT_TRUE(objects.contains(entry.first));
         found_types_non_const.push_back(entry.second.type);
@@ -240,7 +240,7 @@ TEST_F(SlotMapNewTest, IteratorOperations) {
     ASSERT_EQ(empty_map.begin(), empty_map.end());
     ASSERT_EQ(empty_map.cbegin(), empty_map.cend());
     count = 0;
-    for (auto& item : empty_map) { (void)item; count++; }
+    for (const auto& item : empty_map) { (void)item; count++; } // Changed from auto& to const auto&
     ASSERT_EQ(count, 0);
     SlotMap<int> map_to_clear;
     map_to_clear.emplace(1);
@@ -250,7 +250,7 @@ TEST_F(SlotMapNewTest, IteratorOperations) {
     ASSERT_EQ(map_to_clear.begin(), map_to_clear.end());
     ASSERT_EQ(map_to_clear.cbegin(), map_to_clear.cend());
     count = 0;
-    for (auto& item : map_to_clear) { (void)item; count++; }
+    for (const auto& item : map_to_clear) { (void)item; count++; } // Changed from auto& to const auto&
     ASSERT_EQ(count, 0);
 }
 
