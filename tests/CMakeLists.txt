@@ -21,6 +21,7 @@ set(STANDALONE_TEST_FILES
     fenwick_tree_test.cpp
     variant_vector_test.cpp
     use_variant_vector.cpp # This was standalone, though its nature as a GTest is ambiguous from original.
+    timer_wheel_test.cpp # Exclude from run_tests target
 )
 
 # Create the list of sources for the main 'run_tests' executable
