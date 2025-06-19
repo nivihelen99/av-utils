@@ -39,6 +39,16 @@ target_include_directories(timer_wheel INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
 
+# --- AsyncEventQueue Library (Header-Only) ---
+add_library(async_event_queue INTERFACE)
+add_library(cpp_library::async_event_queue ALIAS async_event_queue)
+target_include_directories(async_event_queue INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+target_sources(async_event_queue INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/AsyncEventQueue.h"
+)
+
 # Enable testing (should be global)
 enable_testing()
 
@@ -51,7 +61,7 @@ foreach(SOURCE_FILE ${EXAMPLE_SOURCES})
         add_executable(${EXECUTABLE_NAME} ${SOURCE_FILE})
         # Link common libraries if needed by examples
         # Added Threads::Threads for examples that might use threading features from components like LRUCache
-        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter cpp_library::lazy_sorted_merger cpp_library::timer_wheel Threads::Threads)
+        target_link_libraries(${EXECUTABLE_NAME} PRIVATE cpp_library::variant_vector cpp_library::Counter cpp_library::lazy_sorted_merger cpp_library::timer_wheel cpp_library::async_event_queue Threads::Threads)
     endif()
 endforeach()
 
