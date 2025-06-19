@@ -21,6 +21,7 @@ set(STANDALONE_TEST_FILES
     fenwick_tree_test.cpp
     variant_vector_test.cpp
     use_variant_vector.cpp # This was standalone, though its nature as a GTest is ambiguous from original.
+    timer_wheel_test.cpp # Exclude from run_tests target
 )
 
 # Create the list of sources for the main 'run_tests' executable
@@ -65,7 +66,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock Threads::Threads)
+    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::timer_wheel Threads::Threads)
     if(TEST_NAME STREQUAL "counter_test")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::Counter)
     endif()
