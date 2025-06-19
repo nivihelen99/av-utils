@@ -51,7 +51,7 @@ add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
 # Link GTest and Threads to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter cpp_library::lazy_sorted_merger Threads::Threads)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter cpp_library::lazy_sorted_merger cpp_library::async_event_queue Threads::Threads)
 # GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
 # GTest::gmock should provide the necessary gmock functionalities.
 
@@ -66,7 +66,20 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::timer_wheel Threads::Threads)
+    # Base libraries for all individual tests
+    target_link_libraries(${TEST_NAME} PRIVATE GTest::gtest GTest::gtest_main GTest::gmock Threads::Threads)
+
+    # Link specific libraries needed by each test
+    # The existing CMakeLists links timer_wheel to all, which might be an over-estimation or default.
+    # For async_event_queue_test, we definitely need cpp_library::async_event_queue.
+    # Let's remove the general cpp_library::timer_wheel and add it specifically where needed if necessary,
+    # or keep it if it's a common utility. For now, I'll ensure async_event_queue is linked.
+    if(TEST_NAME STREQUAL "timer_wheel_test") # Assuming timer_wheel_test needs this
+        target_link_libraries(${TEST_NAME} PRIVATE cpp_library::timer_wheel)
+    endif()
+    if(TEST_NAME STREQUAL "async_event_queue_test")
+        target_link_libraries(${TEST_NAME} PRIVATE cpp_library::async_event_queue)
+    endif()
     if(TEST_NAME STREQUAL "counter_test")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::Counter)
     endif()
@@ -77,7 +90,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::variant_vector)
     endif()
     get_filename_component(CURRENT_TEST_FILENAME ${TEST_FILE} NAME) # Get just the filename.cpp
-    if(CURRENT_TEST_FILENAME STREQUAL "lazy_sorted_merger_test.cpp")
+    if(CURRENT_TEST_FILENAME STREQUAL "lazy_sorted_merger_test.cpp") # Check against filename, not target name
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::lazy_sorted_merger)
     endif()
     # For use_variant_vector, gtest_discover_tests might not be appropriate if it has no tests.
