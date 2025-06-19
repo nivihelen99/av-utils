@@ -1,5 +1,5 @@
-#ifndef SLOTMAP_H
-#define SLOTMAP_H
+#ifndef UTILS_SLOTMAP_OLD_H
+#define UTILS_SLOTMAP_OLD_H
 
 #include <vector>
 #include <cstdint>
@@ -121,4 +121,4 @@ bool SlotMap<T>::empty() const {
 
 } // namespace utils
 
-#endif // SLOTMAP_H
+#endif // UTILS_SLOTMAP_OLD_H
