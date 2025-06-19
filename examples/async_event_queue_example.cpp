@@ -175,5 +175,3 @@ int main() {
     std::cout << "All AsyncEventQueue examples finished." << std::endl;
     return 0;
 }
-
-```
