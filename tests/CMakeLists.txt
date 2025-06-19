@@ -13,6 +13,7 @@ find_package(Threads REQUIRED)
 # Define sources for the combined 'run_tests' target
 # Glob all *_test.cpp files, then exclude those meant to be standalone.
 # All .cpp files in tests/ are considered potential test sources.
+# Reviewed: slot_map_new_test.cpp should be automatically picked up by existing globbing rules.
 file(GLOB ALL_TEST_FILES "*.cpp")
 
 # Define test files that are built as standalone executables and should be excluded from run_tests
