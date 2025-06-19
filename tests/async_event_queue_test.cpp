@@ -332,4 +332,3 @@ TEST_F(AsyncEventQueueTest, DestructionWithPotentiallyWaitingThreads) {
     // No explicit SUCCEED() needed if no EXPECT_FAIL/ASSERT_FAIL is hit.
 }
 // Note: No main() function is needed here as it's typically provided by gtest_main or a separate file.
-```
