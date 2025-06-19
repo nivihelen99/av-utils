@@ -221,5 +221,123 @@ int main() {
     std::cout << "Is short ID " << reserve_id_short << " allocated? " << (short_allocator.is_allocated(reserve_id_short) ? "Yes" : "No") << std::endl;
     std::cout << "----------------------------------------" << std::endl;
 
+    // --- Demonstrating Range Operations with IDAllocator<int> ---
+    std::cout << "\n--- Demonstrating Range Operations with IDAllocator<int> ---" << std::endl;
+    IDAllocator<int> range_allocator(1, 20); // New allocator for range tests
+    std::cout << "Initial state (range_allocator 1-20):" << std::endl;
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    // Demonstrate allocate_range
+    std::cout << "Attempting to allocate a range of 5 IDs..." << std::endl;
+    std::optional<int> range1_start = range_allocator.allocate_range(5);
+    if (range1_start) {
+        std::cout << "Allocated range starting at: " << range1_start.value() << " (IDs: " << range1_start.value() << "-" << range1_start.value() + 4 << ")" << std::endl;
+    } else {
+        std::cout << "Failed to allocate range of 5 IDs." << std::endl;
+    }
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    std::cout << "Attempting to allocate another range of 3 IDs..." << std::endl;
+    std::optional<int> range2_start = range_allocator.allocate_range(3);
+    if (range2_start) {
+        std::cout << "Allocated range starting at: " << range2_start.value() << " (IDs: " << range2_start.value() << "-" << range2_start.value() + 2 << ")" << std::endl;
+    } else {
+        std::cout << "Failed to allocate range of 3 IDs." << std::endl;
+    }
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    // IDs 1-5 allocated (next_available_id_ should be 6)
+    // IDs 6-8 allocated (next_available_id_ should be 9)
+    // Available for sequential: 9-20 (12 IDs)
+    std::cout << "Attempting to allocate a range of 10 IDs (should succeed, next_available_id_ is 9, max is 20)..." << std::endl;
+    std::optional<int> range3_start = range_allocator.allocate_range(10); // Needs 9 to 18
+    if (range3_start) {
+        std::cout << "Allocated range starting at: " << range3_start.value() << " (IDs: " << range3_start.value() << "-" << range3_start.value() + 9 << ")" << std::endl;
+    } else {
+        std::cout << "Failed to allocate range of 10 IDs." << std::endl;
+    }
+    print_status(range_allocator); // next_available_id_ should be 19
+    std::cout << "----------------------------------------" << std::endl;
+
+    std::cout << "Attempting to allocate a range of 5 IDs (should fail, only 19-20 available sequentially)..." << std::endl;
+    std::optional<int> range4_start = range_allocator.allocate_range(5);
+    if (range4_start) {
+        std::cout << "Allocated range starting at: " << range4_start.value() << " (IDs: " << range4_start.value() << "-" << range4_start.value() + 4 << ")" << std::endl;
+    } else {
+        std::cout << "Failed to allocate range of 5 IDs as expected." << std::endl;
+    }
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    std::cout << "Demonstrating allocate_range(1)..." << std::endl;
+    std::optional<int> single_alloc_from_range = range_allocator.allocate_range(1); // Should allocate 19
+    if (single_alloc_from_range) {
+        std::cout << "allocate_range(1) allocated ID: " << single_alloc_from_range.value() << std::endl;
+    } else {
+        std::cout << "allocate_range(1) failed." << std::endl;
+    }
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    std::cout << "Demonstrating allocate_range(0)..." << std::endl;
+    std::optional<int> zero_alloc_from_range = range_allocator.allocate_range(0);
+    if (!zero_alloc_from_range) {
+        std::cout << "allocate_range(0) returned std::nullopt as expected." << std::endl;
+    } else {
+        std::cout << "allocate_range(0) allocated ID: " << zero_alloc_from_range.value() << " (unexpected)" << std::endl;
+    }
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    // Demonstrate release_range
+    if (range1_start) {
+        std::cout << "Attempting to release range " << range1_start.value() << "-" << range1_start.value() + 4 << " (5 IDs)..." << std::endl;
+        bool released_range1 = range_allocator.release_range(range1_start.value(), 5);
+        std::cout << "Release range " << range1_start.value() << "-" << range1_start.value() + 4 << ": " << (released_range1 ? "Success" : "Failure") << std::endl;
+        print_status(range_allocator);
+        std::cout << "----------------------------------------" << std::endl;
+
+        std::cout << "Attempting to allocate ID " << range1_start.value() << " individually (should succeed from freed pool)..." << std::endl;
+        std::optional<int> realloc_freed = range_allocator.allocate();
+        if (realloc_freed) {
+            std::cout << "Allocated ID: " << realloc_freed.value() << std::endl;
+        } else {
+            std::cout << "Failed to reallocate from freed pool." << std::endl;
+        }
+        print_status(range_allocator);
+        std::cout << "----------------------------------------" << std::endl;
+    }
+
+    std::cout << "Attempting to release a partially unallocated range (e.g., 100-104, but allocator is 1-20)..." << std::endl;
+    bool released_invalid_range = range_allocator.release_range(100, 5);
+    std::cout << "Release invalid range (100-104): " << (released_invalid_range ? "Success (unexpected)" : "Failure (expected)") << std::endl;
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    std::cout << "Attempting to release a range not fully allocated (e.g., ID 2 was re-allocated, try releasing 1-5)..." << std::endl;
+    // Assuming ID 1 was re-allocated from the freed pool, 2-5 were part of range1_start and are now free
+    // Let's try to release 2-4 (which are free)
+    bool released_not_allocated = range_allocator.release_range(2, 3);
+    std::cout << "Release range 2-4 (should be free): " << (released_not_allocated ? "Success (unexpected)" : "Failure (expected)") << std::endl;
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
+    if (range1_start) { // If range1 was 1-5 and ID 1 was reallocated, 1 is used.
+        std::cout << "Attempting to release already released range (partially, e.g., " << range1_start.value() + 1 << "-" << range1_start.value() + 4 << ")..." << std::endl;
+        bool released_already_freed = range_allocator.release_range(range1_start.value() + 1, 4);
+        std::cout << "Release range " << range1_start.value()+1 << "-" << range1_start.value()+4 << ": " << (released_already_freed ? "Success (unexpected)" : "Failure (expected)") << std::endl;
+        print_status(range_allocator);
+        std::cout << "----------------------------------------" << std::endl;
+    }
+
+    std::cout << "Demonstrating release_range with n=0..." << std::endl;
+    bool released_zero_range = range_allocator.release_range(1, 0);
+    std::cout << "Release range with n=0: " << (released_zero_range ? "Success (expected)" : "Failure (unexpected)") << std::endl;
+    print_status(range_allocator);
+    std::cout << "----------------------------------------" << std::endl;
+
     return 0;
 }

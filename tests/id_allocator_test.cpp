@@ -302,3 +302,206 @@ TEST_F(IDAllocatorTest, FreeingReservedIdMakesItAvailableViaFreedQueue) {
     EXPECT_EQ(*next_id, 2);
     EXPECT_EQ(allocator.used(), 2);
 }
+
+// New tests for allocate_range and release_range
+
+TEST_F(IDAllocatorTest, AllocateRangeBasic) {
+    IDAllocator<int> allocator(1, 20);
+    EXPECT_EQ(allocator.available(), 20);
+
+    std::optional<int> range1_start = allocator.allocate_range(5); // Allocates 1-5
+    ASSERT_TRUE(range1_start.has_value());
+    EXPECT_EQ(range1_start.value(), 1);
+    EXPECT_EQ(allocator.used(), 5);
+    for (int i = 1; i <= 5; ++i) {
+        EXPECT_TRUE(allocator.is_allocated(i));
+    }
+    // Assuming next_available_id_ is updated correctly by allocate_range implementation
+    // Current allocate_range updates it to range_end + 1, so 5 + 1 = 6
+
+    std::optional<int> range2_start = allocator.allocate_range(3); // Allocates 6-8
+    ASSERT_TRUE(range2_start.has_value());
+    EXPECT_EQ(range2_start.value(), 6);
+    EXPECT_EQ(allocator.used(), 8); // 5 + 3
+    for (int i = 6; i <= 8; ++i) {
+        EXPECT_TRUE(allocator.is_allocated(i));
+    }
+    // Next available should be 9
+}
+
+TEST_F(IDAllocatorTest, AllocateRangeFull) {
+    IDAllocator<int> allocator(1, 10);
+    std::optional<int> range1_start = allocator.allocate_range(10); // Allocates 1-10
+    ASSERT_TRUE(range1_start.has_value());
+    EXPECT_EQ(range1_start.value(), 1);
+    EXPECT_EQ(allocator.used(), 10);
+    EXPECT_EQ(allocator.available(), 0);
+
+    std::optional<int> range2_start = allocator.allocate_range(1);
+    EXPECT_FALSE(range2_start.has_value());
+
+    std::optional<int> single_alloc = allocator.allocate();
+    EXPECT_FALSE(single_alloc.has_value());
+}
+
+TEST_F(IDAllocatorTest, AllocateRangeExceedCapacity) {
+    IDAllocator<int> allocator(1, 10);
+    std::optional<int> range1_start = allocator.allocate_range(11);
+    EXPECT_FALSE(range1_start.has_value());
+
+    std::optional<int> range2_start = allocator.allocate_range(5); // Allocates 1-5
+    ASSERT_TRUE(range2_start.has_value());
+    EXPECT_EQ(allocator.used(), 5);
+
+    // next_available_id_ is now 6. Remaining sequential capacity is 10 - 6 + 1 = 5.
+    std::optional<int> range3_start = allocator.allocate_range(6);
+    EXPECT_FALSE(range3_start.has_value());
+}
+
+TEST_F(IDAllocatorTest, AllocateRangeZero) {
+    IDAllocator<int> allocator(1, 10);
+    std::optional<int> range = allocator.allocate_range(0);
+    EXPECT_FALSE(range.has_value()); // Per current implementation, returns nullopt
+}
+
+TEST_F(IDAllocatorTest, AllocateRangeOneDefersToAllocate) {
+    IDAllocator<int> allocator(1, 10);
+    // Let's allocate some then free to test freed pool
+    allocator.allocate(); // Allocates 1
+    allocator.allocate(); // Allocates 2
+    allocator.allocate(); // Allocates 3 (next_available_id_ is 4 after these)
+
+    // Ensure they were allocated before freeing
+    ASSERT_TRUE(allocator.is_allocated(1));
+    ASSERT_TRUE(allocator.is_allocated(2)); // ID 2 remains allocated
+    ASSERT_TRUE(allocator.is_allocated(3));
+
+    ASSERT_TRUE(allocator.free(1)); // Add 1 to freed_ids
+    ASSERT_TRUE(allocator.free(3)); // Add 3 to freed_ids
+    // Freed pool should contain 1 and 3 (1 should be top if min-heap behavior is consistent)
+    // Used_ids_ should contain {2}
+    // next_available_id_ is 4.
+
+    std::optional<int> id = allocator.allocate_range(1); // Defers to allocate()
+    ASSERT_TRUE(id.has_value());
+    EXPECT_EQ(id.value(), 1); // Should get 1 from freed pool
+
+    std::optional<int> id2 = allocator.allocate_range(1); // Defers to allocate()
+    ASSERT_TRUE(id2.has_value());
+    EXPECT_EQ(id2.value(), 3); // Should get 3 from freed pool
+
+    // Freed pool is now empty. ID 2 is still in used_ids_.
+    // next_available_id_ is 4.
+    std::optional<int> id3 = allocator.allocate_range(1); // Defers to allocate()
+    ASSERT_TRUE(id3.has_value());
+    EXPECT_EQ(id3.value(), 4); // Should get 4 from next_available_id_
+}
+
+TEST_F(IDAllocatorTest, AllocateRangeBlockedByUsedId) {
+    IDAllocator<int> allocator(1, 10);
+    ASSERT_TRUE(allocator.reserve(3)); // Reserve ID 3
+
+    // V1 allocate_range only tries from next_available_id_ (which is 1).
+    // The range 1-5 would include reserved ID 3.
+    std::optional<int> range = allocator.allocate_range(5);
+    EXPECT_FALSE(range.has_value());
+}
+
+
+TEST_F(IDAllocatorTest, ReleaseRangeBasic) {
+    IDAllocator<int> allocator(1, 10);
+    std::optional<int> r_start = allocator.allocate_range(5); // Allocates 1-5
+    ASSERT_TRUE(r_start.has_value());
+    EXPECT_EQ(r_start.value(), 1);
+    EXPECT_EQ(allocator.used(), 5);
+
+    EXPECT_TRUE(allocator.release_range(1, 5));
+    EXPECT_EQ(allocator.used(), 0);
+    for (int i = 1; i <= 5; ++i) {
+        EXPECT_FALSE(allocator.is_allocated(i));
+    }
+
+    // IDs 1-5 should be in freed_ids_ (order: 1,2,3,4,5 on top of heap)
+    std::optional<int> id1 = allocator.allocate();
+    ASSERT_TRUE(id1.has_value()); EXPECT_EQ(id1.value(), 1);
+    std::optional<int> id2 = allocator.allocate();
+    ASSERT_TRUE(id2.has_value()); EXPECT_EQ(id2.value(), 2);
+    std::optional<int> id3 = allocator.allocate();
+    ASSERT_TRUE(id3.has_value()); EXPECT_EQ(id3.value(), 3);
+    std::optional<int> id4 = allocator.allocate();
+    ASSERT_TRUE(id4.has_value()); EXPECT_EQ(id4.value(), 4);
+    std::optional<int> id5 = allocator.allocate();
+    ASSERT_TRUE(id5.has_value()); EXPECT_EQ(id5.value(), 5);
+    EXPECT_EQ(allocator.used(), 5);
+}
+
+TEST_F(IDAllocatorTest, ReleaseRangeErrorConditions) {
+    IDAllocator<int> allocator(1, 10);
+    allocator.allocate_range(5); // Allocates 1-5. Used: {1,2,3,4,5}. Next: 6.
+
+    // Range end (1+6-1 = 6) is within max_id (10), but ID 6 is not allocated.
+    EXPECT_FALSE(allocator.release_range(1, 6));
+    EXPECT_EQ(allocator.used(), 5); // State should not change
+
+    // Range start out of bounds
+    EXPECT_FALSE(allocator.release_range(0, 5));
+    EXPECT_EQ(allocator.used(), 5);
+
+    // Range end out of bounds (actual end 10+5-1 = 14 > 10)
+    EXPECT_FALSE(allocator.release_range(10,5));
+    EXPECT_EQ(allocator.used(),5);
+
+    // Range end wraps due to large n (start_id > max_id_ - (n-1))
+    // For IDType=int, this is harder to test without huge numbers for n.
+    // The check `start_id > max_id_ - static_cast<IDType>(n - 1)` handles it.
+    // Example: max_id_ = 10, start_id = 8, n = 4. 8 > 10 - 3 (7) is true.
+    EXPECT_FALSE(allocator.release_range(8, 4)); // 8,9,10, (11 - out of bounds)
+
+    EXPECT_TRUE(allocator.release_range(1, 3)); // Release 1,2,3. Used: {4,5}. Freed: {1,2,3}
+    EXPECT_EQ(allocator.used(), 2);
+    EXPECT_TRUE(allocator.is_allocated(4));
+    EXPECT_TRUE(allocator.is_allocated(5));
+    EXPECT_FALSE(allocator.is_allocated(1));
+
+    // Try to release already partially released range
+    EXPECT_FALSE(allocator.release_range(1, 3));
+    EXPECT_EQ(allocator.used(), 2);
+
+    // Try to release a range where some IDs are allocated, some not (ID 6 not allocated)
+    EXPECT_FALSE(allocator.release_range(4, 3)); // Tries to release 4, 5, 6. 6 is not allocated.
+    EXPECT_EQ(allocator.used(), 2); // State should not change due to atomicity.
+    EXPECT_TRUE(allocator.is_allocated(4));
+    EXPECT_TRUE(allocator.is_allocated(5));
+}
+
+TEST_F(IDAllocatorTest, ReleaseRangeZero) {
+    IDAllocator<int> allocator(1, 10);
+    EXPECT_TRUE(allocator.release_range(1, 0)); // Should succeed
+    EXPECT_EQ(allocator.used(), 0);
+
+    allocator.allocate_range(5); // Allocates 1-5
+    EXPECT_EQ(allocator.used(), 5);
+    EXPECT_TRUE(allocator.release_range(1, 0)); // Should succeed
+    EXPECT_EQ(allocator.used(), 5); // No change
+}
+
+TEST_F(IDAllocatorTest, ReleaseRangeFullThenReallocateRange) {
+    IDAllocator<int> allocator(1, 5);
+    ASSERT_TRUE(allocator.allocate_range(5).has_value()); // 1-5 allocated, next_available is 6
+    ASSERT_TRUE(allocator.release_range(1, 5)); // 1-5 freed, next_available is still 6
+    EXPECT_EQ(allocator.used(), 0);
+
+    // Current V1 allocate_range only checks from next_available_id_ (which is 6).
+    // So, it won't find a block of 5 starting at 6 in a 1-5 allocator.
+    std::optional<int> r = allocator.allocate_range(5);
+    EXPECT_FALSE(r.has_value());
+
+    // However, individual allocations should come from the freed pool
+    for (int i = 1; i <= 5; ++i) {
+        std::optional<int> id = allocator.allocate();
+        ASSERT_TRUE(id.has_value());
+        EXPECT_EQ(id.value(), i);
+    }
+    EXPECT_EQ(allocator.used(), 5);
+    EXPECT_FALSE(allocator.allocate().has_value()); // Now fully allocated
+}
