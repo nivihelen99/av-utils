@@ -42,6 +42,7 @@ endforeach()
 # This is somewhat redundant if the glob catches it and it's not in STANDALONE_TEST_FILES,
 # but ensures it's included as per specific instructions for the subtask.
 list(APPEND RUN_TESTS_SOURCES_LIST "${CMAKE_CURRENT_SOURCE_DIR}/group_by_consecutive_test.cpp")
+list(APPEND RUN_TESTS_SOURCES_LIST "${CMAKE_CURRENT_SOURCE_DIR}/flatMap_test.cpp") # Added flatMap_test.cpp
 
 add_executable(run_tests ${RUN_TESTS_SOURCES_LIST})
 
@@ -87,6 +88,8 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     if(TEST_NAME STREQUAL "skiplist_test")
         target_compile_definitions(${TEST_NAME} PRIVATE SKIPLIST_DEBUG_LOGGING)
     endif()
+    # flatMap_test.cpp does not require special linking beyond GTest and Threads,
+    # which are already provided to all individual tests.
     if(TEST_FILE STREQUAL "variant_vector_test.cpp" OR TEST_FILE STREQUAL "use_variant_vector.cpp")
         target_link_libraries(${TEST_NAME} PRIVATE cpp_library::variant_vector)
     endif()
