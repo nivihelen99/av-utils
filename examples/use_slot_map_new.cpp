@@ -31,7 +31,7 @@ struct GameObject {
 void test_basic_operations() {
     std::cout << "=== Basic Operations Test ===\n";
     
-    SlotMap<int> map;
+    SlotMapNew<int> map;
     
     // Test insertion
     auto key1 = map.emplace(42);
@@ -68,7 +68,7 @@ void test_basic_operations() {
 void test_generation_safety() {
     std::cout << "=== Generation Safety Test ===\n";
     
-    SlotMap<std::string> map;
+    SlotMapNew<std::string> map;
     
     auto key = map.emplace("Hello");
     std::cout << "Original key: index=" << key.index << ", gen=" << key.generation << "\n";
@@ -100,7 +100,7 @@ void test_generation_safety() {
 void test_complex_objects() {
     std::cout << "=== Complex Objects Test ===\n";
     
-    SlotMap<Entity> entities;
+    SlotMapNew<Entity> entities;
     
     // Insert entities
     auto player = entities.emplace(1, "Player", 100.0f);
@@ -130,7 +130,7 @@ void test_complex_objects() {
 void test_iterator() {
     std::cout << "=== Iterator Test ===\n";
     
-    SlotMap<GameObject> objects;
+    SlotMapNew<GameObject> objects;
     
     // Add some objects
     objects.emplace("Player", 10, 20);
@@ -156,10 +156,10 @@ void test_performance() {
     std::cout << "=== Performance Test ===\n";
     
     constexpr size_t NUM_OPERATIONS = 100000;
-    SlotMap<int> map;
+    SlotMapNew<int> map;
     map.reserve(NUM_OPERATIONS);
     
-    std::vector<SlotMap<int>::Key> keys;
+    std::vector<SlotMapNew<int>::Key> keys;
     keys.reserve(NUM_OPERATIONS);
     
     // Test insertion performance
@@ -197,8 +197,8 @@ void test_performance() {
 void test_fragmentation_handling() {
     std::cout << "=== Fragmentation Handling Test ===\n";
     
-    SlotMap<std::string> map;
-    std::vector<SlotMap<std::string>::Key> keys;
+    SlotMapNew<std::string> map;
+    std::vector<SlotMapNew<std::string>::Key> keys;
     
     // Insert many elements
     for (int i = 0; i < 10; ++i) {
@@ -215,7 +215,7 @@ void test_fragmentation_handling() {
     std::cout << "After removing every other element: " << map.size() << "\n";
     
     // Add new elements (should reuse slots)
-    std::vector<SlotMap<std::string>::Key> new_keys;
+    std::vector<SlotMapNew<std::string>::Key> new_keys;
     for (int i = 0; i < 3; ++i) {
         new_keys.push_back(map.emplace("New Item " + std::to_string(i)));
     }
@@ -235,14 +235,14 @@ void test_fragmentation_handling() {
 void test_edge_cases() {
     std::cout << "=== Edge Cases Test ===\n";
     
-    SlotMap<int> map;
+    SlotMapNew<int> map;
     
     // Test empty map
     std::cout << "Empty map size: " << map.size() << "\n";
     std::cout << "Empty map is empty: " << map.empty() << "\n";
     
     // Test invalid key access
-    SlotMap<int>::Key invalid_key{999, 0};
+    SlotMapNew<int>::Key invalid_key{999, 0};
     if (auto* value = map.get(invalid_key)) {
         std::cout << "ERROR: Should not access invalid key!\n";
     } else {
@@ -272,7 +272,7 @@ void test_edge_cases() {
 void game_simulation_example() {
     std::cout << "=== Game Simulation Example ===\n";
     
-    SlotMap<Entity> entities;
+    SlotMapNew<Entity> entities;
     
     // Create game entities
     auto player = entities.emplace(1, "Hero", 100.0f);

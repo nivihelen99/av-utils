@@ -1,5 +1,5 @@
-#ifndef SLOTMAP_H
-#define SLOTMAP_H
+#ifndef UTILS_SLOTMAP_NEW_H
+#define UTILS_SLOTMAP_NEW_H
 
 #include <vector>
 #include <cstdint>
@@ -13,7 +13,7 @@
 namespace utils {
 
 template <typename T>
-class SlotMap {
+class SlotMapNew {
 public:
     using size_type = std::size_t;
     using value_type = T;
@@ -37,20 +37,20 @@ public:
     };
 
     static constexpr uint32_t INVALID_INDEX = std::numeric_limits<uint32_t>::max();
-    static constexpr Key INVALID_KEY = Key{INVALID_INDEX, 0};
+    static constexpr Key INVALID_KEY = SlotMapNew::Key{INVALID_INDEX, 0};
 
     // Constructors
-    SlotMap() = default;
-    explicit SlotMap(size_type reserve_size) {
+    SlotMapNew() = default;
+    explicit SlotMapNew(size_type reserve_size) {
         reserve(reserve_size);
         slot_active_.reserve(reserve_size);
     }
     
     // Move-only semantics for better performance
-    SlotMap(const SlotMap&) = delete;
-    SlotMap& operator=(const SlotMap&) = delete;
-    SlotMap(SlotMap&&) = default;
-    SlotMap& operator=(SlotMap&&) = default;
+    SlotMapNew(const SlotMapNew&) = delete;
+    SlotMapNew& operator=(const SlotMapNew&) = delete;
+    SlotMapNew(SlotMapNew&&) = default;
+    SlotMapNew& operator=(SlotMapNew&&) = default;
 
     // Capacity management
     void reserve(size_type capacity) {
@@ -177,10 +177,27 @@ public:
 
     // Clear all elements
     void clear() noexcept {
-        data_.clear();
-        generations_.clear();
+        // Corrected loop for destruction and generation increment:
+        if constexpr (std::is_destructible_v<T>) { // Assuming T is the map's value_type
+            for (size_type i = 0; i < data_.size(); ++i) {
+                if (slot_active_[i]) { // If it was active
+                    data_[i].~T();
+                    increment_generation(static_cast<uint32_t>(i)); // Increment generation as it's now free
+                    slot_active_[i] = false; // Mark inactive
+                }
+            }
+        }
+        // Now rebuild free_list_ to contain all indices
         free_list_.clear();
-        slot_active_.clear();
+        if (!data_.empty()) { // Ensure data_ is not empty before reserving & pushing back
+            free_list_.reserve(data_.size());
+            for (size_type i = 0; i < data_.size(); ++i) {
+                free_list_.push_back(static_cast<uint32_t>((data_.size() - 1) - i));
+            }
+        }
+        // slot_active_ should be all false now.
+        // generations_ are preserved and updated.
+        // data_ vector is NOT cleared of its memory.
     }
 
     // Iterator support for range-based for loops
@@ -192,12 +209,12 @@ public:
         using pointer = void; // Not meaningful for this iterator
         using reference = value_type;
 
-        const_iterator(const SlotMap* map, size_type index) : map_(map), index_(index) {
+        const_iterator(const SlotMapNew* map, size_type index) : map_(map), index_(index) {
             skip_invalid_slots();
         }
 
         reference operator*() const {
-            return {Key{static_cast<uint32_t>(index_), map_->generations_[index_]},
+            return {SlotMapNew::Key{static_cast<uint32_t>(index_), map_->generations_[index_]},
                     map_->data_[index_]};
         }
 
@@ -229,7 +246,7 @@ public:
             }
         }
 
-        const SlotMap* map_;
+        const SlotMapNew* map_;
         size_type index_;
     };
 
@@ -241,12 +258,12 @@ public:
         using pointer = void; // Not meaningful for this iterator
         using reference = value_type;
 
-        iterator(SlotMap* map, size_type index) : map_(map), index_(index) {
+        iterator(SlotMapNew* map, size_type index) : map_(map), index_(index) {
             skip_invalid_slots();
         }
 
         reference operator*() const {
-            return {Key{static_cast<uint32_t>(index_), map_->generations_[index_]}, 
+            return {SlotMapNew::Key{static_cast<uint32_t>(index_), map_->generations_[index_]},
                     map_->data_[index_]};
         }
 
@@ -278,7 +295,7 @@ public:
             }
         }
 
-        SlotMap* map_;
+        SlotMapNew* map_;
         size_type index_;
     };
 
@@ -326,4 +343,4 @@ private:
 
 } // namespace utils
 
-#endif // SLOTMAP_H
+#endif // UTILS_SLOTMAP_NEW_H
