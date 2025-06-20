@@ -38,10 +38,13 @@ add_executable(run_tests ${GTEST_SOURCES})
 # at the project root. We need to tell this target where to find them.
 # CMAKE_SOURCE_DIR is the root of the project.
 # CMAKE_CURRENT_SOURCE_DIR is tests/
-target_include_directories(run_tests PRIVATE "${CMAKE_SOURCE_DIR}/include")
+target_include_directories(run_tests PRIVATE
+    "${CMAKE_SOURCE_DIR}/include"
+    "${CMAKE_SOURCE_DIR}"  # For headers in the root, like heap_queue.h
+)
 
 # Link GTest and Threads to the test executable
-target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock cpp_library::Counter cpp_library::lazy_sorted_merger cpp_library::async_event_queue Threads::Threads)
+target_link_libraries(run_tests PRIVATE GTest::gtest GTest::gtest_main GTest::gmock CppLibCounter CppLibLazySortedMerger CppLibAsyncEventQueue Threads::Threads)
 # GTest::gmock_main is usually not needed if GTest::gtest_main is already linked.
 # GTest::gmock should provide the necessary gmock functionalities.
 

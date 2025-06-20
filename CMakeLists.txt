@@ -1,12 +1,22 @@
 cmake_minimum_required(VERSION 3.10)
 project(HeapQueueProject CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Define HeapQueue as an interface library (header-only)
 add_library(HeapQueue INTERFACE)
 target_include_directories(HeapQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Define other cpp_library components as interface libraries
+add_library(CppLibCounter INTERFACE)
+target_include_directories(CppLibCounter INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+add_library(CppLibLazySortedMerger INTERFACE)
+target_include_directories(CppLibLazySortedMerger INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+add_library(CppLibAsyncEventQueue INTERFACE)
+target_include_directories(CppLibAsyncEventQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Future steps will add examples and tests here
 
@@ -40,5 +50,7 @@ FetchContent_MakeAvailable(googletest)
 
 # Enable testing for the project
 enable_testing()
+
+add_subdirectory(tests)
 
 message(STATUS "Google Test setup complete. Tests will be added next.")

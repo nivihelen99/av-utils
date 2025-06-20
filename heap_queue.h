@@ -12,8 +12,8 @@
 // Or ensure T is lightweight or passed by const& in KeyFn type
 
 template <typename T,
-          typename Compare = std::less<std::invoke_result_t<KeyFn, const T&>>,
-          typename KeyFn = std::function<T(const T&)>>
+          typename KeyFn = std::function<T(const T&)>,
+          typename Compare = std::less<std::invoke_result_t<KeyFn, const T&>>>
 class HeapQueue {
 public:
     // Default constructor
@@ -25,7 +25,7 @@ public:
           }) {}
 
     // Constructor with custom KeyFn and Compare
-    HeapQueue(KeyFn key_fn, Compare compare_fn = Compare())
+    HeapQueue(KeyFn key_fn, Compare compare_fn)
         : key_fn_(std::move(key_fn)),
           compare_instance_(std::move(compare_fn)),
           internal_comparator_fn_([this](const T& a, const T& b) {

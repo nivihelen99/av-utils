@@ -51,7 +51,7 @@ int main() {
 
     std::cout << "--- Min-Heap Example (Event struct with key function) ---" << std::endl;
     // Explicitly providing std::less for KeyType (int) for min-heap
-    HeapQueue<Event, std::less<int>, decltype(event_priority_key)> event_min_heap(event_priority_key);
+    HeapQueue<Event, decltype(event_priority_key), std::less<int>> event_min_heap(event_priority_key);
 
     event_min_heap.push({5, "Task A"});
     event_min_heap.push({1, "Task B (urgent)"});
@@ -66,7 +66,7 @@ int main() {
 
     std::cout << "--- Max-Heap Example (Event struct with key function) ---" << std::endl;
     // Using std::greater for KeyType (int) to make it a max-heap
-    HeapQueue<Event, std::greater<int>, decltype(event_priority_key)> event_max_heap(event_priority_key, std::greater<int>());
+    HeapQueue<Event, decltype(event_priority_key), std::greater<int>> event_max_heap(event_priority_key, std::greater<int>());
 
     event_max_heap.push({5, "Task X"});
     event_max_heap.push({1, "Task Y (low prio)"});

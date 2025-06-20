@@ -96,7 +96,7 @@ auto test_event_priority_key = [](const TestEvent& ev) {
 };
 
 TEST(HeapQueueTest, StructWithKeyFnMinHeap) {
-    HeapQueue<TestEvent, std::less<int>, decltype(test_event_priority_key)>
+    HeapQueue<TestEvent, decltype(test_event_priority_key), std::less<int>>
         pq(test_event_priority_key, std::less<int>());
 
     pq.push({1, "Event A", 10});
@@ -118,7 +118,7 @@ TEST(HeapQueueTest, StructWithKeyFnMinHeap) {
 }
 
 TEST(HeapQueueTest, StructWithKeyFnMaxHeap) {
-    HeapQueue<TestEvent, std::greater<int>, decltype(test_event_priority_key)>
+    HeapQueue<TestEvent, decltype(test_event_priority_key), std::greater<int>>
         pq(test_event_priority_key, std::greater<int>());
 
     pq.push({1, "Event A", 10});
