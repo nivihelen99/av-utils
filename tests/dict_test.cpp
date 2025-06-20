@@ -786,10 +786,12 @@ TEST_F(DictTest, SwapFunction) {
     ExpectItemsEqual(items2_orig, d1.items());
 }
 
+/*
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+*/
 
 // Ensure Value is defined for setdefault test.
 // If Value is not default constructible, setdefault without a value will fail to compile.

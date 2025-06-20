@@ -738,8 +738,10 @@ TEST_F(IntegrationTest, MixedOperationsWorkflow) {
 // MAIN TEST RUNNER
 // ============================================================================
 
+/*
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+*/
 
