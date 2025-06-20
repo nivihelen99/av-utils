@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "../heap_queue.h" // Adjust path if heap_queue.h is in root
+#include "heap_queue.h" // Adjust path if heap_queue.h is in root
 #include <string>
 #include <vector>
 #include <functional> // For std::greater, std::less
