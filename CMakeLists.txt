@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Define HeapQueue as an interface library (header-only)
 add_library(HeapQueue INTERFACE)
-target_include_directories(HeapQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(HeapQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Define other cpp_library components as interface libraries
 add_library(CppLibCounter INTERFACE)
