@@ -132,7 +132,7 @@ void test_access_and_lookup() {
     std::map<std::string, int> m2 = {{"banana", 200}, {"cherry", 30}}; // "banana" in m1 takes precedence
     std::map<std::string, int> m3 = {}; // Empty map for insertion tests
 
-    ChainMap<std::string, int, std::map<std::string, int>> cm(&m3, &m1, &m2);
+    ChainMap<std::string, int, std::map<std::string, int>> cm({&m3, &m1, &m2});
 
     // Test contains()
     assert(cm.contains("apple"));
@@ -214,7 +214,7 @@ void test_modification_operations() {
     std::map<std::string, int> m2 = {{"b", 20}, {"c", 3}};
     std::map<std::string, int> m_writable;
 
-    ChainMap<std::string, int, std::map<std::string, int>> cm(&m_writable, &m1);
+    ChainMap<std::string, int, std::map<std::string, int>> cm({&m_writable, &m1});
 
     // Test insert() - should insert into m_writable
     cm.insert("d", 4);
@@ -305,7 +305,7 @@ void test_iteration_and_views() {
     std::map<std::string, int> m_empty = {};
     std::map<std::string, int>* m_null = nullptr;
 
-    ChainMap<std::string, int, std::map<std::string, int>> cm(&m1, &m_empty, &m2, m_null);
+    ChainMap<std::string, int, std::map<std::string, int>> cm({&m1, &m_empty, &m2, m_null});
     // Expected iteration order: apple (m1), banana (m1), cherry (m2)
 
     std::vector<std::string> expected_keys = {"apple", "banana", "cherry"};
@@ -359,7 +359,7 @@ void test_iteration_and_views() {
     assert(count == 0);
 
     // Test ChainMap with only null maps initially
-    ChainMap<std::string, int, std::map<std::string, int>> cm_all_null(m_null, m_null);
+    ChainMap<std::string, int, std::map<std::string, int>> cm_all_null({m_null, m_null});
     assert(cm_all_null.begin() == cm_all_null.end());
     assert(cm_all_null.keys().empty());
 
@@ -418,7 +418,7 @@ void test_requirements_example() {
 
     // Test iteration and expected items after modification
     // Expected order due to ChainMap iteration logic (user map first, then system_cfg, then defaults, skipping visited keys)
-    std::vector<std::pair<const std::string, std::string>> expected_items;
+    std::vector<std::pair<std::string, std::string>> expected_items;
     // Keys from user map (order within map itself might vary for unordered_map, but ChainMap processes map by map)
     // Assuming "theme" comes before "lang" in user map's internal order for this test, or vice-versa.
     // The important part is that all of user's unique keys come first.
@@ -434,9 +434,9 @@ void test_requirements_example() {
     expected_items.push_back({"timezone", "UTC"});
 
 
-    std::vector<std::pair<const std::string, std::string>> actual_items;
+    std::vector<std::pair<std::string, std::string>> actual_items;
     for (const auto& item : config) {
-        actual_items.push_back(item);
+        actual_items.emplace_back(item.first, item.second);
     }
 
     assert(actual_items.size() == expected_items.size());
@@ -452,7 +452,7 @@ void test_requirements_example() {
 
     // Let's sort both actual and expected items before comparison to make the test robust
     // to internal ordering of std::unordered_map.
-    auto sort_pairs = [](std::vector<std::pair<const std::string, std::string>>& vec) {
+    auto sort_pairs = [](std::vector<std::pair<std::string, std::string>>& vec) {
         std::sort(vec.begin(), vec.end(), [](const auto& a, const auto& b){
             return a.first < b.first;
         });
