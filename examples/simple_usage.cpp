@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 #include <functional> // For std::greater
-#include "../heap_queue.h" // Adjust path if heap_queue.h is elsewhere relative to root
+#include "../include/heap_queue.h" // Adjust path if heap_queue.h is elsewhere relative to root
 
 // Example struct
 struct Event {

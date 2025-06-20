@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Define HeapQueue as an interface library (header-only)
 add_library(HeapQueue INTERFACE)
-target_include_directories(HeapQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(HeapQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Define other cpp_library components as interface libraries
 add_library(CppLibCounter INTERFACE)
@@ -25,6 +25,12 @@ add_executable(SimpleUsageExample examples/simple_usage.cpp)
 
 # Link example against HeapQueue
 target_link_libraries(SimpleUsageExample PRIVATE HeapQueue)
+
+# Add ChainMapExample executable
+add_executable(ChainMapExample examples/chain_map_example.cpp)
+target_include_directories(ChainMapExample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# ChainMapExample does not link against HeapQueue or other specific libs from this project by default
+# It uses the header-only ChainMap library.
 
 # Optional: Print a message where the executable can be found
 # Get the directory where the executable will be built

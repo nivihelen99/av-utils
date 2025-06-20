@@ -40,7 +40,6 @@ add_executable(run_tests ${GTEST_SOURCES})
 # CMAKE_CURRENT_SOURCE_DIR is tests/
 target_include_directories(run_tests PRIVATE
     "${CMAKE_SOURCE_DIR}/include"
-    "${CMAKE_SOURCE_DIR}"  # For headers in the root, like heap_queue.h
 )
 
 # Link GTest and Threads to the test executable

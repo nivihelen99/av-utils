@@ -1,5 +1,5 @@
 #include "gtest/gtest.h"
-#include "group_by_consecutive.hpp" // Adjust path as needed by CMake include directories
+#include "group_by_consecutive.h" // Adjust path as needed by CMake include directories
 #include <vector>
 #include <string>
 #include <utility> // For std::pair
