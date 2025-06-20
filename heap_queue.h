@@ -5,12 +5,14 @@
 #include <functional>
 #include <algorithm> // For std::make_heap, std::push_heap, std::pop_heap
 #include <utility> // For std::move
+#include <stdexcept> // For std::out_of_range
+#include <type_traits> // For std::invoke_result_t
 
 // Forward declaration if KeyFn uses T by value and T is complex
 // Or ensure T is lightweight or passed by const& in KeyFn type
 
 template <typename T,
-          typename Compare = std::less<typename std::result_of<std::function<T(const T&)>(const T&)>::type>,
+          typename Compare = std::less<std::invoke_result_t<KeyFn, const T&>>,
           typename KeyFn = std::function<T(const T&)>>
 class HeapQueue {
 public:
@@ -90,12 +92,26 @@ public:
         return data_.front();
     }
 
+    T update_top(const T& item) {
+        if (empty()) {
+            throw std::out_of_range("HeapQueue is empty");
+        }
+        T old_top = data_[0];
+        data_[0] = item;
+        _sift_down(0);
+        return old_top;
+    }
+
     bool empty() const {
         return data_.empty();
     }
 
     size_t size() const {
         return data_.size();
+    }
+
+    const std::vector<T>& as_vector() const {
+        return data_;
     }
 
     void clear() {
@@ -117,6 +133,45 @@ private:
     KeyFn key_fn_;
     Compare compare_instance_; // Added as per instruction
     std::function<bool(const T&, const T&)> internal_comparator_fn_;
+
+    void _sift_down(size_t index) {
+        size_t parent_idx = index;
+        size_t num_elements = data_.size();
+
+        while (true) {
+            size_t left_child_idx = 2 * parent_idx + 1;
+            if (left_child_idx >= num_elements) { // No children, so parent_idx is a leaf
+                break;
+            }
+
+            size_t child_to_swap_idx = left_child_idx; // Assume left child is the one to potentially swap with
+            size_t right_child_idx = left_child_idx + 1;
+
+            // If right child exists and is "preferred" (considered "larger" by comparator) over left child
+            // internal_comparator_fn_(A, B) is true if B's key < A's key (for std::less as Compare)
+            // This means B has higher priority for a min-heap.
+            // So, if internal_comparator_fn_(data_[left_child_idx], data_[right_child_idx]) is true,
+            // it means key(data_[right_child_idx]) < key(data_[left_child_idx]).
+            // Thus, the right child has a smaller key (higher priority) and should be chosen.
+            if (right_child_idx < num_elements && internal_comparator_fn_(data_[left_child_idx], data_[right_child_idx])) {
+                child_to_swap_idx = right_child_idx;
+            }
+
+            // Now child_to_swap_idx is the index of the child with the higher priority (smaller key).
+            // We need to check if parent_idx should be swapped with child_to_swap_idx.
+            // Swap if parent is "less preferred" (considered "smaller" by comparator) than child_to_swap_idx.
+            // This means swap if internal_comparator_fn_(data_[parent_idx], data_[child_to_swap_idx]) is true.
+            // internal_comparator_fn_(parent, child) means key(child) < key(parent).
+            // If key(child) < key(parent), then parent is not in the right place, so swap.
+            if (internal_comparator_fn_(data_[parent_idx], data_[child_to_swap_idx])) {
+                std::swap(data_[parent_idx], data_[child_to_swap_idx]);
+                parent_idx = child_to_swap_idx; // Move down to the child's position
+            } else {
+                // Parent has higher or equal priority (key <= child's key), so heap property is satisfied locally.
+                break;
+            }
+        }
+    }
 };
 
 #endif // HEAP_QUEUE_H_
