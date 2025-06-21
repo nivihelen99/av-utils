@@ -1,4 +1,4 @@
-#include "group_by_consecutive.hpp" // Assuming it's in the include path
+#include "group_by_consecutive.h" // Assuming it's in the include path
 #include <vector>
 #include <string>
 #include <iostream>

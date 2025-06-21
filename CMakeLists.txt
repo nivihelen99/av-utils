@@ -20,27 +20,37 @@ target_include_directories(CppLibAsyncEventQueue INTERFACE ${CMAKE_CURRENT_SOURC
 
 # Future steps will add examples and tests here
 
-# Add example executable
-add_executable(SimpleUsageExample examples/simple_usage.cpp)
+# Automatically add executables for all files in the examples/ directory
+file(GLOB EXAMPLE_FILES "examples/*.cpp")
 
-# Link example against HeapQueue
-target_link_libraries(SimpleUsageExample PRIVATE HeapQueue)
+foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
+    # Derive executable name from source file name
+    get_filename_component(EXECUTABLE_NAME ${EXAMPLE_FILE} NAME_WE)
 
-# Add ChainMapExample executable
-add_executable(ChainMapExample examples/chain_map_example.cpp)
-target_include_directories(ChainMapExample PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-# ChainMapExample does not link against HeapQueue or other specific libs from this project by default
-# It uses the header-only ChainMap library.
+    # Add executable target
+    add_executable(${EXECUTABLE_NAME} ${EXAMPLE_FILE})
 
-# Optional: Print a message where the executable can be found
-# Get the directory where the executable will be built
+    # Set include directories
+    target_include_directories(${EXECUTABLE_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+    # Link against relevant libraries
+    target_link_libraries(${EXECUTABLE_NAME} PRIVATE
+        HeapQueue
+        CppLibCounter
+        CppLibLazySortedMerger
+        CppLibAsyncEventQueue
+    )
+endforeach()
+
+# Optional: Print a message where the executables can be found
+# Get the directory where the executables will be built
 if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
     set(EXE_OUTPUT_PATH ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 else()
     set(EXE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 endif()
 
-message(STATUS "SimpleUsageExample executable will be built in: ${EXE_OUTPUT_PATH}/")
+message(STATUS "Example executables will be built in: ${EXE_OUTPUT_PATH}/")
 
 # Google Test setup
 include(FetchContent)
