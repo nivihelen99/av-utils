@@ -3,6 +3,8 @@
 #include <deque>
 #include <stdexcept>
 #include <functional>
+#include <algorithm> // For std::find, std::remove
+#include <iterator>  // For std::distance
 
 /**
  * @brief A fair rotating queue for C++17 that provides circular access to elements
@@ -20,6 +22,20 @@ private:
     size_t current = 0;
 
 public:
+    /**
+     * @brief Default constructor
+     */
+    RoundRobinQueue() = default;
+
+    /**
+     * @brief Constructor from a pair of iterators
+     * @tparam InputIt Iterator type
+     * @param first Iterator to the first element
+     * @param last Iterator to the one past the last element
+     */
+    template<typename InputIt>
+    RoundRobinQueue(InputIt first, InputIt last) : queue(first, last), current(0) {}
+
     /**
      * @brief Add an element to the back of the queue
      * @param item The item to add
@@ -141,11 +157,14 @@ public:
      * @complexity O(1)
      */
     void insert_front(const T& item) {
+        bool was_empty = queue.empty();
         queue.push_front(item);
-        // Adjust current pointer since we inserted at the front
-        if (!queue.empty() && current > 0) {
+        // Adjust current pointer since we inserted at the front.
+        // If the queue was not empty, the previously current item is shifted one position to the right.
+        if (!was_empty) {
             current++;
         }
+        // If the queue was empty, current remains 0, which is correct.
     }
 
     /**
@@ -154,9 +173,10 @@ public:
      * @complexity O(1)
      */
     void insert_front(T&& item) {
+        bool was_empty = queue.empty();
         queue.push_front(std::move(item));
-        // Adjust current pointer since we inserted at the front
-        if (!queue.empty() && current > 0) {
+        // Adjust current pointer since we inserted at the front.
+        if (!was_empty) {
             current++;
         }
     }
@@ -184,6 +204,77 @@ public:
      */
     size_t current_position() const {
         return current;
+    }
+
+    /**
+     * @brief Rotate the queue's starting point.
+     * Positive n advances the current pointer, negative n moves it backward.
+     * @param n Number of positions to rotate.
+     * @complexity O(1)
+     */
+    void rotate(int n) {
+        if (empty()) {
+            return;
+        }
+        // Modulo arithmetic needs to handle negative results correctly.
+        // (current + n) % size might be negative if (current + n) is negative.
+        // So, ((current + n) % size + size) % size ensures a positive result.
+        long long num_elements = static_cast<long long>(queue.size());
+        long long current_ll = static_cast<long long>(current);
+        long long n_ll = static_cast<long long>(n);
+
+        current = static_cast<size_t>(((current_ll + n_ll) % num_elements + num_elements) % num_elements);
+    }
+
+    /**
+     * @brief Remove the first occurrence of a specific value from the queue.
+     * @param value The value to remove.
+     * @return True if an element was removed, false otherwise.
+     * @complexity O(N) due to searching and potential erase in std::deque.
+     */
+    bool remove(const T& value) {
+        if (empty()) {
+            return false;
+        }
+
+        auto it = std::find(queue.begin(), queue.end(), value);
+        if (it == queue.end()) {
+            return false; // Value not found
+        }
+
+        size_t removed_idx = std::distance(queue.begin(), it);
+        queue.erase(it);
+
+        if (empty()) {
+            current = 0;
+        } else {
+            if (removed_idx < current) {
+                current--; // Element before current was removed
+            } else if (removed_idx == current) {
+                // Current element was removed, new current should be at the same "logical" position
+                // which means it stays at the same index, unless it was the last element.
+                if (current >= queue.size()) { // If it was the last element
+                    current = 0;
+                }
+            }
+            // If removed_idx > current, current index is not affected unless
+            // current becomes out of bounds due to removal of last element,
+            // which is handled by the (current >= queue.size()) check.
+            if (current >= queue.size() && !queue.empty()) { // Ensure current is valid
+                 current = 0; // or current % queue.size(); but 0 is safer if current was > size
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @brief Check if the queue contains a specific value.
+     * @param value The value to check for.
+     * @return True if the value is found, false otherwise.
+     * @complexity O(N)
+     */
+    bool contains(const T& value) const {
+        return std::find(queue.begin(), queue.end(), value) != queue.end();
     }
 
     // Iterator support for STL compatibility
