@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <utility>
 #include <cassert>
+#include <iostream> // Required for std::cout, std::endl in example code
 
 /**
  * @brief Policy enum for DelayedInit behavior
@@ -270,7 +271,77 @@ public:
                      "value_or() only available for Nullable policy");
         return initialized_ ? *ptr() : static_cast<T>(std::forward<U>(default_value));
     }
+
+    /**
+     * @brief Swap with another DelayedInit object
+     */
+    void swap(DelayedInit& other) noexcept(std::is_nothrow_move_constructible_v<T> && std::is_nothrow_destructible_v<T>) {
+        using std::swap;
+        if (!initialized_ && !other.initialized_) {
+            return; // Both uninitialized, nothing to do
+        } else if (initialized_ && other.initialized_) {
+            swap(*ptr(), *other.ptr()); // Both initialized, swap values
+        } else if (initialized_) { // This is initialized, other is not
+            other.init(std::move(*ptr()));
+            destroy(); // Make this uninitialized
+        } else { // This is not initialized, other is
+            init(std::move(*other.ptr()));
+            other.destroy(); // Make other uninitialized
+        }
+    }
 };
+
+// Comparison Operators
+template<typename T, DelayedInitPolicy P>
+bool operator==(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    if (lhs.is_initialized() != rhs.is_initialized()) {
+        return false;
+    }
+    if (!lhs.is_initialized()) { // Both are uninitialized
+        return true;
+    }
+    return *lhs == *rhs; // Both initialized, compare values
+}
+
+template<typename T, DelayedInitPolicy P>
+bool operator!=(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    return !(lhs == rhs);
+}
+
+template<typename T, DelayedInitPolicy P>
+bool operator<(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    if (!lhs.is_initialized() && rhs.is_initialized()) {
+        return true; // Uninitialized is less than initialized
+    }
+    if (lhs.is_initialized() && !rhs.is_initialized()) {
+        return false; // Initialized is not less than uninitialized
+    }
+    if (!lhs.is_initialized() && !rhs.is_initialized()) {
+        return false; // Both uninitialized, not less than
+    }
+    return *lhs < *rhs; // Both initialized, compare values
+}
+
+template<typename T, DelayedInitPolicy P>
+bool operator<=(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    return (lhs < rhs) || (lhs == rhs);
+}
+
+template<typename T, DelayedInitPolicy P>
+bool operator>(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    return !(lhs <= rhs);
+}
+
+template<typename T, DelayedInitPolicy P>
+bool operator>=(const DelayedInit<T, P>& lhs, const DelayedInit<T, P>& rhs) {
+    return !(lhs < rhs);
+}
+
+// Non-member swap
+template<typename T, DelayedInitPolicy P>
+void swap(DelayedInit<T, P>& lhs, DelayedInit<T, P>& rhs) noexcept(noexcept(lhs.swap(rhs))) {
+    lhs.swap(rhs);
+}
 
 // Convenience type aliases
 template<typename T>
@@ -387,3 +458,4 @@ int main() {
     
     return 0;
 }
+#endif // DELAYED_INIT_EXAMPLE_MAIN
