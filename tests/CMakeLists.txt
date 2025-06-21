@@ -32,6 +32,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         CppLibContextMgr
         OrderedSet
         BoundedSetLib
+        SlidingWindowMinMax
     )
 
     # Specific configurations for certain tests
