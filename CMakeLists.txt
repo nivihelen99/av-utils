@@ -30,6 +30,9 @@ target_include_directories(BoundedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/i
 add_library(SlidingWindowMinMax INTERFACE)
 target_include_directories(SlidingWindowMinMax INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_library(ZipViewLib INTERFACE)
+target_include_directories(ZipViewLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -55,6 +58,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         OrderedSet
         BoundedSetLib
         SlidingWindowMinMax
+        ZipViewLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

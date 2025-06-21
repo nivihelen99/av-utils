@@ -33,6 +33,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         OrderedSet
         BoundedSetLib
         SlidingWindowMinMax
+        ZipViewLib
     )
 
     # Specific configurations for certain tests
