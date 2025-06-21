@@ -5,16 +5,43 @@ This repository contains a collection of various C++ data structures and librari
 This section provides an overview of some of the key categories and components available in this repository.
 
 ### Core Data Structures
-This category includes fundamental and advanced data structures for efficient data storage and retrieval. It features various tree and list structures (e.g., `skiplist.h`, `trie.h`, `fenwick_tree.h`), associative containers (e.g., `bimap.h`, `dict.h`), and specialized arrays (e.g., `persist_array.h`).
+This category includes fundamental and advanced data structures for efficient data storage and retrieval.
+It features:
+*   Tree and list structures (e.g., `skiplist.h`, `skiplist_std.h` - concurrent skip list, `trie.h`, `fenwick_tree.h`).
+*   Associative containers (e.g., `bimap.h`, `dict.h`, `flatMap.h` - sorted vector-based map, `chain_map.h` - view over multiple maps).
+*   Set-like structures (e.g., `ordered_set.h` - preserves insertion order, `bounded_set.h` - fixed-capacity with FIFO eviction).
+*   Specialized arrays and vectors (e.g., `persist_array.h`, `variant_vector.h` - stores elements of mixed types).
+*   Queues (e.g., `heap_queue.h` - priority queue with custom key/comparison).
+*   Specialized maps (e.g., `interval_map.h` - maps values to intervals, `slot_map_new.h` - stable storage with O(1) ops via keys).
+*   Union-Find structures (e.g., `disjoint_set_union.h` - generic and integer-optimized DSU).
+*   Sorted lists (e.g., `sorted_list_bisect.h` - elements kept sorted).
 
 ### Caching Libraries
-These components offer various caching mechanisms to improve performance by storing frequently accessed data. A key example is the `lru_cache.h`, which implements a Least Recently Used (LRU) cache.
+These components offer various caching mechanisms to improve performance by storing frequently accessed data.
+Examples include:
+*   `lru_cache.h`: Implements a Least Recently Used (LRU) cache.
+*   `expiring_containers.h`: Provides `TimeStampedQueue` and `ExpiringDict` where entries auto-expire based on TTL.
 
 ### Networking Utilities
-This category includes utilities specifically designed for networking applications, such as MAC address manipulation (`MacAddress.h`, `mac_parse.h`), ARP and ND cache implementations (`arp_cache.h`, `nd_cache.h`), and topic-based filtering (`topic_filter.h`).
+This category includes utilities specifically designed for networking applications.
+Key components:
+*   MAC address manipulation (`MacAddress.h`, `mac_parse.h`).
+*   ARP and ND cache implementations (`arp_cache.h`, `nd_cache.h`).
+*   Topic-based filtering (`topic_filter.h`).
+*   Policy-based routing and TCAM (`policy_radix.h` - radix tree for routing policies, `tcam.h` - Ternary Content-Addressable Memory).
+*   Distributed ID allocation (`redis_id_allocator.h` - uses Redis backend).
 
 ### Language/Utility Extensions
-These components extend C++ with useful general-purpose utilities and language-like features. This includes containers with default values (`default_dict.h`), value/error type handling (`expected.h`), named struct/tuple utilities (`named_struct.h`, `named_tuple.h`), thread-safe queues (`spsc.h`), and undo/redo functionality (`undo.h`).
+These components extend C++ with useful general-purpose utilities and language-like features.
+This includes:
+*   Containers with special properties (e.g., `default_dict.h` - default values for missing keys, `counter.h` - frequency counting).
+*   Value/error type handling (e.g., `expected.h`).
+*   Metaprogramming and reflection (e.g., `named_struct.h`, `named_tuple.h`, `enum_reflect.h` - compile-time enum reflection).
+*   Concurrency and timing (e.g., `spsc.h` - single-producer/consumer queue, `AsyncEventQueue.h` - thread-safe event queue, `delayed_call.h` - deferred execution, `timer_wheel.h` - efficient timer management).
+*   Resource management (e.g., `context_mgr.h` - RAII context managers, scope guards).
+*   Functional programming utilities (e.g., `partial.h` - function argument binding).
+*   Iterator and algorithm utilities (e.g., `any_all.h` - truth testing for containers, `group_by_consecutive.h` - groups consecutive items, `lazy_sorted_merger.h` - merges sorted sequences lazily, `zip_view.h` - Python-like `zip` and `enumerate`).
+*   Miscellaneous utilities (e.g., `undo.h` - undo/redo functionality, `IDAllocator.h` - unique ID allocation, `sliding_window_minmax.h` - tracks min/max in a sliding window).
 
 ## General Usage
 
