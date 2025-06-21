@@ -197,9 +197,9 @@ void example_macro_usage() {
     
     std::cout << "Before scope exit\n";
     
-    SCOPE_EXIT {
+    SCOPE_EXIT({
         std::cout << "🎯 Macro-based cleanup executed!\n";
-    };
+    });
     
     std::cout << "Inside scope\n";
     std::cout << "About to exit scope...\n";
