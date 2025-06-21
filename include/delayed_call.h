@@ -71,34 +71,77 @@ public:
     DelayedCall(const DelayedCall&) = delete;
     DelayedCall& operator=(const DelayedCall&) = delete;
     
-    DelayedCall(DelayedCall&& other) noexcept
-        : task_fn_(std::move(other.task_fn_))
-        , delay_(other.delay_)
-        , scheduled_time_(other.scheduled_time_)
-        , is_cancelled_(other.is_cancelled_.load())
-        , has_fired_(other.has_fired_.load())
-        , is_rescheduling_(other.is_rescheduling_.load())
-        , timer_thread_(std::move(other.timer_thread_))
-    {
-        other.is_cancelled_ = true;
+    DelayedCall(DelayedCall&& other) noexcept {
+        // Take properties from other
+        task_fn_ = std::move(other.task_fn_);
+        delay_ = other.delay_;
+
+        // Was the other task viable before we started messing with it?
+        bool other_was_pending = !other.has_fired_.load() && !other.is_cancelled_.load();
+
+        // Neutralize the other object.
+        // Signal its thread to stop (if running) and join it.
+        other.is_cancelled_ = true; // Signal cancellation to its thread
+        other.cv_.notify_all();     // Wake up its thread if it's waiting
+        if (other.timer_thread_.joinable()) {
+            other.timer_thread_.join();
+        }
+        other.has_fired_ = true; // Mark as effectively done/used up.
+
+        // Initialize this object's state
+        is_cancelled_ = false;
+        has_fired_ = false;
+        is_rescheduling_ = false; // Should not be rescheduling during a move construction
+
+        // If the other task was pending, schedule it anew for this object.
+        if (other_was_pending) {
+            // schedule_internal uses this->delay_ and this->task_fn_
+            // which are already set from other.
+            schedule_internal();
+        } else {
+            // If other was not pending (already fired or cancelled),
+            // this new object is also considered fired/cancelled to match.
+            // No new thread will be started.
+            is_cancelled_ = !other.has_fired_.load(); // if other was cancelled, this is cancelled
+            has_fired_ = other.has_fired_.load();    // if other was fired, this is fired
+        }
     }
     
     DelayedCall& operator=(DelayedCall&& other) noexcept {
         if (this != &other) {
-            cancel();
+            // 1. Clean up current object's resources
+            cancel(); // Sets is_cancelled_ = true, notifies cv_
             if (timer_thread_.joinable()) {
                 timer_thread_.join();
             }
             
+            // 2. Take properties from other
             task_fn_ = std::move(other.task_fn_);
             delay_ = other.delay_;
-            scheduled_time_ = other.scheduled_time_;
-            is_cancelled_ = other.is_cancelled_.load();
-            has_fired_ = other.has_fired_.load();
-            is_rescheduling_ = other.is_rescheduling_.load();
-            timer_thread_ = std::move(other.timer_thread_);
-            
+
+            // Was the other task viable before we started messing with it?
+            bool other_was_pending = !other.has_fired_.load() && !other.is_cancelled_.load();
+
+            // 3. Neutralize the other object.
             other.is_cancelled_ = true;
+            other.cv_.notify_all();
+            if (other.timer_thread_.joinable()) {
+                other.timer_thread_.join();
+            }
+            other.has_fired_ = true; // Mark as effectively done.
+
+            // 4. Initialize this object's state for the new task
+            is_cancelled_ = false;
+            has_fired_ = false;
+            is_rescheduling_ = false;
+
+            // 5. If the other task was pending, schedule it anew for this object.
+            if (other_was_pending) {
+                schedule_internal();
+            } else {
+                is_cancelled_ = !other.has_fired_.load();
+                has_fired_ = other.has_fired_.load();
+            }
         }
         return *this;
     }
