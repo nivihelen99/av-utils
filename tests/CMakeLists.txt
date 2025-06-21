@@ -31,6 +31,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         CppLibAsyncEventQueue
         CppLibContextMgr
         OrderedSet
+        BoundedSetLib
     )
 
     # Specific configurations for certain tests

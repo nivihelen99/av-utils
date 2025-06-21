@@ -24,6 +24,9 @@ target_include_directories(CppLibContextMgr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 add_library(OrderedSet INTERFACE)
 target_include_directories(OrderedSet INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_library(BoundedSetLib INTERFACE)
+target_include_directories(BoundedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -47,6 +50,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         CppLibAsyncEventQueue
         CppLibContextMgr
         OrderedSet
+        BoundedSetLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
