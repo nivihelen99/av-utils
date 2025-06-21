@@ -4,6 +4,17 @@
 #include <vector>
 #include <memory> // For std::shared_ptr if used in demo
 
+// Define Server struct at file scope
+struct Server {
+    std::string name;
+    int load = 0;
+    Server(std::string n) : name(std::move(n)) {}
+    // Adding a stream operator for easy printing
+    friend std::ostream& operator<<(std::ostream& os, const Server& s) {
+        return os << s.name << "(load: " << s.load << ")";
+    }
+};
+
 // Function to demonstrate practical usage of RoundRobinQueue
 void demonstrate_round_robin_queue() {
     std::cout << "=== RoundRobinQueue Demonstration ===" << std::endl;
@@ -25,15 +36,7 @@ void demonstrate_round_robin_queue() {
     }
 
     // Example 2: Load balancing simulation
-    struct Server {
-        std::string name;
-        int load = 0;
-        Server(std::string n) : name(std::move(n)) {}
-        // Adding a stream operator for easy printing if needed
-        friend std::ostream& operator<<(std::ostream& os, const Server& s) {
-            return os << s.name << "(load: " << s.load << ")";
-        }
-    };
+    // Server struct is now defined at file scope
 
     RoundRobinQueue<Server> servers;
     servers.enqueue(Server("ServerAlpha"));
