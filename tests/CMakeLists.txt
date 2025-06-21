@@ -34,6 +34,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         BoundedSetLib
         SlidingWindowMinMax
         ZipViewLib
+        BatcherLib
     )
 
     # Specific configurations for certain tests
