@@ -175,7 +175,7 @@ void test_event_deduplication() {
     ExpiringDict<std::string, bool> recent_events(3000ms);
     
     auto emit_alarm = [](const std::string& event) {
-        std::cout << "🚨 ALARM: " << event << std::endl;
+        std::cout << "ALARM: " << event << std::endl;
     };
     
     auto process_event = [&](const std::string& event) {
@@ -236,11 +236,11 @@ int main() {
         test_event_deduplication();
         test_for_each_visitor();
         
-        std::cout << "🎉 All tests passed successfully!\n";
+        std::cout << "All tests passed successfully!\n";
         return 0;
     }
     catch (const std::exception& e) {
-        std::cerr << "❌ Test failed with exception: " << e.what() << std::endl;
+        std::cerr << "Test failed with exception: " << e.what() << std::endl;
         return 1;
     }
 }
