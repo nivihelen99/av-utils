@@ -24,7 +24,7 @@ void example_scoped_timer() {
     auto timer = context::make_scope_exit([=] {
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-        std::cout << "⏱️  Elapsed time: " << duration.count() << " microseconds\n";
+        std::cout << "Timer: Elapsed time: " << duration.count() << " microseconds\n";
     });
     
     std::cout << "Performing some work...\n";
@@ -38,8 +38,8 @@ void example_scoped_logging() {
     print_separator("Scoped Logging Example");
     
     auto log_scope = context::make_context(
-        [] { std::cout << "🔍 Entering critical section\n"; },
-        [] { std::cout << "✅ Exiting critical section\n"; }
+        [] { std::cout << "Log: Entering critical section\n"; },
+        [] { std::cout << "OK: Exiting critical section\n"; }
     );
     
     std::cout << "Doing important work inside critical section...\n";
@@ -58,7 +58,7 @@ void example_variable_override() {
         std::cout << "g_verbose inside scope: " << std::boolalpha << g_verbose << "\n";
         
         if (g_verbose) {
-            std::cout << "This message prints because verbose is true!\n";
+            std::cout << "OK: This message prints because verbose is true!\n";
         }
     }
     
@@ -79,7 +79,7 @@ void example_file_handling() {
     
     auto file_guard = context::make_scope_exit([=] {
         fclose(file);
-        std::cout << "📁 File closed automatically\n";
+        std::cout << "File: File closed automatically\n";
     });
     
     fprintf(file, "Hello from context manager!\n");
@@ -106,11 +106,11 @@ void example_indent_manager() {
         auto indent_guard = context::make_context(
             [] { 
                 ++g_indent_level; 
-                std::cout << "📝 Increased indent level to " << g_indent_level << "\n";
+                std::cout << "Indent: Increased indent level to " << g_indent_level << "\n";
             },
             [] { 
                 --g_indent_level; 
-                std::cout << "📝 Decreased indent level to " << g_indent_level << "\n";
+                std::cout << "Indent: Decreased indent level to " << g_indent_level << "\n";
             }
         );
         
@@ -136,7 +136,7 @@ void example_cancellation() {
     print_separator("Cancellation Example");
     
     auto cleanup = context::make_scope_exit([] {
-        std::cout << "❌ This should NOT print - cleanup was cancelled\n";
+        std::cout << "Cancelled: This should NOT print - cleanup was cancelled\n";
     });
     
     std::cout << "Cleanup is active: " << std::boolalpha << cleanup.is_active() << "\n";
@@ -145,7 +145,7 @@ void example_cancellation() {
     cleanup.dismiss();
     
     std::cout << "Cleanup is active after dismiss: " << std::boolalpha << cleanup.is_active() << "\n";
-    std::cout << "✅ Cleanup was successfully cancelled\n";
+    std::cout << "OK: Cleanup was successfully cancelled\n";
 }
 
 void example_exception_safety() {
@@ -153,7 +153,7 @@ void example_exception_safety() {
     
     try {
         auto cleanup = context::make_scope_exit([] {
-            std::cout << "🛡️  Exception-safe cleanup executed\n";
+            std::cout << "Safe: Exception-safe cleanup executed\n";
         });
         
         std::cout << "About to throw an exception...\n";
@@ -173,16 +173,16 @@ void example_resource_acquisition() {
     
     auto resource_manager = context::make_context(
         [&resources] {
-            std::cout << "🔄 Acquiring resources...\n";
+            std::cout << "Resource: Acquiring resources...\n";
             resources.push_back(std::make_unique<int>(1));
             resources.push_back(std::make_unique<int>(2));
             resources.push_back(std::make_unique<int>(3));
-            std::cout << "✅ Acquired " << resources.size() << " resources\n";
+            std::cout << "OK: Acquired " << resources.size() << " resources\n";
         },
         [&resources] {
-            std::cout << "🧹 Releasing " << resources.size() << " resources...\n";
+            std::cout << "Resource: Releasing " << resources.size() << " resources...\n";
             resources.clear();
-            std::cout << "✅ All resources released\n";
+            std::cout << "OK: All resources released\n";
         }
     );
     
@@ -198,7 +198,7 @@ void example_macro_usage() {
     std::cout << "Before scope exit\n";
     
     SCOPE_EXIT({
-        std::cout << "🎯 Macro-based cleanup executed!\n";
+        std::cout << "Macro: Macro-based cleanup executed!\n";
     });
     
     std::cout << "Inside scope\n";
@@ -241,11 +241,11 @@ void example_complex_scenario() {
     auto transaction_scope = context::make_context(
         [&transaction_active] {
             transaction_active = true;
-            std::cout << "🔄 Transaction started\n";
+            std::cout << "Tx: Transaction started\n";
         },
         [&transaction_active] {
             if (transaction_active) {
-                std::cout << "💾 Transaction committed\n";
+                std::cout << "Commit: Transaction committed\n";
                 transaction_active = false;
             }
         }
@@ -254,11 +254,11 @@ void example_complex_scenario() {
     auto lock_scope = context::make_context(
         [&lock_held] {
             lock_held = true;
-            std::cout << "🔒 Lock acquired\n";
+            std::cout << "Lock: Lock acquired\n";
         },
         [&lock_held] {
             if (lock_held) {
-                std::cout << "🔓 Lock released\n";
+                std::cout << "Unlock: Lock released\n";
                 lock_held = false;
             }
         }
@@ -267,7 +267,7 @@ void example_complex_scenario() {
     auto timer = context::make_scope_exit([start = std::chrono::high_resolution_clock::now()] {
         auto end = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        std::cout << "⏱️  Total operation time: " << duration.count() << " ms\n";
+        std::cout << "Timer: Total operation time: " << duration.count() << " ms\n";
     });
     
     std::cout << "Performing complex database operation...\n";
@@ -279,7 +279,7 @@ void example_complex_scenario() {
 }
 
 int main() {
-    std::cout << "🚀 Context Manager Examples\n";
+    std::cout << "Start: Context Manager Examples\n";
     std::cout << "C++17 Header-only Implementation\n";
     
     example_scoped_timer();
@@ -294,7 +294,7 @@ int main() {
     example_named_scope();
     example_complex_scenario();
     
-    std::cout << "\n🎉 All examples completed successfully!\n";
+    std::cout << "\nDone: All examples completed successfully!\n";
     
     return 0;
 }
