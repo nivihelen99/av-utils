@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <random>
 #include <chrono>
+#include <cmath>
 
 using namespace sliding_window;
 
