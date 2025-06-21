@@ -20,50 +20,47 @@ template <typename T>
 using const_reference_t = decltype(*std::begin(std::declval<const T&>()));
 
 // Forward declaration
-template <typename... Containers>
+template <typename... ViewTypes> // These are the types stored in the view's tuple (T or T&)
 class ZippedView;
 
 // Iterator implementation
-template <typename... Containers>
+template <typename... ContTypes> // These are the types of the containers being iterated (T or T&)
 class ZippedIterator {
 public:
     using iterator_category = std::forward_iterator_tag;
-    using value_type = std::tuple<reference_t<Containers>...>;
+    // reference_t<ContTypes> will correctly give U& if ContTypes is U or U&
+    using value_type = std::tuple<reference_t<ContTypes>...>;
     using difference_type = std::ptrdiff_t;
-    using pointer = void;
-    using reference = value_type;
+    using pointer = void; // Pointers to tuples are not common for iterators
+    using reference = value_type; // operator* returns by value (a tuple of references)
 
 private:
-    std::tuple<iterator_t<Containers>...> iterators_;
+    // iterator_t<ContTypes> will correctly give iterator type for U or U&
+    std::tuple<iterator_t<ContTypes>...> iterators_;
 
 public:
-    explicit ZippedIterator(iterator_t<Containers>... iters)
+    explicit ZippedIterator(iterator_t<ContTypes>... iters)
         : iterators_(std::move(iters)...) {}
 
-    // Dereference operator - returns tuple of references
     auto operator*() const -> value_type {
-        return dereference_impl(std::index_sequence_for<Containers...>{});
+        return dereference_impl(std::index_sequence_for<ContTypes...>{});
     }
 
-    // Pre-increment operator
     ZippedIterator& operator++() {
-        increment_impl(std::index_sequence_for<Containers...>{});
+        increment_impl(std::index_sequence_for<ContTypes...>{});
         return *this;
     }
 
-    // Post-increment operator
     ZippedIterator operator++(int) {
         auto copy = *this;
         ++(*this);
         return copy;
     }
 
-    // Equality comparison
     bool operator==(const ZippedIterator& other) const {
-        return equals_impl(other, std::index_sequence_for<Containers...>{});
+        return equals_impl(other, std::index_sequence_for<ContTypes...>{});
     }
 
-    // Inequality comparison
     bool operator!=(const ZippedIterator& other) const {
         return !(*this == other);
     }
@@ -76,39 +73,42 @@ private:
 
     template <std::size_t... Is>
     void increment_impl(std::index_sequence<Is...>) {
-        (++std::get<Is>(iterators_), ...);
+        (void)(++std::get<Is>(iterators_), ...); // Fold expression
     }
 
     template <std::size_t... Is>
     bool equals_impl(const ZippedIterator& other, std::index_sequence<Is...>) const {
-        // Iteration stops when ANY iterator reaches its end (shortest container)
-        return ((std::get<Is>(iterators_) == std::get<Is>(other.iterators_)) || ...);
+        // Two zip iterators are equal if *any* of their underlying iterators are equal.
+        // This implies that the shortest sequence has been exhausted when comparing to an end iterator.
+        bool result = false;
+        ((result = result || (std::get<Is>(iterators_) == std::get<Is>(other.iterators_))), ...);
+        return result;
     }
 };
 
 // Const iterator implementation
-template <typename... Containers>
+template <typename... ContTypes> // These are types of containers (T or T&)
 class ZippedConstIterator {
 public:
     using iterator_category = std::forward_iterator_tag;
-    using value_type = std::tuple<const_reference_t<Containers>...>;
+    using value_type = std::tuple<const_reference_t<ContTypes>...>;
     using difference_type = std::ptrdiff_t;
     using pointer = void;
     using reference = value_type;
 
 private:
-    std::tuple<const_iterator_t<Containers>...> iterators_;
+    std::tuple<const_iterator_t<ContTypes>...> iterators_;
 
 public:
-    explicit ZippedConstIterator(const_iterator_t<Containers>... iters)
+    explicit ZippedConstIterator(const_iterator_t<ContTypes>... iters)
         : iterators_(std::move(iters)...) {}
 
     auto operator*() const -> value_type {
-        return dereference_impl(std::index_sequence_for<Containers...>{});
+        return dereference_impl(std::index_sequence_for<ContTypes...>{});
     }
 
     ZippedConstIterator& operator++() {
-        increment_impl(std::index_sequence_for<Containers...>{});
+        increment_impl(std::index_sequence_for<ContTypes...>{});
         return *this;
     }
 
@@ -119,7 +119,7 @@ public:
     }
 
     bool operator==(const ZippedConstIterator& other) const {
-        return equals_impl(other, std::index_sequence_for<Containers...>{});
+        return equals_impl(other, std::index_sequence_for<ContTypes...>{});
     }
 
     bool operator!=(const ZippedConstIterator& other) const {
@@ -134,112 +134,124 @@ private:
 
     template <std::size_t... Is>
     void increment_impl(std::index_sequence<Is...>) {
-        (++std::get<Is>(iterators_), ...);
+        (void)(++std::get<Is>(iterators_), ...);
     }
 
     template <std::size_t... Is>
     bool equals_impl(const ZippedConstIterator& other, std::index_sequence<Is...>) const {
-        return ((std::get<Is>(iterators_) == std::get<Is>(other.iterators_)) || ...);
+        bool result = false;
+        ((result = result || (std::get<Is>(iterators_) == std::get<Is>(other.iterators_))), ...);
+        return result;
     }
 };
 
+
 // Main ZippedView class
-template <typename... Containers>
+// ViewTypes are the types passed to the factory (e.g., std::vector<int>&, std::list<std::string>&&)
+// The tuple will store these as is (e.g. T& for lvalues, T for rvalues if moved)
+template <typename... ViewTypes>
 class ZippedView {
 public:
-    using iterator = ZippedIterator<Containers...>;
-    using const_iterator = ZippedConstIterator<Containers...>;
+    // The iterators operate on these ViewTypes directly.
+    // std::begin/end work on T and T&.
+    using iterator = ZippedIterator<ViewTypes...>;
+    using const_iterator = ZippedConstIterator<ViewTypes...>;
 
 private:
-    std::tuple<Containers&...> containers_;
+    std::tuple<ViewTypes...> containers_tuple_; // Stores T& or T (if rvalue was moved in)
 
 public:
-    explicit ZippedView(Containers&... containers)
-        : containers_(containers...) {}
+    // Constructor takes forwarding references to perfectly forward into the tuple
+    explicit ZippedView(ViewTypes&&... containers)
+        : containers_tuple_(std::forward<ViewTypes>(containers)...) {}
 
-    // Begin iterator
     iterator begin() {
-        return make_begin_iterator(std::index_sequence_for<Containers...>{});
+        return make_iterator<iterator>([](auto& c){ return std::begin(c); });
     }
 
-    // End iterator
     iterator end() {
-        return make_end_iterator(std::index_sequence_for<Containers...>{});
+        return make_iterator<iterator>([](auto& c){ return std::end(c); });
     }
 
-    // Const begin iterator
     const_iterator begin() const {
-        return make_const_begin_iterator(std::index_sequence_for<Containers...>{});
+        return make_iterator<const_iterator>([](const auto& c){ return std::begin(c); });
     }
 
-    // Const end iterator
     const_iterator end() const {
-        return make_const_end_iterator(std::index_sequence_for<Containers...>{});
+        return make_iterator<const_iterator>([](const auto& c){ return std::end(c); });
     }
 
-    // Const begin iterator (cbegin)
     const_iterator cbegin() const {
         return begin();
     }
 
-    // Const end iterator (cend)
     const_iterator cend() const {
         return end();
     }
 
 private:
-    template <std::size_t... Is>
-    iterator make_begin_iterator(std::index_sequence<Is...>) {
-        return iterator(std::begin(std::get<Is>(containers_))...);
+    template <typename Iter, typename Func, std::size_t... Is>
+    Iter make_iterator_impl(Func f, std::index_sequence<Is...>) {
+        return Iter(f(std::get<Is>(containers_tuple_))...);
     }
 
-    template <std::size_t... Is>
-    iterator make_end_iterator(std::index_sequence<Is...>) {
-        return iterator(std::end(std::get<Is>(containers_))...);
+    template <typename Iter, typename Func, std::size_t... Is>
+    Iter make_iterator_impl_const(Func f, std::index_sequence<Is...>) const {
+        return Iter(f(std::get<Is>(containers_tuple_))...);
     }
 
-    template <std::size_t... Is>
-    const_iterator make_const_begin_iterator(std::index_sequence<Is...>) const {
-        return const_iterator(std::begin(std::get<Is>(containers_))...);
+    template <typename Iter, typename Func>
+    Iter make_iterator(Func f) {
+        return make_iterator_impl<Iter>(f, std::index_sequence_for<ViewTypes...>{});
     }
 
-    template <std::size_t... Is>
-    const_iterator make_const_end_iterator(std::index_sequence<Is...>) const {
-        return const_iterator(std::end(std::get<Is>(containers_))...);
+    template <typename Iter, typename Func>
+    Iter make_iterator(Func f) const {
+        return make_iterator_impl_const<Iter>(f, std::index_sequence_for<ViewTypes...>{});
     }
 };
 
 // Factory function for zip
+// Takes Containers&&... (e.g., T&, U&&)
+// Returns ZippedView<T&, U> (if U was rvalue, it's moved into ZippedView)
 template <typename... Containers>
-auto zip(Containers&&... containers) -> ZippedView<std::remove_reference_t<Containers>...> {
-    return ZippedView<std::remove_reference_t<Containers>...>(containers...);
+auto zip(Containers&&... containers) -> ZippedView<Containers...> {
+    return ZippedView<Containers...>(std::forward<Containers>(containers)...);
 }
 
 // Bonus: Enumerate implementation
-template <typename Container>
+// ViewType is T or T& (if an rvalue container is passed, ViewType is T, otherwise T&)
+template <typename ViewType>
 class EnumerateView {
 public:
-    using container_iterator = iterator_t<Container>;
-    using value_type = std::pair<std::size_t, reference_t<Container>>;
+    // Use ViewType for iterator_t and reference_t
+    using container_iterator_type = iterator_t<ViewType>;
+    using container_reference_type = reference_t<ViewType>;
+    // value_type for the view itself, though not strictly needed here
+    using view_value_type = std::pair<std::size_t, container_reference_type>;
+
 
     class iterator {
     public:
         using iterator_category = std::forward_iterator_tag;
-        using value_type = std::pair<std::size_t, reference_t<Container>>;
+        // The iterator's value_type is a pair of index and reference to element
+        using value_type = std::pair<std::size_t, container_reference_type>;
         using difference_type = std::ptrdiff_t;
-        using pointer = void;
-        using reference = value_type;
+        using pointer = void; // Not typical for such iterators
+        using reference = value_type; // operator* returns by value (the pair)
 
     private:
         std::size_t index_;
-        container_iterator iter_;
+        container_iterator_type iter_;
+        // Store end iterator to determine when iteration should stop, especially if container is empty or for equality.
+        // container_iterator_type end_iter_; // Optional: only if equality needs it explicitly
 
     public:
-        iterator(std::size_t index, container_iterator iter)
+        iterator(std::size_t index, container_iterator_type iter) // Removed end_iter_ for simplicity for now
             : index_(index), iter_(iter) {}
 
         auto operator*() const -> value_type {
-            return std::make_pair(index_, *iter_);
+            return value_type(index_, *iter_); // Constructs pair (size_t, T&)
         }
 
         iterator& operator++() {
@@ -254,6 +266,8 @@ public:
             return copy;
         }
 
+        // Equality comparison: only the underlying container iterator matters.
+        // The index is auxiliary information for dereferencing.
         bool operator==(const iterator& other) const {
             return iter_ == other.iter_;
         }
@@ -264,97 +278,34 @@ public:
     };
 
 private:
-    Container& container_;
+    ViewType container_; // Stores T (if rvalue moved in) or T&
 
 public:
-    explicit EnumerateView(Container& container) : container_(container) {}
+    // Constructor takes a forwarding reference to store T or T&
+    explicit EnumerateView(ViewType&& container)
+        : container_(std::forward<ViewType>(container)) {}
 
     iterator begin() {
         return iterator(0, std::begin(container_));
     }
 
     iterator end() {
-        return iterator(0, std::end(container_)); // Index doesn't matter for end
+        // The index for the end iterator can be the size of the container.
+        // This is mostly for conceptual correctness or if size() is implemented.
+        // For typical range-based for loops, only iter_ equality matters.
+        return iterator(std::distance(std::begin(container_), std::end(container_)), std::end(container_));
     }
+
+    // TODO: Add const begin()/end() and cbegin()/cend() if const enumeration is desired.
+    // This would involve a const_iterator for EnumerateView.
 };
 
 // Factory function for enumerate
+// Container will be deduced as T& for lvalues, T for rvalues (after std::forward)
+// So EnumerateView will be instantiated with EnumerateView<T&> or EnumerateView<T>
 template <typename Container>
-auto enumerate(Container&& container) -> EnumerateView<std::remove_reference_t<Container>> {
-    return EnumerateView<std::remove_reference_t<Container>>(container);
+auto enumerate(Container&& container) -> EnumerateView<Container> {
+    return EnumerateView<Container>(std::forward<Container>(container));
 }
 
 } // namespace zip_utils
-
-// Example usage and test cases
-#ifdef ZIPPED_VIEW_EXAMPLE
-
-#include <iostream>
-#include <vector>
-#include <list>
-#include <deque>
-#include <string>
-
-int main() {
-    using namespace zip_utils;
-
-    // Example 1: Basic zip with vectors
-    std::vector<int> ids = {1, 2, 3, 4};
-    std::vector<std::string> names = {"one", "two", "three"};
-    
-    std::cout << "Example 1: Basic zip\n";
-    for (auto&& [id, name] : zip(ids, names)) {
-        std::cout << id << " = " << name << "\n";
-    }
-
-    // Example 2: Three containers with different types
-    std::vector<int> a = {1, 2, 3};
-    std::list<std::string> b = {"a", "b", "c"};
-    std::deque<char> c = {'x', 'y', 'z'};
-    
-    std::cout << "\nExample 2: Three containers\n";
-    for (auto&& [i, s, ch] : zip(a, b, c)) {
-        std::cout << i << " " << s << " " << ch << "\n";
-    }
-
-    // Example 3: Mutable references
-    std::vector<int> vec1 = {1, 2, 3};
-    std::vector<int> vec2 = {10, 20, 30};
-    
-    std::cout << "\nExample 3: Before modification\n";
-    for (auto&& [x, y] : zip(vec1, vec2)) {
-        std::cout << x << " " << y << "\n";
-    }
-    
-    // Modify through zip
-    for (auto&& [x, y] : zip(vec1, vec2)) {
-        x += y;
-    }
-    
-    std::cout << "After modification (vec1 += vec2):\n";
-    for (int x : vec1) {
-        std::cout << x << " ";
-    }
-    std::cout << "\n";
-
-    // Example 4: Enumerate
-    std::vector<std::string> words = {"hello", "world", "cpp"};
-    
-    std::cout << "\nExample 4: Enumerate\n";
-    for (auto&& [index, word] : enumerate(words)) {
-        std::cout << index << ": " << word << "\n";
-    }
-
-    // Example 5: Const containers
-    const std::vector<int> const_vec = {5, 6, 7};
-    const std::vector<char> const_chars = {'a', 'b', 'c'};
-    
-    std::cout << "\nExample 5: Const containers\n";
-    for (auto&& [num, ch] : zip(const_vec, const_chars)) {
-        std::cout << num << " -> " << ch << "\n";
-    }
-
-    return 0;
-}
-
-#endif // ZIPPED_VIEW_EXAMPLE
