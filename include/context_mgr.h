@@ -4,6 +4,9 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
+#include <string>
+#include <iostream>
+#include <ostream>
 
 namespace context {
 
@@ -193,8 +196,8 @@ auto make_scope_exit(F&& exit_func) {
  * 
  * Usage: SCOPE_EXIT { cleanup_code(); };
  */
-#define SCOPE_EXIT \
-    auto CONTEXT_UNIQUE_NAME(__scope_exit_) = ::context::make_scope_exit([&]()
+#define SCOPE_EXIT(lambda_body) \
+    auto CONTEXT_UNIQUE_NAME(__scope_exit_) = ::context::make_scope_exit([&]() -> void lambda_body);
 
 #define CONTEXT_UNIQUE_NAME(base) CONTEXT_CONCAT(base, __LINE__)
 #define CONTEXT_CONCAT(a, b) CONTEXT_CONCAT_IMPL(a, b)

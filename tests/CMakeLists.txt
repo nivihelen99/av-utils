@@ -29,6 +29,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         CppLibCounter
         CppLibLazySortedMerger
         CppLibAsyncEventQueue
+        CppLibContextMgr
     )
 
     # Specific configurations for certain tests

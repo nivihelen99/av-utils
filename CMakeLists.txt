@@ -18,6 +18,9 @@ target_include_directories(CppLibLazySortedMerger INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(CppLibAsyncEventQueue INTERFACE)
 target_include_directories(CppLibAsyncEventQueue INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_library(CppLibContextMgr INTERFACE)
+target_include_directories(CppLibContextMgr INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -39,6 +42,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         CppLibCounter
         CppLibLazySortedMerger
         CppLibAsyncEventQueue
+        CppLibContextMgr
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

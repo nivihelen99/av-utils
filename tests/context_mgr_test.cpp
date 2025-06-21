@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../include/context_manager.hpp"
+#include "context_mgr.h"
 #include <vector>
 #include <string>
 #include <stdexcept>
@@ -140,21 +140,25 @@ TEST_F(ContextManagerTest, MoveSemantics) {
 }
 
 TEST_F(ContextManagerTest, MoveAssignment) {
+    std::vector<std::string>& log_ref = call_log; // For lambda capture
     {
-        auto guard1 = make_scope_exit([this] { log_call("cleanup1"); });
-        auto guard2 = make_scope_exit([this] { log_call("cleanup2"); });
+        std::function<void()> fn1 = [this, &log_ref] { log_ref.push_back("cleanup1"); };
+        std::function<void()> fn2 = [this, &log_ref] { log_ref.push_back("cleanup2"); };
+
+        auto guard1 = make_scope_exit(fn1); // guard1 is ScopeExit<std::function<void()>>
+        auto guard2 = make_scope_exit(fn2); // guard2 is ScopeExit<std::function<void()>>
         
         // Move assign - should execute cleanup2 immediately
-        guard2 = std::move(guard1);
+        guard2 = std::move(guard1); // Now types match: ScopeExit<std::function<void()>>
         
         EXPECT_EQ(call_log.size(), 1);
         EXPECT_EQ(call_log[0], "cleanup2");
         
-        EXPECT_FALSE(guard1.is_active());
-        EXPECT_TRUE(guard2.is_active());
+        EXPECT_FALSE(guard1.is_active()); // guard1's function was moved out
+        EXPECT_TRUE(guard2.is_active());  // guard2 now holds fn1
     }
     
-    // cleanup1 should run when guard2 is destroyed
+    // cleanup1 should run when guard2 is destroyed (as guard2 now holds fn1)
     EXPECT_EQ(call_log.size(), 2);
     EXPECT_EQ(call_log[1], "cleanup1");
 }
@@ -270,7 +274,7 @@ TEST_F(ContextManagerTest, EmptyLambdas) {
 
 TEST_F(ContextManagerTest, FunctionPointer) {
     {
-        auto guard = make_scope_exit(&ContextManagerTest::increment_counter, this);
+        auto guard = make_scope_exit([this]() { this->increment_counter(); });
         EXPECT_EQ(counter, 0);
     }
     
@@ -292,9 +296,9 @@ TEST_F(ContextManagerTest, StdFunction) {
 // Macro tests
 TEST_F(ContextManagerTest, ScopeExitMacro) {
     {
-        SCOPE_EXIT {
+        SCOPE_EXIT({
             log_call("macro_cleanup");
-        };
+        });
     }
     
     EXPECT_EQ(call_log.size(), 1);
@@ -467,8 +471,8 @@ TEST_F(ContextManagerTest, ConstexprCompatibility) {
         int value = 5;
         {
             auto ctx = make_context(
-                [&value] { increment(value); },
-                [&value] { decrement(value); }
+                [&value, &increment] { increment(value); },
+                [&value, &decrement] { decrement(value); }
             );
             
             EXPECT_EQ(value, 6);
