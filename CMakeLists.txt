@@ -40,6 +40,10 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         CppLibLazySortedMerger
         CppLibAsyncEventQueue
     )
+
+    if(EXECUTABLE_NAME STREQUAL "partial_example")
+        target_compile_definitions(${EXECUTABLE_NAME} PRIVATE FUNCTOOLS_PARTIAL_EXAMPLES)
+    endif()
 endforeach()
 
 # Optional: Print a message where the executables can be found
