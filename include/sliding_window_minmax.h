@@ -3,6 +3,7 @@
 #include <deque>
 #include <stdexcept>
 #include <type_traits>
+#include <chrono>
 
 namespace sliding_window {
 
