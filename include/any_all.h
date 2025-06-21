@@ -15,11 +15,24 @@ struct is_callable {
     static constexpr bool value = decltype(test<T>(0))::value;
 };
 
+// Helper trait to check if type T has an empty() method
+template<typename T, typename = void>
+struct has_empty_method : std::false_type {};
+
+template<typename T>
+struct has_empty_method<T, std::void_t<decltype(std::declval<T>().empty())>> : std::true_type {};
+
 // any_of function - returns true if any element is truthy or satisfies predicate
 template<typename Container>
 bool any_of(const Container& container) {
-    return std::any_of(container.begin(), container.end(), 
-                      [](const auto& elem) { return static_cast<bool>(elem); });
+    return std::any_of(container.begin(), container.end(),
+                      [](const auto& elem) {
+                          if constexpr (has_empty_method<decltype(elem)>::value) {
+                              return !elem.empty();
+                          } else {
+                              return static_cast<bool>(elem);
+                          }
+                      });
 }
 
 template<typename Container, typename Predicate>
@@ -30,8 +43,14 @@ bool any_of(const Container& container, Predicate pred) {
 // all_of function - returns true if all elements are truthy or satisfy predicate
 template<typename Container>
 bool all_of(const Container& container) {
-    return std::all_of(container.begin(), container.end(), 
-                      [](const auto& elem) { return static_cast<bool>(elem); });
+    return std::all_of(container.begin(), container.end(),
+                      [](const auto& elem) {
+                          if constexpr (has_empty_method<decltype(elem)>::value) {
+                              return !elem.empty();
+                          } else {
+                              return static_cast<bool>(elem);
+                          }
+                      });
 }
 
 template<typename Container, typename Predicate>
@@ -42,8 +61,14 @@ bool all_of(const Container& container, Predicate pred) {
 // none_of function - bonus utility
 template<typename Container>
 bool none_of(const Container& container) {
-    return std::none_of(container.begin(), container.end(), 
-                       [](const auto& elem) { return static_cast<bool>(elem); });
+    return std::none_of(container.begin(), container.end(),
+                       [](const auto& elem) {
+                           if constexpr (has_empty_method<decltype(elem)>::value) {
+                               return !elem.empty();
+                           } else {
+                               return static_cast<bool>(elem);
+                           }
+                       });
 }
 
 template<typename Container, typename Predicate>
