@@ -1,4 +1,4 @@
-#include "sliding_window_mainmax.h"
+#include "sliding_window_minmax.h"
 #include <cassert>
 #include <iostream>
 #include <vector>
