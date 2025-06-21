@@ -1,4 +1,4 @@
-#include "ordered_set.hpp"
+#include "ordered_set.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -269,43 +269,10 @@ void test_front_back() {
     assert(cs.front() == 20);
     assert(cs.back() == 5);
 
-    // Test mutable versions allow modification if T is not const
-    s.front() = 22; // This is tricky. If front() returns T&, and T is key in map...
-                    // Current implementation of list stores T, map stores T.
-                    // If T is modified in list, map key is NOT updated. This is bad.
-                    // Standard library containers like std::set iterators are const.
-                    // Our iterators from std::list are not inherently const for T&.
-                    // The front()/back() methods should return const T& to prevent this.
-                    // Let's check the plan: "T& front()" is listed for mutable.
-                    // This implies the key in the map might become out of sync.
-                    // The design of OrderedSet has `std::unordered_map<T, ...>`.
-                    // If T is modified via a non-const reference from the list,
-                    // the hash/equality of that T might change, breaking the map.
-                    // For safety, front() and back() non-const should be removed or re-evaluated.
-                    // The plan has T& front() and const T& front().
-                    // Let's assume for now the user must not modify the element in a way
-                    // that changes its hash/equality. Or better, make them const.
-                    // For now, I will adjust front()/back() to return const T& for safety
-                    // and revisit if mutable access is truly needed and how to handle it.
-                    // This means the test `s.front() = 22;` would not compile if they return const T&.
-                    // I will proceed with the current plan (T& return) and note this as a potential issue.
-                    // If `s.front() = 22;` is allowed:
-                    // This would modify `ordered_elements_` but not `element_index_`'s key.
-                    // `element_index_` would still have `20` as a key, but it would point to `22`.
-                    // `s.contains(20)` would be true. `s.contains(22)` would be false.
-                    // `s.erase(20)` would erase `22`. This is problematic.
-                    //
-                    // Decision: For now, stick to the plan's T&, but this is a known issue.
-                    // A better OrderedSet would enforce constness on elements like std::set.
-                    // If mutable T& is required, the element must be re-hashed/re-indexed.
-
-    // If front() returns T&, this test shows the issue:
-    // s.front() = 22; // Original was 20
-    // assert(s.front() == 22);
-    // assert(s.contains(20)); // This would be true because map key is still 20
-    // assert(!s.contains(22)); // This would be false
-    // s.erase(20); // This would remove the element now valued 22
-    // assert(s.front() == 5); // Assuming 5 was next
+    // Test mutable versions allow modification if T is not const (Removed as front/back now return const T&)
+    // The following lines demonstrated a potential issue if front() returned T&,
+    // but since it returns const T&, direct modification is not allowed, which is safer.
+    // s.front() = 22; // This would not compile now.
 
     // Reverting to a safer test that doesn't modify via front()/back() for now.
     // The issue of mutable access needs to be addressed in the class design if it's a hard requirement.
@@ -313,19 +280,14 @@ void test_front_back() {
     OrderedSet<int> s_mut;
     s_mut.insert(100);
     s_mut.insert(200);
-    int& front_ref = s_mut.front();
-    int& back_ref = s_mut.back();
+    const int& front_ref = s_mut.front(); // Changed to const int&
+    const int& back_ref = s_mut.back();   // Changed to const int&
     assert(front_ref == 100);
     assert(back_ref == 200);
-    // Modifying front_ref here would be problematic as discussed.
-    // front_ref = 101; // This changes the list element, but not the map key.
-    // assert(s_mut.contains(100)); // Still true
-    // assert(!s_mut.contains(101)); // False
-    // assert(s_mut.front() == 101); // True
-    // This is why std::set iterators are const.
+    // Modifying front_ref or back_ref is not possible as they are const references.
+    // This is the desired behavior for safety, similar to std::set.
 
-
-    std::cout << "Front & Back tests passed (with caveats on mutable access)." << std::endl;
+    std::cout << "Front & Back tests passed." << std::endl;
 }
 
 void test_as_vector() {

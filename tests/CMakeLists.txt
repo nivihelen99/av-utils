@@ -30,6 +30,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         CppLibLazySortedMerger
         CppLibAsyncEventQueue
         CppLibContextMgr
+        OrderedSet
     )
 
     # Specific configurations for certain tests
