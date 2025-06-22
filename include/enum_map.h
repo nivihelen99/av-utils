@@ -28,18 +28,38 @@ public:
     using mapped_type = TValue;
     using value_type = TValue;
     using size_type = std::size_t;
-    using iterator = typename std::array<TValue, N>::iterator;
-    using const_iterator = typename std::array<TValue, N>::const_iterator;
+    using value_iterator = typename std::array<TValue, N>::iterator;
+    using const_value_iterator = typename std::array<TValue, N>::const_iterator;
     using reference = TValue&;
     using const_reference = const TValue&;
 
+    // Forward declarations for custom iterators
+    template <bool IsConst> class EnumMapIterator;
+    using iterator = EnumMapIterator<false>;
+    using const_iterator = EnumMapIterator<true>;
+
     // Default constructor - default-initializes all values
-    EnumMap() = default;
+    EnumMap() {
+        if constexpr (std::is_default_constructible_v<TValue>) {
+            // This will value-initialize if TValue is a POD type (e.g., int to 0)
+            // or default-construct if TValue is a class type.
+            for (size_type i = 0; i < N; ++i) {
+                 data_[i] = TValue{};
+            }
+        }
+        // If TValue is not default constructible, the behavior of data_ is to leave elements
+        // uninitialized for non-class types, or call default constructors for class types
+        // if std::array does so. However, our clear() and erase() will require default constructibility.
+    }
     
     // Initializer list constructor
-    EnumMap(std::initializer_list<std::pair<TEnum, TValue>> init) {
+    // Delegates to the default constructor to ensure all elements are initialized,
+    // then overwrites with values from the initializer list.
+    EnumMap(std::initializer_list<std::pair<TEnum, TValue>> init) : EnumMap() {
         for (const auto& pair : init) {
-            (*this)[pair.first] = pair.second;
+            // Using data_ directly might be slightly safer if operator[] had side effects
+            // or if TEnum was not perfectly mapping to indices (though our design ensures it).
+            data_[to_index(pair.first)] = pair.second;
         }
     }
     
@@ -60,6 +80,8 @@ public:
 
     // Element access - non-const version
     TValue& operator[](TEnum key) {
+        // Consider adding a bounds check here if desired, or rely on at() for checked access.
+        // For performance, operator[] often omits bounds checks.
         return data_[to_index(key)];
     }
     
@@ -84,30 +106,238 @@ public:
         return data_[to_index(key)];
     }
 
-    // Iterators
+    // --- Custom Key-Value Iterators ---
+public:
+    template <bool IsConst>
+    class EnumMapIterator {
+    public:
+        using iterator_category = std::random_access_iterator_tag;
+        // Value type is std::pair<const TEnum, maybe_const TValue>
+        // Key is const because it shouldn't be changed via iterator.
+        using value_type = std::pair<const TEnum, typename std::conditional_t<IsConst, const TValue, TValue>>;
+        using difference_type = std::ptrdiff_t;
+
+        // The pointer type for operator->()
+        // For non-const iterators, we need a proxy object if TValue is not a reference.
+        // However, since data_ stores TValue directly, operator* returns a reference to TValue (or const TValue).
+        // So, the pair will be std::pair<const TEnum, TValue&> or std::pair<const TEnum, const TValue&>.
+        // operator-> must return a pointer to such a pair. Since we construct it on the fly,
+        // we need a helper struct or store the pair.
+        // Let's simplify: operator* returns by value for the pair.
+        // This is common for map-like iterators where key is by value and value is by reference.
+        // For operator->, we can return a pointer to a temporary pair if needed, or disallow it if too complex.
+        // Or, more simply, make value_type std::pair<TEnum, TValue*> or similar and adjust.
+        // Let's stick to a common pattern: operator* returns a "proxy" or a pair of references.
+        // std::map::iterator::value_type is std::pair<const Key, T>
+        // operator* returns std::pair<const Key, T>&
+        // This is hard because our TEnum is not stored, it's derived from index.
+
+        // Let's define what operator* returns more directly.
+        // It should be something like: struct { TEnum first; TValue& second; };
+        // Or std::pair<TEnum, std::reference_wrapper<TValue>>
+        // For simplicity, let's make operator* return a std::pair<TEnum, TValue&> (or const version)
+        // This means value_type should reflect this.
+        // value_type for iterator: std::pair<TEnum, TValue> - no, this implies copying.
+        // value_type for iterator: not directly used by users usually.
+        // reference for iterator: std::pair<TEnum, TValue&>
+        // pointer for iterator: pointer to std::pair<TEnum, TValue&>
+
+        // Let's try to make it similar to how std::map iterators work, but adapted.
+        // The "value" iterated over is a conceptual pair.
+        // operator* returns a reference to this conceptual pair.
+        // Since TEnum is generated from the index, it cannot be part of the stored data.
+        // So, we'll need a proxy reference type.
+
+        struct PairProxy {
+            TEnum first;
+            typename std::conditional_t<IsConst, const TValue&, TValue&> second;
+
+            // Allow conversion to std::pair for convenience, if needed
+            operator std::pair<TEnum, typename std::conditional_t<IsConst, const TValue&, TValue&>>() const {
+                return {first, second};
+            }
+            // operator-> on the proxy to access members of TValue directly if TValue is a struct/class
+            typename std::conditional_t<IsConst, const TValue*, TValue*> operator->() {
+                 return &second;
+            }
+        };
+         struct ConstPairProxy {
+            TEnum first;
+            const TValue& second;
+
+            operator std::pair<TEnum, const TValue&>() const {
+                return {first, second};
+            }
+             const TValue* operator->() const { // Note: returns TValue* not PairProxy*
+                 return &second;
+            }
+        };
+
+
+        using reference = typename std::conditional_t<IsConst, ConstPairProxy, PairProxy>;
+        // Pointer type is tricky for proxy objects. Often a proxy pointer or just raw pointer to TValue.
+        // For now, let's use a simple pointer to the proxy object for illustration,
+        // though this requires the proxy to be addressable or implement operator-> itself.
+        // A common pattern is to return the proxy itself from operator-> if it has an operator*
+        // Let's make operator-> return our proxy by value, which is unusual but works if proxy has ->
+         using pointer = reference; // operator-> will return reference, which has its own ->
+
+
+    private:
+        friend class EnumMap<TEnum, TValue, N>; // Allow EnumMap to access private members
+        using ArrayType = typename std::conditional_t<IsConst, const std::array<TValue, N>, std::array<TValue, N>>;
+
+        ArrayType* data_ptr_ = nullptr;
+        size_type current_index_ = 0;
+
+        EnumMapIterator(ArrayType* data_ptr, size_type index)
+            : data_ptr_(data_ptr), current_index_(index) {}
+
+    public:
+        EnumMapIterator() = default; // For default construction, e.g. as end iterator
+
+        // Conversion from non-const to const iterator
+        operator EnumMapIterator<true>() const {
+            return EnumMapIterator<true>(data_ptr_, current_index_);
+        }
+
+        reference operator*() const {
+            return {static_cast<TEnum>(current_index_), (*data_ptr_)[current_index_]};
+        }
+
+        pointer operator->() const {
+            return operator*(); // Returns the proxy, which has its own operator->
+        }
+
+        EnumMapIterator& operator++() { // Pre-increment
+            ++current_index_;
+            return *this;
+        }
+
+        EnumMapIterator operator++(int) { // Post-increment
+            EnumMapIterator temp = *this;
+            ++(*this);
+            return temp;
+        }
+
+        EnumMapIterator& operator--() { // Pre-decrement
+            --current_index_;
+            return *this;
+        }
+
+        EnumMapIterator operator--(int) { // Post-decrement
+            EnumMapIterator temp = *this;
+            --(*this);
+            return temp;
+        }
+
+        EnumMapIterator& operator+=(difference_type offset) {
+            current_index_ += offset;
+            return *this;
+        }
+
+        EnumMapIterator operator+(difference_type offset) const {
+            EnumMapIterator temp = *this;
+            temp += offset;
+            return temp;
+        }
+
+        EnumMapIterator& operator-=(difference_type offset) {
+            current_index_ -= offset;
+            return *this;
+        }
+
+        EnumMapIterator operator-(difference_type offset) const {
+            EnumMapIterator temp = *this;
+            temp -= offset;
+            return temp;
+        }
+
+        difference_type operator-(const EnumMapIterator& other) const {
+            return static_cast<difference_type>(current_index_) - static_cast<difference_type>(other.current_index_);
+        }
+
+        // operator[] - access element by offset
+        reference operator[](difference_type offset) const {
+            return *(*this + offset);
+        }
+
+        bool operator==(const EnumMapIterator& other) const {
+            return data_ptr_ == other.data_ptr_ && current_index_ == other.current_index_;
+        }
+
+        bool operator!=(const EnumMapIterator& other) const {
+            return !(*this == other);
+        }
+
+        bool operator<(const EnumMapIterator& other) const {
+            // Add check for same container if necessary: (data_ptr_ == other.data_ptr_)
+            return current_index_ < other.current_index_;
+        }
+
+        bool operator>(const EnumMapIterator& other) const {
+            return other < *this;
+        }
+
+        bool operator<=(const EnumMapIterator& other) const {
+            return !(*this > other);
+        }
+
+        bool operator>=(const EnumMapIterator& other) const {
+            return !(*this < other);
+        }
+    };
+
+    // Key-value iterators
     iterator begin() noexcept {
-        return data_.begin();
+        return iterator(const_cast<std::array<TValue, N>*>(&data_), 0);
     }
     
     const_iterator begin() const noexcept {
-        return data_.begin();
+        return const_iterator(const_cast<std::array<TValue, N>*>(&data_), 0);
     }
     
     const_iterator cbegin() const noexcept {
-        return data_.cbegin();
+        return const_iterator(const_cast<std::array<TValue, N>*>(&data_), 0);
     }
     
     iterator end() noexcept {
-        return data_.end();
+        return iterator(const_cast<std::array<TValue, N>*>(&data_), N);
     }
     
     const_iterator end() const noexcept {
-        return data_.end();
+        return const_iterator(const_cast<std::array<TValue, N>*>(&data_), N);
     }
     
     const_iterator cend() const noexcept {
+        return const_iterator(const_cast<std::array<TValue, N>*>(&data_), N);
+    }
+
+    // Value-only iterators (renamed for clarity)
+    value_iterator value_begin() noexcept {
+        return data_.begin();
+    }
+
+    const_value_iterator value_begin() const noexcept {
+        return data_.begin();
+    }
+
+    const_value_iterator const_value_cbegin() const noexcept {
+        return data_.cbegin();
+    }
+
+    value_iterator value_end() noexcept {
+        return data_.end();
+    }
+
+    const_value_iterator value_end() const noexcept {
+        return data_.end();
+    }
+
+    const_value_iterator const_value_cend() const noexcept {
         return data_.cend();
     }
+
 
     // Capacity
     constexpr std::size_t size() const noexcept {
@@ -130,6 +360,24 @@ public:
     // Modifiers
     void fill(const TValue& value) {
         data_.fill(value);
+    }
+
+    void clear() noexcept(std::is_nothrow_default_constructible_v<TValue> && std::is_nothrow_assignable_v<TValue&, TValue&&>) {
+        static_assert(std::is_default_constructible_v<TValue>, "TValue must be default constructible to use clear().");
+        for (size_type i = 0; i < N; ++i) {
+            data_[i] = TValue{}; // Default construct and assign
+        }
+    }
+
+    // Erases an element by resetting it to a default-constructed value.
+    // Returns true if key was valid and element was "erased", false otherwise.
+    bool erase(TEnum key) noexcept(std::is_nothrow_default_constructible_v<TValue> && std::is_nothrow_assignable_v<TValue&, TValue&&>) {
+        static_assert(std::is_default_constructible_v<TValue>, "TValue must be default constructible to use erase().");
+        if (!is_valid_enum(key)) {
+            return false;
+        }
+        data_[to_index(key)] = TValue{};
+        return true;
     }
     
     void swap(EnumMap& other) noexcept {
@@ -166,88 +414,4 @@ void swap(EnumMap<TEnum, TValue, N>& lhs, EnumMap<TEnum, TValue, N>& rhs) noexce
     lhs.swap(rhs);
 }
 
-// Example usage and test code
-#ifdef ENUMMAP_INCLUDE_EXAMPLES
-
-#include <iostream>
-#include <string>
-#include <functional>
-
-// Example 1: State machine
-enum class State {
-    INIT,
-    RUNNING,
-    ERROR,
-    COUNT
-};
-
-// Example 2: Opcode dispatch table
-enum class Opcode {
-    NOP,
-    ACK,
-    ERR,
-    COUNT
-};
-
-void handle_nop() { std::cout << "Handling NOP\n"; }
-void handle_ack() { std::cout << "Handling ACK\n"; }
-void handle_err() { std::cout << "Handling ERR\n"; }
-
-// Example 3: Mode labels
-enum class Mode { 
-    OFF, 
-    IDLE, 
-    ACTIVE, 
-    COUNT 
-};
-
-void example_usage() {
-    // State machine example
-    EnumMap<State, std::string> state_names = {
-        {State::INIT, "Idle"},
-        {State::RUNNING, "Running"},
-        {State::ERROR, "Fault"}
-    };
-    
-    std::cout << "State: " << state_names[State::ERROR] << "\n";
-    
-    // Dispatch table example
-    EnumMap<Opcode, std::function<void()>> dispatch_table = {
-        {Opcode::NOP, handle_nop},
-        {Opcode::ACK, handle_ack},
-        {Opcode::ERR, handle_err}
-    };
-    
-    dispatch_table[Opcode::ACK]();
-    
-    // Mode labels example
-    EnumMap<Mode, std::string> mode_labels = {
-        {Mode::OFF,    "Power Off"},
-        {Mode::IDLE,   "Idle"},
-        {Mode::ACTIVE, "Running"}
-    };
-    
-    // Iteration example
-    std::cout << "All modes:\n";
-    for (std::size_t i = 0; i < mode_labels.size(); ++i) {
-        Mode mode = static_cast<Mode>(i);
-        std::cout << "  " << mode_labels[mode] << "\n";
-    }
-    
-    // Range-based for loop (iterates over values)
-    std::cout << "State names:\n";
-    for (const auto& name : state_names) {
-        std::cout << "  " << name << "\n";
-    }
-    
-    // Bounds checking example
-    try {
-        EnumMap<State, int> counters;
-        counters.at(State::RUNNING) = 42;
-        std::cout << "Counter: " << counters.at(State::RUNNING) << "\n";
-    } catch (const std::out_of_range& e) {
-        std::cout << "Error: " << e.what() << "\n";
-    }
-}
-
-#endif // ENUMMAP_INCLUDE_EXAMPLES
+// Removed example code from here. It's now in examples/enum_map_example.cpp
