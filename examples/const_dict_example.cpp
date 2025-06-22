@@ -3,6 +3,8 @@
 #include <functional>
 #include <cassert>
 
+#include "const_dict.h"
+
 // Include the ConstDict header (would be #include "const_dict.hpp")
 // For this example, assume the header content is already available
 
