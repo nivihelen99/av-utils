@@ -834,5 +834,65 @@ auto match(OnSome&& on_some, OnNone&& on_none) {
 } // namespace optional
 } // namespace pipeline
 
+// Example 2: Handling different but compatible return types
+std::optional<std::string> maybe_name = std::nullopt;
+
+auto message = match(
+    [](const std::string& name) { return "Hello, " + name; },
+    []() { return "Hello, stranger"; }
+)(maybe_name);
+
+std::cout << message << std::endl; // Output: "Hello, stranger"
+
+// Example 3: Side effects only
+std::optional<double> maybe_score = 95.5;
+
+match(
+    [](double score) { 
+        std::cout << "Your score is: " << score << std::endl;
+        return 0; // dummy return for type consistency
+    },
+    []() { 
+        std::cout << "No score available" << std::endl;
+        return 0;
+    }
+)(maybe_score);
+// Example 4: Using with function composition
+auto process_optional_int = [](std::optional<int> opt) {
+    return match(
+        [](int value) { return value * 2; },
+        []() { return -1; }  // sentinel value
+    )(opt);
+};
+
+std::optional<int> some_int = 21;
+std::optional<int> no_int = std::nullopt;
+
+std::cout << process_optional_int(some_int) << std::endl;  // Output: 42
+std::cout << process_optional_int(no_int) << std::endl;    // Output: -1
+
+// Example 6: File processing scenario
+#include <fstream>
+
+auto read_file_size = [](const std::string& filename) -> std::optional<size_t> {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (file.is_open()) {
+        return file.tellg();
+    }
+    return std::nullopt;
+};
+
+auto file_size = read_file_size("example.txt");
+
+auto result = match(
+    [](size_t size) { 
+        return "File size: " + std::to_string(size) + " bytes";
+    },
+    []() { 
+        return std::string("Could not read file");
+    }
+)(file_size);
+
+std::cout << result << std::endl;
 
 #endif
