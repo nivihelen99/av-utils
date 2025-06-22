@@ -56,13 +56,30 @@ auto pipe(F f) -> FunctionPipeline<F> {
     return FunctionPipeline<F>{std::move(f)};
 }
 
+// Helper for variadic pipe to chain 'then' calls recursively
+namespace internal {
+template<typename PipelineType, typename G>
+auto chain_then_recursive(PipelineType current_pipeline, G g) {
+    return current_pipeline.then(std::move(g));
+}
+
+template<typename PipelineType, typename G, typename... GsRest>
+auto chain_then_recursive(PipelineType current_pipeline, G g, GsRest... gs_rest) {
+    return chain_then_recursive(current_pipeline.then(std::move(g)), std::move(gs_rest)...);
+}
+} // namespace internal
+
 // Variadic pipe - shorthand for pipe(f1).then(f2).then(f3)...
 template <typename F1, typename F2, typename... Fs>
 auto pipe(F1 f1, F2 f2, Fs... fs) {
+    // Initial pipeline from the first two functions
+    auto initial_pipeline = ::pipeline::pipe(std::move(f1)).then(std::move(f2));
+
     if constexpr (sizeof...(fs) == 0) {
-        return pipe(std::move(f1)).then(std::move(f2));
+        return initial_pipeline;
     } else {
-        return pipe(std::move(f1)).then(std::move(f2)).then(std::move(fs)...);
+        // Chain the rest of the functions onto the initial pipeline
+        return internal::chain_then_recursive(initial_pipeline, std::move(fs)...);
     }
 }
 
