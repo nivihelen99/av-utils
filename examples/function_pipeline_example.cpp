@@ -1,4 +1,5 @@
 
+#define PIPELINE_EXAMPLES
 #include "function_pipeline.h"
 
 #include <iostream>
