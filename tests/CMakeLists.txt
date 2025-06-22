@@ -35,6 +35,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SlidingWindowMinMax
         ZipViewLib
         BatcherLib
+        ScopedTimer
     )
 
     # Specific configurations for certain tests
