@@ -191,3 +191,352 @@ int main() {
     
     return 0;
 }
+
+
+#if 0
+#include "function_pipeline.hpp"
+#include <optional>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <cctype>
+
+namespace optional_examples {
+
+using namespace pipeline;
+
+// Helper functions for optional transformations
+template<typename T, typename F>
+auto optional_map(F&& func) {
+    return [func = std::forward<F>(func)](const std::optional<T>& opt) -> std::optional<decltype(func(std::declval<T>()))> {
+        if (opt.has_value()) {
+            return func(opt.value());
+        }
+        return std::nullopt;
+    };
+}
+
+template<typename T, typename F>
+auto optional_and_then(F&& func) {
+    return [func = std::forward<F>(func)](const std::optional<T>& opt) -> decltype(func(std::declval<T>())) {
+        if (opt.has_value()) {
+            return func(opt.value());
+        }
+        return std::nullopt;
+    };
+}
+
+template<typename T>
+auto optional_filter(std::function<bool(const T&)> predicate) {
+    return [predicate](const std::optional<T>& opt) -> std::optional<T> {
+        if (opt.has_value() && predicate(opt.value())) {
+            return opt;
+        }
+        return std::nullopt;
+    };
+}
+
+// Example 1: Basic optional pipeline
+void example_basic_optional() {
+    std::cout << "=== Example 1: Basic Optional Pipeline ===\n";
+    
+    // Pipeline that works with optionals
+    auto safe_math = pipe(optional_map<int>([](int x) { return x * 2; }))
+                        .then(optional_map<int>([](int x) { return x + 10; }))
+                        .then(optional_map<int>([](int x) { return x * x; }));
+    
+    // Test with valid optional
+    std::optional<int> input1 = 5;
+    auto result1 = safe_math(input1);
+    std::cout << "safe_math(5) = " << (result1 ? std::to_string(*result1) : "nullopt") << std::endl;
+    // Expected: ((5 * 2) + 10)^2 = 20^2 = 400
+    
+    // Test with empty optional
+    std::optional<int> input2 = std::nullopt;
+    auto result2 = safe_math(input2);
+    std::cout << "safe_math(nullopt) = " << (result2 ? std::to_string(*result2) : "nullopt") << std::endl;
+    std::cout << std::endl;
+}
+
+// Example 2: Safe string parsing pipeline
+void example_safe_parsing() {
+    std::cout << "=== Example 2: Safe String Parsing ===\n";
+    
+    // Safe string to int conversion
+    auto safe_stoi = [](const std::string& s) -> std::optional<int> {
+        try {
+            return std::stoi(s);
+        } catch (...) {
+            return std::nullopt;
+        }
+    };
+    
+    // Safe division
+    auto safe_divide = [](std::pair<int, int> p) -> std::optional<double> {
+        if (p.second == 0) return std::nullopt;
+        return static_cast<double>(p.first) / p.second;
+    };
+    
+    // Pipeline for safe string -> int -> calculation
+    auto safe_calculator = pipe(safe_stoi)
+                              .then(optional_and_then<int>([](int x) -> std::optional<std::pair<int, int>> {
+                                  if (x > 0) return std::make_pair(100, x);
+                                  return std::nullopt;
+                              }))
+                              .then(optional_and_then<std::pair<int, int>>(safe_divide))
+                              .then(optional_map<double>([](double d) { return std::to_string(d); }));
+    
+    // Test cases
+    std::vector<std::string> test_inputs = {"5", "0", "-3", "abc", "20"};
+    
+    for (const auto& input : test_inputs) {
+        auto result = safe_calculator(input);
+        std::cout << "safe_calculator(\"" << input << "\") = " 
+                  << (result ? *result : "nullopt") << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+// Example 3: Optional chaining with validation
+void example_validation_chain() {
+    std::cout << "=== Example 3: Validation Chain ===\n";
+    
+    struct Person {
+        std::string name;
+        int age;
+        std::string email;
+    };
+    
+    // Validation functions
+    auto validate_name = [](const Person& p) -> std::optional<Person> {
+        if (!p.name.empty() && p.name.length() >= 2) {
+            return p;
+        }
+        return std::nullopt;
+    };
+    
+    auto validate_age = [](const Person& p) -> std::optional<Person> {
+        if (p.age >= 18 && p.age <= 120) {
+            return p;
+        }
+        return std::nullopt;
+    };
+    
+    auto validate_email = [](const Person& p) -> std::optional<Person> {
+        if (p.email.find('@') != std::string::npos && p.email.find('.') != std::string::npos) {
+            return p;
+        }
+        return std::nullopt;
+    };
+    
+    auto format_person = [](const Person& p) -> std::string {
+        return p.name + " (" + std::to_string(p.age) + ") <" + p.email + ">";
+    };
+    
+    // Validation pipeline
+    auto person_validator = pipe([](const Person& p) { return std::optional<Person>{p}; })
+                               .then(optional_and_then<Person>(validate_name))
+                               .then(optional_and_then<Person>(validate_age))
+                               .then(optional_and_then<Person>(validate_email))
+                               .then(optional_map<Person>(format_person));
+    
+    // Test cases
+    std::vector<Person> test_people = {
+        {"John Doe", 25, "john@example.com"},      // Valid
+        {"", 30, "test@example.com"},              // Invalid name
+        {"Jane Smith", 15, "jane@example.com"},    // Invalid age
+        {"Bob Wilson", 35, "bobexample.com"},      // Invalid email
+        {"Alice Brown", 28, "alice@test.co.uk"}    // Valid
+    };
+    
+    for (const auto& person : test_people) {
+        auto result = person_validator(person);
+        std::cout << "Validating " << person.name << ": " 
+                  << (result ? *result : "INVALID") << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+// Example 4: Optional with error accumulation
+void example_error_accumulation() {
+    std::cout << "=== Example 4: Error Accumulation ===\n";
+    
+    // Result type that can hold either value or error
+    template<typename T>
+    struct Result {
+        std::optional<T> value;
+        std::vector<std::string> errors;
+        
+        Result(T val) : value(val) {}
+        Result(std::string error) : errors{error} {}
+        Result(std::optional<T> val, std::vector<std::string> errs) 
+            : value(val), errors(errs) {}
+        
+        bool is_ok() const { return value.has_value(); }
+        T unwrap() const { return value.value(); }
+    };
+    
+    // Helper for result mapping
+    template<typename T, typename F>
+    auto result_map(F&& func, const std::string& error_msg) {
+        return [func = std::forward<F>(func), error_msg](const Result<T>& result) -> Result<decltype(func(std::declval<T>()))> {
+            if (result.is_ok()) {
+                try {
+                    return Result<decltype(func(std::declval<T>()))>(func(result.unwrap()));
+                } catch (...) {
+                    auto errors = result.errors;
+                    errors.push_back(error_msg);
+                    return Result<decltype(func(std::declval<T>()))>(std::nullopt, errors);
+                }
+            } else {
+                return Result<decltype(func(std::declval<T>()))>(std::nullopt, result.errors);
+            }
+        };
+    }
+    
+    // Pipeline with error accumulation
+    auto error_prone_pipeline = pipe(result_map<std::string>([](const std::string& s) {
+                                        return std::stoi(s);
+                                    }, "Failed to parse integer"))
+                                   .then(result_map<int>([](int x) {
+                                        if (x == 0) throw std::runtime_error("Zero division");
+                                        return 100 / x;
+                                    }, "Division by zero"))
+                                   .then(result_map<int>([](int x) {
+                                        return std::to_string(x * x);
+                                    }, "Failed to square and convert"));
+    
+    // Test cases
+    std::vector<std::string> inputs = {"5", "0", "abc", "10", "-2"};
+    
+    for (const auto& input : inputs) {
+        Result<std::string> initial_result(input);
+        auto result = error_prone_pipeline(initial_result);
+        
+        std::cout << "Processing \"" << input << "\": ";
+        if (result.is_ok()) {
+            std::cout << "Success = " << result.unwrap() << std::endl;
+        } else {
+            std::cout << "Errors: ";
+            for (size_t i = 0; i < result.errors.size(); ++i) {
+                std::cout << result.errors[i];
+                if (i < result.errors.size() - 1) std::cout << ", ";
+            }
+            std::cout << std::endl;
+        }
+    }
+    std::cout << std::endl;
+}
+
+// Example 5: Optional data processing pipeline
+void example_data_processing() {
+    std::cout << "=== Example 5: Optional Data Processing ===\n";
+    
+    // Simulate reading data that might fail
+    auto read_data = [](const std::string& filename) -> std::optional<std::vector<std::string>> {
+        if (filename.empty() || filename == "invalid.txt") {
+            return std::nullopt;
+        }
+        // Simulate file content
+        return std::vector<std::string>{"1", "2", "3", "invalid", "5", "6"};
+    };
+    
+    // Parse numbers, filtering out invalid ones
+    auto parse_numbers = [](const std::vector<std::string>& lines) -> std::vector<int> {
+        std::vector<int> numbers;
+        for (const auto& line : lines) {
+            try {
+                numbers.push_back(std::stoi(line));
+            } catch (...) {
+                // Skip invalid numbers
+            }
+        }
+        return numbers;
+    };
+    
+    // Calculate statistics
+    auto calculate_stats = [](const std::vector<int>& numbers) -> std::optional<std::string> {
+        if (numbers.empty()) return std::nullopt;
+        
+        int sum = 0;
+        int min = numbers[0];
+        int max = numbers[0];
+        
+        for (int n : numbers) {
+            sum += n;
+            if (n < min) min = n;
+            if (n > max) max = n;
+        }
+        
+        double avg = static_cast<double>(sum) / numbers.size();
+        
+        std::ostringstream oss;
+        oss << "Count: " << numbers.size() 
+            << ", Sum: " << sum 
+            << ", Avg: " << std::fixed << avg
+            << ", Min: " << min 
+            << ", Max: " << max;
+        
+        return oss.str();
+    };
+    
+    // Complete data processing pipeline
+    auto data_processor = pipe(read_data)
+                             .then(optional_map<std::vector<std::string>>(parse_numbers))
+                             .then(optional_and_then<std::vector<int>>(calculate_stats));
+    
+    // Test with different filenames
+    std::vector<std::string> filenames = {"data.txt", "invalid.txt", "", "numbers.csv"};
+    
+    for (const auto& filename : filenames) {
+        auto result = data_processor(filename);
+        std::cout << "Processing \"" << filename << "\": " 
+                  << (result ? *result : "Failed to process") << std::endl;
+    }
+    std::cout << std::endl;
+}
+
+// Example 6: Combining optionals with regular values
+void example_mixed_pipeline() {
+    std::cout << "=== Example 6: Mixed Optional/Regular Pipeline ===\n";
+    
+    // Pipeline that starts with regular value, goes through optional, back to regular
+    auto mixed_pipeline = pipe([](int x) { 
+                                 // Regular -> Optional
+                                 if (x > 0) return std::optional<int>{x * 2};
+                                 return std::optional<int>{};
+                             })
+                             .then([](const std::optional<int>& opt) {
+                                 // Optional -> Optional
+                                 if (opt) return std::optional<std::string>{std::to_string(*opt)};
+                                 return std::optional<std::string>{};
+                             })
+                             .then([](const std::optional<std::string>& opt) {
+                                 // Optional -> Regular (with default)
+                                 return opt.value_or("DEFAULT");
+                             })
+                             .then([](const std::string& s) {
+                                 // Regular -> Regular
+                                 return "Result: " + s;
+                             });
+    
+    // Test cases
+    std::vector<int> test_values = {5, -3, 0, 10};
+    
+    for (int value : test_values) {
+        auto result = mixed_pipeline(value);
+        std::cout << "mixed_pipeline(" << value << ") = \"" << result << "\"" << std::endl;
+    }
+}
+
+} // namespace optional_examples
+
+int main() {
+    std::cout << "=== FunctionPipeline with std::optional Examples ===\n\n";
+    
+    optional_examples::example_basic_optional();
+    optional_examples::example_safe_parsing();
+
+
+#endif
