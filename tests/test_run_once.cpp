@@ -1,72 +1,62 @@
 #include "run_once.h"
-#include <cassert>
-#include <iostream>
+#include <gtest/gtest.h>
 #include <thread>
 #include <vector>
 #include <atomic>
 #include <chrono>
+#include <string>
+#include <stdexcept>
 
-// Simple test framework macros
-#define TEST(name) void test_##name()
-#define RUN_TEST(name) do { \
-    std::cout << "Running " #name "..."; \
-    test_##name(); \
-    std::cout << " ✅\n"; \
-} while(0)
+// Test fixture for RunOnce tests
+class RunOnceTest : public ::testing::Test {
+protected:
+    RunOnce once; // Default member for most RunOnce tests
+    // For RunOnceReturn tests, instances are created locally in the test cases
+    // to allow for different types and cleaner separation of concerns.
+};
 
-TEST(basic_functionality) {
-    RunOnce once;
+TEST_F(RunOnceTest, BasicFunctionality) {
     int counter = 0;
     
-    // Should not have run initially
-    assert(!once.has_run());
+    ASSERT_FALSE(once.has_run());
     
-    // First call should execute
     once([&counter] { counter++; });
-    assert(counter == 1);
-    assert(once.has_run());
+    ASSERT_EQ(counter, 1);
+    ASSERT_TRUE(once.has_run());
     
-    // Subsequent calls should not execute
     once([&counter] { counter++; });
     once([&counter] { counter++; });
-    assert(counter == 1);
-    assert(once.has_run());
+    ASSERT_EQ(counter, 1);
+    ASSERT_TRUE(once.has_run());
 }
 
-TEST(exception_handling) {
-    RunOnce once;
+TEST_F(RunOnceTest, ExceptionHandling) {
     int attempt = 0;
     
-    // First attempt throws
-    try {
+    ASSERT_THROW(
         once([&attempt] {
             attempt++;
             throw std::runtime_error("Test exception");
-        });
-        assert(false); // Should not reach here
-    } catch (const std::runtime_error&) {
-        // Expected
-    }
+        }),
+        std::runtime_error
+    );
     
-    assert(attempt == 1);
-    assert(!once.has_run()); // Should not be marked as run due to exception
+    ASSERT_EQ(attempt, 1);
+    ASSERT_FALSE(once.has_run());
     
-    // Second attempt succeeds
     once([&attempt] {
         attempt++;
         // No exception this time
     });
     
-    assert(attempt == 2);
-    assert(once.has_run()); // Now it should be marked as run
+    ASSERT_EQ(attempt, 2);
+    ASSERT_TRUE(once.has_run());
     
-    // Third attempt should not execute
     once([&attempt] { attempt++; });
-    assert(attempt == 2);
+    ASSERT_EQ(attempt, 2);
 }
 
-TEST(thread_safety) {
-    RunOnce once;
+TEST_F(RunOnceTest, ThreadSafety) {
     std::atomic<int> counter{0};
     std::atomic<int> threads_completed{0};
     
@@ -74,9 +64,8 @@ TEST(thread_safety) {
     std::vector<std::thread> threads;
     
     for (int i = 0; i < num_threads; ++i) {
-        threads.emplace_back([&once, &counter, &threads_completed] {
+        threads.emplace_back([this, &counter, &threads_completed] {
             once([&counter] {
-                // Simulate some work
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 counter++;
             });
@@ -88,94 +77,89 @@ TEST(thread_safety) {
         t.join();
     }
     
-    assert(counter.load() == 1); // Only executed once
-    assert(threads_completed.load() == num_threads); // All threads completed
-    assert(once.has_run());
+    ASSERT_EQ(counter.load(), 1);
+    ASSERT_EQ(threads_completed.load(), num_threads);
+    ASSERT_TRUE(once.has_run());
 }
 
-TEST(multiple_instances) {
+TEST_F(RunOnceTest, MultipleInstances) {
     RunOnce once1, once2;
     int counter1 = 0, counter2 = 0;
     
     once1([&counter1] { counter1++; });
     once2([&counter2] { counter2++; });
     
-    assert(counter1 == 1);
-    assert(counter2 == 1);
-    assert(once1.has_run());
-    assert(once2.has_run());
+    ASSERT_EQ(counter1, 1);
+    ASSERT_EQ(counter2, 1);
+    ASSERT_TRUE(once1.has_run());
+    ASSERT_TRUE(once2.has_run());
     
-    // Second calls should not execute
     once1([&counter1] { counter1++; });
     once2([&counter2] { counter2++; });
     
-    assert(counter1 == 1);
-    assert(counter2 == 1);
+    ASSERT_EQ(counter1, 1);
+    ASSERT_EQ(counter2, 1);
 }
 
-TEST(reset_functionality) {
-    RunOnce once;
+TEST_F(RunOnceTest, ResetFunctionality) {
     int counter = 0;
     
-    // First execution
     once([&counter] { counter++; });
-    assert(counter == 1);
-    assert(once.has_run());
+    ASSERT_EQ(counter, 1);
+    ASSERT_TRUE(once.has_run());
     
-    // Reset and execute again
     once.reset();
-    assert(!once.has_run());
+    ASSERT_FALSE(once.has_run());
     
     once([&counter] { counter++; });
-    assert(counter == 2);
-    assert(once.has_run());
+    ASSERT_EQ(counter, 2);
+    ASSERT_TRUE(once.has_run());
 }
 
-TEST(run_once_return_basic) {
-    RunOnceReturn<int> once_return;
+TEST_F(RunOnceTest, RunOnceReturnBasic) {
+    RunOnceReturn<int> once_return_int;
     int computation_count = 0;
     
-    // First call should compute
-    int result1 = once_return([&computation_count] {
+    ASSERT_FALSE(once_return_int.has_run());
+    int result1 = once_return_int([&computation_count] {
         computation_count++;
         return 42;
     });
     
-    assert(result1 == 42);
-    assert(computation_count == 1);
-    assert(once_return.has_run());
+    ASSERT_EQ(result1, 42);
+    ASSERT_EQ(computation_count, 1);
+    ASSERT_TRUE(once_return_int.has_run());
+    ASSERT_EQ(once_return_int.get(), 42);
     
-    // Second call should return cached value
-    int result2 = once_return([&computation_count] {
+    int result2 = once_return_int([&computation_count] {
         computation_count++;
-        return 99; // This should not be executed
+        return 99;
     });
     
-    assert(result2 == 42); // Should be the cached value
-    assert(computation_count == 1); // Should not have incremented
-    assert(once_return.get() == 42);
+    ASSERT_EQ(result2, 42);
+    ASSERT_EQ(computation_count, 1);
+    ASSERT_EQ(once_return_int.get(), 42);
 }
 
-TEST(run_once_return_string) {
-    RunOnceReturn<std::string> once_return;
-    
-    std::string result = once_return([] {
+TEST_F(RunOnceTest, RunOnceReturnString) {
+    RunOnceReturn<std::string> once_return_string;
+    ASSERT_FALSE(once_return_string.has_run());
+    std::string result = once_return_string([] {
         return std::string("Hello, World!");
     });
     
-    assert(result == "Hello, World!");
-    assert(once_return.get() == "Hello, World!");
+    ASSERT_EQ(result, "Hello, World!");
+    ASSERT_TRUE(once_return_string.has_run());
+    ASSERT_EQ(once_return_string.get(), "Hello, World!");
     
-    // Second call should return same string
-    std::string result2 = once_return([] {
+    std::string result2 = once_return_string([] {
         return std::string("Different string");
     });
     
-    assert(result2 == "Hello, World!");
+    ASSERT_EQ(result2, "Hello, World!");
 }
 
-TEST(lambda_with_captures) {
-    RunOnce once;
+TEST_F(RunOnceTest, LambdaWithCaptures) {
     int captured_value = 100;
     int result = 0;
     
@@ -183,43 +167,131 @@ TEST(lambda_with_captures) {
         result = captured_value * 2;
     });
     
-    assert(result == 200);
-    assert(once.has_run());
+    ASSERT_EQ(result, 200);
+    ASSERT_TRUE(once.has_run());
 }
 
-TEST(different_callable_types) {
+// Helper for DifferentCallableTypes test
+static bool function_ptr_called = false;
+void test_function_for_run_once() {
+    function_ptr_called = true;
+}
+
+struct TestFunctor {
+    bool* called_flag;
+    TestFunctor(bool* flag) : called_flag(flag) {}
+    void operator()() {
+        if (called_flag) *called_flag = true;
+    }
+};
+
+TEST_F(RunOnceTest, DifferentCallableTypes) {
     // Function pointer
-    RunOnce once1;
-    static bool function_called = false;
-    once1([]() { function_called = true; });
-    assert(function_called);
+    RunOnce once_func_ptr;
+    function_ptr_called = false; // Reset static variable
+    once_func_ptr(test_function_for_run_once);
+    ASSERT_TRUE(function_ptr_called);
     
     // Functor
-    struct TestFunctor {
-        bool* called;
-        TestFunctor(bool* c) : called(c) {}
-        void operator()() { *called = true; }
-    };
-    
-    RunOnce once2;
-    bool functor_called = false;
-    once2(TestFunctor(&functor_called));
-    assert(functor_called);
+    RunOnce once_functor;
+    bool functor_flag = false;
+    once_functor(TestFunctor(&functor_flag));
+    ASSERT_TRUE(functor_flag);
 }
 
-int main() {
-    std::cout << "🧪 Running RunOnce tests...\n\n";
-    
-    RUN_TEST(basic_functionality);
-    RUN_TEST(exception_handling);
-    RUN_TEST(thread_safety);
-    RUN_TEST(multiple_instances);
-    RUN_TEST(reset_functionality);
-    RUN_TEST(run_once_return_basic);
-    RUN_TEST(run_once_return_string);
-    RUN_TEST(lambda_with_captures);
-    RUN_TEST(different_callable_types);
-    
-    std::cout << "\n🎉 All tests passed!\n";
-    return 0;
+// Tests for RunOnceReturn
+class RunOnceReturnTest : public ::testing::Test {};
+
+TEST_F(RunOnceReturnTest, ExceptionHandling) {
+    RunOnceReturn<int> ror_int;
+    int attempts = 0;
+    EXPECT_THROW(
+        ror_int([&attempts] {
+            attempts++;
+            throw std::runtime_error("Failed computation");
+            return 1; // Should not be reached
+        }),
+        std::runtime_error
+    );
+    EXPECT_EQ(attempts, 1);
+    EXPECT_FALSE(ror_int.has_run());
+
+    // Should attempt again
+    int result = ror_int([&attempts] {
+        attempts++;
+        return 42;
+    });
+    EXPECT_EQ(attempts, 2);
+    EXPECT_TRUE(ror_int.has_run());
+    EXPECT_EQ(result, 42);
+    EXPECT_EQ(ror_int.get(), 42);
+
+    // Should not run again
+    result = ror_int([&attempts] {
+        attempts++;
+        return 99;
+    });
+    EXPECT_EQ(attempts, 2); // Not incremented
+    EXPECT_EQ(result, 42);
+}
+
+TEST_F(RunOnceReturnTest, ResetFunctionality) {
+    RunOnceReturn<std::string> ror_str;
+    int counter = 0;
+
+    std::string val = ror_str([&counter] {
+        counter++;
+        return "first run";
+    });
+    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE(ror_str.has_run());
+    EXPECT_EQ(val, "first run");
+
+    ror_str.reset();
+    EXPECT_FALSE(ror_str.has_run());
+    EXPECT_EQ(counter, 1); // Counter is external, not reset
+
+    val = ror_str([&counter] {
+        counter++;
+        return "second run";
+    });
+    EXPECT_EQ(counter, 2);
+    EXPECT_TRUE(ror_str.has_run());
+    EXPECT_EQ(val, "second run");
+    EXPECT_EQ(ror_str.get(), "second run");
+}
+
+TEST_F(RunOnceReturnTest, ThreadSafety) {
+    RunOnceReturn<long> ror_long;
+    std::atomic<int> execution_count{0};
+    const int num_threads = 10;
+    std::vector<std::thread> threads;
+    std::vector<long> results(num_threads);
+
+    for (int i = 0; i < num_threads; ++i) {
+        threads.emplace_back([&ror_long, &execution_count, &results, i] {
+            results[i] = ror_long([&execution_count] {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                execution_count++;
+                return 12345L;
+            });
+        });
+    }
+
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    EXPECT_EQ(execution_count.load(), 1);
+    EXPECT_TRUE(ror_long.has_run());
+    EXPECT_EQ(ror_long.get(), 12345L);
+    for (int i = 0; i < num_threads; ++i) {
+        EXPECT_EQ(results[i], 12345L);
+    }
+}
+
+
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
