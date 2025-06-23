@@ -36,7 +36,8 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ZipViewLib
         BatcherLib
         ScopedTimer
-        RetryUtil  # Added RetryUtil here
+        RetryUtil
+        ScopedFlagLib
     )
 
     # Specific configurations for certain tests
