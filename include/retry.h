@@ -20,7 +20,19 @@ private:
     std::size_t max_retries_ = 3;
     std::chrono::milliseconds delay_ = std::chrono::milliseconds(0);
     std::function<bool(const std::exception&)> exception_handler_ = nullptr;
-    std::function<bool(const ReturnType&)> value_predicate_ = nullptr;
+
+    // Conditional value_predicate_
+    template<typename T, typename = void>
+    struct ValuePredicateMember {
+        // No member if T is void
+    };
+
+    template<typename T>
+    struct ValuePredicateMember<T, std::enable_if_t<!std::is_void_v<T>>> {
+        std::function<bool(const T&)> member = nullptr;
+    };
+    ValuePredicateMember<ReturnType> value_predicate_helper_;
+
     std::function<void(std::size_t, const std::exception*)> retry_callback_ = nullptr;
     double backoff_factor_ = 1.0;
     std::chrono::milliseconds max_timeout_ = std::chrono::milliseconds(0);
@@ -60,7 +72,9 @@ public:
     Retriable& until(Pred pred) {
         static_assert(!std::is_void_v<ReturnType>, 
                      "Cannot use 'until' with void-returning functions");
-        value_predicate_ = pred;
+        if constexpr (!std::is_void_v<ReturnType>) {
+            value_predicate_helper_.member = pred;
+        }
         return *this;
     }
     
@@ -128,17 +142,21 @@ public:
                     auto result = fn_();
                     
                     // Check if result satisfies the success condition
-                    if (!value_predicate_ || value_predicate_(result)) {
-                        return result; // Success
-                    }
-                    
-                    // Result doesn't satisfy condition, will retry if more attempts available
-                    if (attempt < max_retries_ - 1) {
-                        if (retry_callback_) {
-                            retry_callback_(attempt + 1, nullptr);
+                    if constexpr (!std::is_void_v<ReturnType>) {
+                        if (!value_predicate_helper_.member || value_predicate_helper_.member(result)) {
+                            return result; // Success
                         }
-                        sleep_with_backoff(attempt);
+                        // Result doesn't satisfy condition, will retry if more attempts available
+                        if (attempt < max_retries_ - 1) {
+                            if (retry_callback_) {
+                                retry_callback_(attempt + 1, nullptr); // nullptr because it's not an exception, but a value predicate failure
+                            }
+                            sleep_with_backoff(attempt);
+                        }
+                        // If it's the last attempt and condition not met, loop will terminate and throw outside.
                     }
+                    // For void functions, if fn_() didn't throw, it's considered success already by the 'if constexpr (std::is_void_v<ReturnType>)' block.
+                    // This part of the 'else' for non-void will only be reached if value_predicate exists and fails.
                 }
             } catch (const std::exception& e) {
                 last_exception = std::current_exception();
@@ -262,13 +280,14 @@ public:
                .with_backoff(factor);
     }
     
-    template<typename Func, typename ExceptionType>
+    // Changed order of template parameters: ExceptionType first, then Func (deduced)
+    template<typename ExceptionType, typename Func>
     static auto on_exception(Func&& fn, std::size_t times = 3,
                            std::chrono::milliseconds delay = std::chrono::milliseconds(100)) {
         return retry(std::forward<Func>(fn))
                .times(times)
                .with_delay(delay)
-               .template on_exception<ExceptionType>();
+               .template on_exception<ExceptionType>(); // Retriable::on_exception<E>() is fine
     }
 };
 
