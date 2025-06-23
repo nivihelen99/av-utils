@@ -137,11 +137,20 @@ public:
             try {
                 if constexpr (std::is_void_v<ReturnType>) {
                     fn_();
+                    // Check timeout immediately after function execution
+                    if (max_timeout_.count() > 0 && (std::chrono::steady_clock::now() - start_time >= max_timeout_)) {
+                        throw std::runtime_error("Retry timeout exceeded");
+                    }
                     return; // Success for void functions
                 } else {
                     auto result = fn_();
+                    // Check timeout immediately after function execution
+                    if (max_timeout_.count() > 0 && (std::chrono::steady_clock::now() - start_time >= max_timeout_)) {
+                        throw std::runtime_error("Retry timeout exceeded");
+                    }
                     
                     // Check if result satisfies the success condition
+                    // This 'if constexpr' is technically redundant due to the parent 'else' block, but harmless.
                     if constexpr (!std::is_void_v<ReturnType>) {
                         if (!value_predicate_helper_.member || value_predicate_helper_.member(result)) {
                             return result; // Success
@@ -151,44 +160,63 @@ public:
                             if (retry_callback_) {
                                 retry_callback_(attempt + 1, nullptr); // nullptr because it's not an exception, but a value predicate failure
                             }
+                            // Before sleeping, check timeout again, as the predicate evaluation might take time or we just want to be sure.
+                            if (max_timeout_.count() > 0 && (std::chrono::steady_clock::now() - start_time >= max_timeout_)) {
+                                throw std::runtime_error("Retry timeout exceeded");
+                            }
                             sleep_with_backoff(attempt);
                         }
                         // If it's the last attempt and condition not met, loop will terminate and throw outside.
                     }
-                    // For void functions, if fn_() didn't throw, it's considered success already by the 'if constexpr (std::is_void_v<ReturnType>)' block.
-                    // This part of the 'else' for non-void will only be reached if value_predicate exists and fails.
                 }
             } catch (const std::exception& e) {
+                // Check timeout if function threw an exception, it might have taken long
+                if (max_timeout_.count() > 0 && (std::chrono::steady_clock::now() - start_time >= max_timeout_)) {
+                    throw std::runtime_error("Retry timeout exceeded");
+                }
                 last_exception = std::current_exception();
                 
-                // Check if we should retry on this exception
-                if (exception_handler_ && exception_handler_(e)) {
-                    if (attempt < max_retries_ - 1) {
-                        if (retry_callback_) {
-                            retry_callback_(attempt + 1, &e);
-                        }
-                        sleep_with_backoff(attempt);
-                        continue;
+                bool retry_decision = true; // Default: retry if no specific handler
+                if (exception_handler_) {
+                    retry_decision = exception_handler_(e); // If handler exists, use its decision
+                }
+
+                if (retry_decision && (attempt < max_retries_ - 1)) {
+                    // If decided to retry AND retries are available
+                    if (retry_callback_) {
+                        retry_callback_(attempt + 1, &e);
                     }
+                    sleep_with_backoff(attempt);
+                    continue; // Proceed to the next attempt
                 }
                 
-                // Don't retry on this exception, or max attempts reached
+                // If decided not to retry OR no retries left, rethrow.
                 std::rethrow_exception(last_exception);
-            } catch (...) {
-                // Unknown exception, don't retry unless we have a generic handler
+            } catch (...) { // Catches non-std::exception types
+                last_exception = std::current_exception();
+
+                bool retry_decision = true;
+                std::unique_ptr<std::runtime_error> handler_exception_obj = nullptr; // For callback if needed
+
                 if (exception_handler_) {
-                    std::runtime_error generic_error("Unknown exception");
-                    if (exception_handler_(generic_error)) {
-                        if (attempt < max_retries_ - 1) {
-                            if (retry_callback_) {
-                                retry_callback_(attempt + 1, &generic_error);
-                            }
-                            sleep_with_backoff(attempt);
-                            continue;
-                        }
-                    }
+                    // If a handler exists, it might be generic enough to handle a description
+                    // Create a representative exception object for the handler to inspect
+                    handler_exception_obj = std::make_unique<std::runtime_error>("Unknown exception occurred during retry");
+                    retry_decision = exception_handler_(*handler_exception_obj);
                 }
-                throw;
+
+                if (retry_decision && (attempt < max_retries_ - 1)) {
+                    // If decided to retry AND retries are available
+                    if (retry_callback_) {
+                        // Pass the raw pointer from unique_ptr if it was created for the handler,
+                        // otherwise pass nullptr if retry is by default for an unknown (non-std) exception.
+                        retry_callback_(attempt + 1, handler_exception_obj.get());
+                    }
+                    sleep_with_backoff(attempt);
+                    continue; // Proceed to the next attempt
+                }
+                // If decided not to retry OR no retries left, rethrow original unknown exception
+                std::rethrow_exception(last_exception);
             }
         }
         
