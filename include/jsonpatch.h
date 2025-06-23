@@ -1,7 +1,7 @@
 #pragma once
 
-// #include <nlohmann/json.hpp>
-#include "json.hpp"
+#include <nlohmann/json.hpp>
+// #include "json.hpp" // Replaced by the line above
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -244,8 +244,27 @@ void JsonPatch::generate_diff_recursive(const json& from, const json& to,
     if (from == to) {
         return; // No difference
     }
+
+    // Handle cases where one is an empty object and the other is not, at the root.
+    if (base_path.empty() && from.is_object() && to.is_object()) {
+        if (from.empty() && !to.empty()) {
+            // From is {}, To is not {}. Add all keys from To.
+            for (auto it = to.begin(); it != to.end(); ++it) {
+                operations.emplace_back(JsonPatchOperation::Type::ADD, "/" + escape_path_component(it.key()), it.value());
+            }
+            return;
+        }
+        if (!from.empty() && to.empty()) {
+            // From is not {}, To is {}. Remove all keys from From.
+            for (auto it = from.begin(); it != from.end(); ++it) {
+                operations.emplace_back(JsonPatchOperation::Type::REMOVE, "/" + escape_path_component(it.key()));
+            }
+            return;
+        }
+        // If both empty or both non-empty, proceed to normal diff.
+    }
     
-    // Handle type changes
+    // Handle type changes (if not caught by above or if not root)
     if (from.type() != to.type()) {
         operations.emplace_back(JsonPatchOperation::Type::REPLACE, base_path, to);
         return;
@@ -697,126 +716,3 @@ std::string JsonPatch::unescape_path_component(const std::string& component) {
 JsonPatch diff(const json& from, const json& to, const JsonDiffOptions& options) {
     return JsonPatch::diff(from, to, options);
 }
-
-
-#ifdef EXAMPLES
-#include <iostream>
-#include <cassert>
-
-void basic_example() {
-    std::cout << "=== Basic JsonPatch Example ===\n";
-    
-    json a = {
-        {"version", 1},
-        {"config", {
-            {"ip", "192.168.1.1"},
-            {"enabled", true}
-        }}
-    };
-
-    json b = {
-        {"version", 2},
-        {"config", {
-            {"ip", "10.0.0.1"},
-            {"enabled", false},
-            {"mode", "advanced"}
-        }}
-    };
-
-    // Generate patch
-    JsonPatch patch = diff(a, b);
-    
-    std::cout << "Original document:\n" << a.dump(2) << "\n\n";
-    std::cout << "Target document:\n" << b.dump(2) << "\n\n";
-    std::cout << "Generated patch:\n" << patch.to_json().dump(2) << "\n\n";
-    
-    // Apply patch
-    json patched = patch.apply(a);
-    
-    std::cout << "Patched document:\n" << patched.dump(2) << "\n\n";
-    
-    // Verify result
-    assert(patched == b);
-    std::cout << "? Patch applied successfully!\n\n";
-}
-
-void array_example() {
-    std::cout << "=== Array Patch Example ===\n";
-    
-    json original = {
-        {"items", {"apple", "banana", "cherry"}},
-        {"count", 3}
-    };
-    
-    json modified = {
-        {"items", {"apple", "blueberry", "cherry", "date"}},
-        {"count", 4}
-    };
-    
-    JsonPatch patch = diff(original, modified);
-    
-    std::cout << "Array patch operations:\n" << patch.to_json().dump(2) << "\n\n";
-    
-    json result = patch.apply(original);
-    assert(result == modified);
-    std::cout << "? Array patch applied successfully!\n\n";
-}
-
-void serialization_example() {
-    std::cout << "=== Serialization Example ===\n";
-    
-    json doc1 = {{"name", "John"}, {"age", 30}};
-    json doc2 = {{"name", "Jane"}, {"age", 25}, {"city", "NYC"}};
-    
-    // Create patch
-    JsonPatch original_patch = diff(doc1, doc2);
-    
-    // Serialize to string
-    std::string patch_json = original_patch.to_json().dump();
-    std::cout << "Serialized patch: " << patch_json << "\n\n";
-    
-    // Deserialize from string
-    JsonPatch loaded_patch = JsonPatch::from_json(json::parse(patch_json));
-    
-    // Apply loaded patch
-    json result = loaded_patch.apply(doc1);
-    assert(result == doc2);
-    std::cout << "? Serialization/deserialization works!\n\n";
-}
-
-void inversion_example() {
-    std::cout << "=== Patch Inversion Example ===\n";
-    
-    json original = {{"x", 10}, {"y", 20}};
-    json modified = {{"x", 15}, {"z", 30}};
-    
-    // Create forward patch
-    JsonPatch forward_patch = diff(original, modified);
-    std::cout << "Forward patch:\n" << forward_patch.to_json().dump(2) << "\n\n";
-    
-    // Apply forward patch
-    json result = forward_patch.apply(original);
-    
-    // Create inverse patch
-    JsonPatch inverse_patch = forward_patch.invert(original);
-    std::cout << "Inverse patch:\n" << inverse_patch.to_json().dump(2) << "\n\n";
-    
-    // Apply inverse patch to get back original
-    json restored = inverse_patch.apply(result);
-    
-    std::cout << "Original:  " << original.dump() << "\n";
-    std::cout << "Modified:  " << result.dump() << "\n";
-    std::cout << "Restored:  " << restored.dump() << "\n\n";
-    
-    assert(restored == original);
-    std::cout << "? Patch inversion works (undo functionality)!\n\n";
-}
-
-
-int main()
-{
-
-    inversion_example();
-}
-
-#endif
