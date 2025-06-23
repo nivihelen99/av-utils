@@ -243,7 +243,138 @@ void run_examples() {
 
 } // namespace retry_util_examples
 
-int main() {
+
+// Function that needs parameters
+int divide(int a, int b) {
+    if (b == 0) throw std::runtime_error("Division by zero");
+    return a / b;
+}
+
+int test1() {
+    int numerator = 10;
+    int denominator = 2;
+    
+    // Capture parameters in lambda
+    auto result = retry_util::retry([=]() {
+        return divide(numerator, denominator);
+    }).times(3).with_delay(std::chrono::milliseconds(100)).run();
+    
+    std::cout << "Result: " << result << std::endl;
+    return 0;
+}
+
+
+int test2() {
+    int numerator = 10;
+    int denominator = 2;
+    
+    // Using std::bind
+    auto bound_function = std::bind(divide, numerator, denominator);
+    auto result = retry_util::retry(bound_function)
+                    .times(3)
+                    .with_delay(std::chrono::milliseconds(100))
+                    .run();
+    
+    std::cout << "Result: " << result << std::endl;
+    return 0;
+}
+
+void process_data(const std::string& filename, int option) {
+    // Some processing that might fail
+    if (filename.empty()) throw std::invalid_argument("Empty filename");
+    // ... processing logic
+}
+
+int test3() {
+    std::string filename = "data.txt";
+    int option = 42;
+    
+    // Retry a void function
+    retry_util::retry([=]() {
+        process_data(filename, option);
+    }).times(5)
+      .with_delay(std::chrono::milliseconds(200))
+      .with_backoff(2.0)
+      .run();
+    
+    return 0;
+}
+
+class DataProcessor {
+public:
+    int process(const std::string& data, int flags) {
+        // Some processing that might fail
+        if (data.empty()) throw std::runtime_error("Empty data");
+        return data.length() * flags;
+    }
+};
+
+int test7() {
+    DataProcessor processor;
+    std::string data = "test data";
+    int flags = 5;
+    
+    // Retry member function
+    auto result = retry_util::retry([&processor, data, flags]() {
+        return processor.process(data, flags);
+    }).times(3).run();
+    
+    std::cout << "Result: " << result << std::endl;
+    return 0;
+}
+
+int test4() {
     retry_util_examples::run_examples();
     return 0;
+}
+
+
+#include <random>
+
+int unreliable_function(int min_value) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<> dis(1, 10);
+    
+    int result = dis(gen);
+    if (result < min_value) {
+        throw std::runtime_error("Value too low");
+    }
+    return result;
+}
+
+int test5() {
+    int minimum = 7;
+    
+    // Retry until we get a value >= 8
+    auto result = retry_util::retry([=]() {
+        return unreliable_function(minimum);
+    }).times(10)
+      .with_delay(std::chrono::milliseconds(50))
+      .until([](int value) { return value >= 8; })  // Keep retrying until value >= 8
+      .run();
+    
+    std::cout << "Final result: " << result << std::endl;
+    return 0;
+}
+
+int test6() {
+    int a = 15, b = 3;
+    
+    // Simple retry with parameters
+    auto result = retry_util::RetryBuilder::simple([=]() {
+        return divide(a, b);
+    }, 3, std::chrono::milliseconds(100)).run();
+    
+    // With backoff
+    auto result2 = retry_util::RetryBuilder::with_backoff([=]() {
+        return divide(a, b);
+    }, 5, std::chrono::milliseconds(50), 2.0).run();
+    
+    return 0;
+}
+
+int main()
+{
+    run_examples();
 }
