@@ -6,6 +6,7 @@
 #include <exception>
 #include <type_traits>
 #include <stdexcept>
+#include <random> // For jitter
 
 namespace retry_util {
 
@@ -23,6 +24,9 @@ private:
     std::function<void(std::size_t, const std::exception*)> retry_callback_ = nullptr;
     double backoff_factor_ = 1.0;
     std::chrono::milliseconds max_timeout_ = std::chrono::milliseconds(0);
+    bool jitter_ = false;
+    double jitter_factor_ = 0.1; // Default jitter factor of 10%
+    std::chrono::milliseconds max_delay_ = std::chrono::milliseconds::max(); // Default to very large max_delay
     
 public:
     explicit Retriable(Func fn) : fn_(std::move(fn)) {}
@@ -80,6 +84,25 @@ public:
     template<typename Callback>
     Retriable& on_retry(Callback callback) {
         retry_callback_ = callback;
+        return *this;
+    }
+
+    // Enable jitter in delay calculations
+    Retriable& with_jitter(bool jitter = true, double factor = 0.1) {
+        jitter_ = jitter;
+        if (factor < 0.0 || factor > 1.0) {
+            throw std::out_of_range("Jitter factor must be between 0.0 and 1.0");
+        }
+        jitter_factor_ = factor;
+        return *this;
+    }
+
+    // Set maximum delay cap for backoff
+    Retriable& with_max_delay(std::chrono::milliseconds max_delay) {
+        if (max_delay.count() < 0) {
+            throw std::out_of_range("Max delay cannot be negative");
+        }
+        max_delay_ = max_delay;
         return *this;
     }
     
@@ -170,18 +193,46 @@ public:
     
 private:
     void sleep_with_backoff(std::size_t attempt) {
-        if (delay_.count() > 0) {
-            auto current_delay = delay_;
-            if (backoff_factor_ > 1.0) {
-                double multiplier = 1.0;
-                for (std::size_t i = 0; i < attempt; ++i) {
-                    multiplier *= backoff_factor_;
-                }
-                current_delay = std::chrono::milliseconds(
-                    static_cast<long long>(delay_.count() * multiplier)
-                );
+        if (delay_.count() <= 0) {
+            return;
+        }
+
+        auto current_delay_ms = static_cast<double>(delay_.count());
+
+        if (backoff_factor_ > 1.0 && attempt > 0) { // Apply backoff only after the first attempt (attempt index starts at 0 for first sleep)
+            double multiplier = 1.0;
+            // The 'attempt' parameter here is the number of *completed* attempts.
+            // So for the sleep *after* the first failure (attempt == 0 completed), 
+            // we want to apply backoff once if attempt_idx_for_backoff = 0.
+            // Let's adjust to use 'attempt' directly as it signifies number of *previous* failures.
+            for (std::size_t i = 0; i < attempt; ++i) { 
+                multiplier *= backoff_factor_;
             }
-            std::this_thread::sleep_for(current_delay);
+            current_delay_ms *= multiplier;
+        }
+        
+        std::chrono::milliseconds actual_delay(static_cast<long long>(current_delay_ms));
+
+        // Apply jitter if enabled
+        if (jitter_) {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            // Calculate jitter range: delay ± delay * jitter_factor_
+            double min_jitter = actual_delay.count() * (1.0 - jitter_factor_);
+            double max_jitter = actual_delay.count() * (1.0 + jitter_factor_);
+            if (min_jitter < 0) min_jitter = 0;
+            
+            std::uniform_real_distribution<> dis(min_jitter, max_jitter);
+            actual_delay = std::chrono::milliseconds(static_cast<long long>(dis(gen)));
+        }
+
+        // Cap delay by max_delay_
+        if (actual_delay > max_delay_) {
+            actual_delay = max_delay_;
+        }
+        
+        if (actual_delay.count() > 0) {
+            std::this_thread::sleep_for(actual_delay);
         }
     }
 };
@@ -222,107 +273,3 @@ public:
 };
 
 } // namespace retry_util
-
-// Example usage and test functions
-#ifdef RETRY_UTIL_EXAMPLES
-
-#include <iostream>
-#include <random>
-
-namespace retry_util::examples {
-
-// Example: Flaky function that fails a few times before succeeding
-int flaky_function() {
-    static int call_count = 0;
-    ++call_count;
-    
-    if (call_count < 3) {
-        throw std::runtime_error("Temporary failure #" + std::to_string(call_count));
-    }
-    
-    return 42;
-}
-
-// Example: Function that returns success/failure
-bool unreliable_ping() {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    static std::uniform_int_distribution<> dis(1, 10);
-    
-    return dis(gen) > 7; // 30% chance of success
-}
-
-// Example: Network connection simulation
-void connect_to_server() {
-    static int attempts = 0;
-    ++attempts;
-    
-    if (attempts < 2) {
-        throw std::runtime_error("Connection failed");
-    }
-    
-    std::cout << "Connected successfully!\n";
-}
-
-void run_examples() {
-    std::cout << "=== Retry Utility Examples ===\n\n";
-    
-    // Example 1: Basic retry with delay
-    std::cout << "1. Basic retry with delay:\n";
-    try {
-        auto result = retry(flaky_function)
-                        .times(5)
-                        .with_delay(std::chrono::milliseconds(50))
-                        .run();
-        std::cout << "Result: " << result << "\n\n";
-    } catch (const std::exception& e) {
-        std::cout << "Failed: " << e.what() << "\n\n";
-    }
-    
-    // Example 2: Retry until condition is met
-    std::cout << "2. Retry until condition is met:\n";
-    try {
-        auto success = retry(unreliable_ping)
-                         .times(10)
-                         .with_delay(std::chrono::milliseconds(100))
-                         .until([](bool result) { return result; })
-                         .on_retry([](std::size_t attempt, const std::exception*) {
-                             std::cout << "  Attempt " << attempt << " failed, retrying...\n";
-                         })
-                         .run();
-        std::cout << "Ping successful: " << std::boolalpha << success << "\n\n";
-    } catch (const std::exception& e) {
-        std::cout << "Failed: " << e.what() << "\n\n";
-    }
-    
-    // Example 3: Exponential backoff
-    std::cout << "3. Exponential backoff:\n";
-    try {
-        retry(connect_to_server)
-            .times(4)
-            .with_delay(std::chrono::milliseconds(50))
-            .with_backoff(2.0)
-            .on_retry([](std::size_t attempt, const std::exception* e) {
-                if (e) {
-                    std::cout << "  Attempt " << attempt << " failed: " << e->what() << "\n";
-                }
-            })
-            .run();
-    } catch (const std::exception& e) {
-        std::cout << "Failed: " << e.what() << "\n\n";
-    }
-    
-    // Example 4: Using RetryBuilder for common patterns
-    std::cout << "4. Using RetryBuilder:\n";
-    try {
-        auto result = RetryBuilder::simple([]() { return 123; }, 3, std::chrono::milliseconds(10))
-                        .run();
-        std::cout << "Simple retry result: " << result << "\n";
-    } catch (const std::exception& e) {
-        std::cout << "Failed: " << e.what() << "\n";
-    }
-}
-
-} // namespace retry_util::examples
-
-#endif // RETRY_UTIL_EXAMPLES
