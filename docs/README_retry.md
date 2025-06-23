@@ -1,376 +1,180 @@
-# Using the Retry Utility (`retry.h`)
+# Retry Utility (`retry_util::retry`)
 
-The `retry.h` header provides a flexible and powerful utility for adding retry logic to function calls in C++. It allows you to retry operations that might fail intermittently, with support for various backoff strategies, exception filtering, value-based success conditions, and timeouts.
+## Overview
 
-## Core Concepts
+The `retry.h` header provides a flexible and fluent C++ utility for adding retry logic to function calls. It allows you to easily wrap any callable (function, lambda, member function) and specify conditions under which it should be retried if it fails or if its result isn't satisfactory.
 
-The primary component is the `Retriable<Func>` class, which wraps a callable function (`Func`). You configure its behavior using a fluent API and then execute it using the `run()` method or the call operator `()`.
+The core of the utility is the `retry_util::retry(Func&& fn)` factory function, which returns a `Retriable<Func>` object. This object can then be configured using a chain of methods (e.g., number of attempts, delays, backoff strategy, exception filters, value predicates, timeouts) before finally executing the operation with `.run()` or `()`.
 
-A factory function `retry_util::retry(your_function)` is the main entry point to create a `Retriable` object.
+## Namespace
+All utilities are within the `retry_util` namespace.
 
-## Including the Utility
+## Core Components
+
+-   **`Retriable<Func>` Class**:
+    -   Wraps the callable `Func` to be executed.
+    -   Provides a fluent API for configuring retry behavior.
+    -   Specialized for functions returning `void` and non-`void`.
+-   **`retry_util::retry(Func&& fn)` Factory Function**:
+    -   The main entry point to create a `Retriable` object from a given callable `fn`.
+
+## Configuration Methods (Fluent API on `Retriable` object)
+
+-   **`.times(std::size_t n)`**: Sets the maximum number of attempts (total, including the first). Default is 3. `times(0)` means the function will not be attempted. `times(1)` means one attempt, no retries.
+-   **`.with_delay(std::chrono::milliseconds delay)`**: Sets a fixed delay between retry attempts. Default is 0ms.
+-   **`.with_backoff(double factor)`**: Applies an exponential backoff to the delay. The delay is multiplied by `factor` for each subsequent retry. `factor` must be >= 1.0.
+-   **`.with_max_delay(std::chrono::milliseconds max_val_delay)`**: Caps the maximum delay between retries, even with backoff.
+-   **`.with_jitter(bool jitter_enabled = true, double factor = 0.1)`**: Enables/disables jitter. If enabled, a random amount (based on `factor`, e.g., 0.1 for +/-10%) is added/subtracted from the calculated delay.
+-   **`.timeout(std::chrono::milliseconds max_timeout)`**: Sets an overall maximum duration for all retry attempts combined. If this timeout is exceeded, the operation fails.
+-   **`.until(Predicate pred)`**: (For non-void functions only) Specifies a predicate `pred(const ReturnType& result)` that must return `true` for the result to be considered successful. If it returns `false`, a retry is triggered.
+-   **`.on_exception(ExceptionPred handler)`**: Provides a predicate `handler(const std::exception& e)` that returns `true` if a caught exception `e` should trigger a retry.
+-   **`.on_exception<ExceptionType>()`**: A convenience method to retry only if a specific `ExceptionType` (or derived) is caught.
+-   **`.on_retry(Callback callback)`**: Sets a callback `callback(std::size_t attempt_num, const std::exception* e_ptr)` that is invoked before each retry. `e_ptr` is non-null if the retry is due to an exception.
+
+### Execution
+-   **`.run()`**: Executes the configured retry logic. Returns the result of the function if successful and non-void. Throws the last exception if all attempts fail due to exceptions, or `std::runtime_error` if timeout/value predicate failures occur after all attempts.
+-   **`operator()()`**: Alias for `.run()`.
+
+## `RetryBuilder` Convenience Class
+Provides static factory methods for common retry patterns:
+-   **`RetryBuilder::simple(Func&& fn, times, delay)`**
+-   **`RetryBuilder::with_backoff(Func&& fn, times, initial_delay, factor)`**
+-   **`RetryBuilder::on_exception<ExceptionType>(Func&& fn, times, delay)`**
+
+## Usage Examples
+
+(Based on `examples/retry_example.cpp`)
+
+### 1. Basic Retry with Delay and Backoff
 
 ```cpp
 #include "retry.h" // Adjust path as necessary
 #include <iostream>
-#include <stdexcept>
-#include <chrono>
-#include <vector>
+#include <stdexcept> // For std::runtime_error
+#include <chrono>    // For time literals
 
 // For convenience with time literals
 using namespace std::chrono_literals;
-```
 
-## Basic Usage
-
-### 1. Simple Retries
-
-Retry a function a specific number of times with no delay.
-
-```cpp
-int might_fail_count = 0;
-int task_simple() {
-    might_fail_count++;
-    if (might_fail_count < 3) {
-        std::cout << "Task_simple: Attempt " << might_fail_count << " failed." << std::endl;
-        throw std::runtime_error("Failed!");
+int attempt_count = 0;
+int task_that_fails_twice() {
+    attempt_count++;
+    std::cout << "Executing task_that_fails_twice, attempt #" << attempt_count << std::endl;
+    if (attempt_count < 3) {
+        throw std::runtime_error("Simulated temporary failure");
     }
-    std::cout << "Task_simple: Attempt " << might_fail_count << " succeeded." << std::endl;
-    return 42;
+    return 100; // Success
 }
 
-void example_simple_retry() {
-    might_fail_count = 0; // Reset for example
+int main() {
     try {
-        int result = retry_util::retry(task_simple)
-                        .times(3) // Total 3 attempts
+        int result = retry_util::retry(task_that_fails_twice)
+                        .times(4)                         // Max 4 attempts
+                        .with_delay(100ms)                // Initial delay 100ms
+                        .with_backoff(2.0)                // Delay doubles: 100ms, 200ms, 400ms
+                        .on_retry([](std::size_t num, const std::exception* e) {
+                            std::cout << "  Retry attempt #" << num;
+                            if (e) std::cout << " due to: " << e->what();
+                            std::cout << std::endl;
+                        })
                         .run();
-        std::cout << "Simple_retry successful, result: " << result << std::endl;
+        std::cout << "Task succeeded with result: " << result << std::endl;
     } catch (const std::exception& e) {
-        std::cout << "Simple_retry ultimately failed: " << e.what() << std::endl;
+        std::cout << "Task ultimately failed: " << e.what() << std::endl;
     }
 }
 ```
 
-### 2. Retries with Fixed Delay
-
-Retry with a fixed delay between attempts.
+### 2. Retry Based on Return Value (`.until()`)
 
 ```cpp
-int might_fail_delayed_count = 0;
-void task_delayed_void() {
-    might_fail_delayed_count++;
-    if (might_fail_delayed_count < 2) {
-        std::cout << "Task_delayed_void: Attempt " << might_fail_delayed_count << " failed." << std::endl;
-        throw std::runtime_error("Void task failed");
-    }
-    std::cout << "Task_delayed_void: Attempt " << might_fail_delayed_count << " succeeded." << std::endl;
+#include "retry.h"
+#include <iostream>
+#include <chrono>
+#include <random>
+
+using namespace std::chrono_literals;
+
+// Simulates an operation that eventually returns true
+bool check_status() {
+    static int call_num = 0;
+    call_num++;
+    bool success = (call_num >= 3); // Succeeds on the 3rd call
+    std::cout << "check_status call #" << call_num << ", result: " << std::boolalpha << success << std::endl;
+    return success;
 }
 
-void example_fixed_delay() {
-    might_fail_delayed_count = 0; // Reset
+int main() {
     try {
-        retry_util::retry(task_delayed_void)
-            .times(3)
-            .with_delay(100ms) // Wait 100ms between retries
-            .run();
-        std::cout << "Fixed_delay (void) successful." << std::endl;
+        bool final_status = retry_util::retry(check_status)
+                                .times(5)
+                                .with_delay(50ms)
+                                .until([](bool status_result) { // Retry if lambda returns false
+                                    return status_result == true;
+                                })
+                                .on_retry([](std::size_t attempt, const std::exception* /*e_ptr will be null*/){
+                                    std::cout << "  Value predicate failed, retrying (attempt #" << attempt << ")" << std::endl;
+                                })
+                                .run();
+        std::cout << "Status check succeeded: " << std::boolalpha << final_status << std::endl;
     } catch (const std::exception& e) {
-        std::cout << "Fixed_delay (void) ultimately failed: " << e.what() << std::endl;
+        // This might be std::runtime_error("Retry failed: condition not met after all attempts")
+        std::cout << "Status check ultimately failed: " << e.what() << std::endl;
     }
 }
 ```
 
-## Advanced Configuration
-
-### 1. Exponential Backoff
-
-Increase the delay exponentially between retries.
+### 3. Handling Specific Exceptions and Timeout
 
 ```cpp
-int backoff_task_count = 0;
-int task_exponential_backoff() {
-    backoff_task_count++;
-    std::cout << "Task_exponential_backoff: Attempt " << backoff_task_count << " at "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::steady_clock::now().time_since_epoch()).count()
-              << "ms" << std::endl;
-    if (backoff_task_count < 4) {
-        throw std::runtime_error("Backoff task failed");
-    }
-    return 100;
+#include "retry.h"
+#include <iostream>
+#include <stdexcept>
+#include <chrono>
+#include <thread> // For std::this_thread::sleep_for
+
+using namespace std::chrono_literals;
+
+struct MyCustomError : std::runtime_error {
+    MyCustomError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+int operation_with_custom_error(int& counter) {
+    counter++;
+    std::cout << "Operation with custom error, attempt #" << counter << std::endl;
+    if (counter == 1) throw MyCustomError("A custom error occurred!");
+    if (counter == 2) throw std::runtime_error("A generic runtime error!"); // This won't be retried
+    // Success on 3rd attempt if only MyCustomError is retried
+    std::this_thread::sleep_for(60ms); // Simulate work
+    return counter;
 }
 
-void example_exponential_backoff() {
-    backoff_task_count = 0;
+int main() {
+    int attempt_counter = 0;
     try {
-        int result = retry_util::retry(task_exponential_backoff)
+        int result = retry_util::retry([&attempt_counter](){ return operation_with_custom_error(attempt_counter); })
                         .times(5)
-                        .with_delay(50ms)     // Initial delay
-                        .with_backoff(2.0)    // Factor: 50ms, 100ms, 200ms, 400ms
+                        .with_delay(20ms)
+                        .on_exception<MyCustomError>() // Only retry if MyCustomError is thrown
+                        .timeout(100ms)               // Overall timeout for all attempts
                         .run();
-        std::cout << "Exponential_backoff successful, result: " << result << std::endl;
+        std::cout << "Operation succeeded with result: " << result << std::endl;
+    } catch (const MyCustomError& e) {
+        std::cout << "Failed due to MyCustomError after retries: " << e.what() << std::endl;
+    } catch (const std::runtime_error& e) {
+        std::cout << "Failed due to non-retried std::runtime_error or timeout: " << e.what() << std::endl;
     } catch (const std::exception& e) {
-        std::cout << "Exponential_backoff ultimately failed: " << e.what() << std::endl;
+        std::cout << "Failed with other exception: " << e.what() << std::endl;
     }
 }
 ```
 
-### 2. Jitter
+## Dependencies
+- `<functional>` (for `std::function`)
+- `<chrono>`, `<thread>` (for delays and timeouts)
+- `<exception>`, `<stdexcept>` (for exception handling)
+- `<type_traits>` (for SFINAE and `std::invoke_result_t`)
+- `<random>` (for jitter)
+- `<memory>` (for `std::unique_ptr` in some internal details)
 
-Add randomness to delay calculations to prevent thundering herd scenarios. Jitter is a factor applied to the current delay (e.g., 0.1 means +/- 10%).
-
-```cpp
-void example_jitter() {
-    // Assuming task_exponential_backoff or similar
-    backoff_task_count = 0;
-    std::cout << "\nStarting Jitter Example:\n";
-    try {
-        retry_util::retry(task_exponential_backoff)
-            .times(4)
-            .with_delay(100ms)
-            .with_backoff(1.5)
-            .with_jitter(true, 0.25) // Enable jitter, +/- 25% of calculated delay
-            .run();
-        std::cout << "Jitter example successful." << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "Jitter example failed: " << e.what() << std::endl;
-    }
-}
-```
-
-### 3. Maximum Delay
-
-Cap the maximum delay, even with exponential backoff.
-
-```cpp
-void example_max_delay() {
-    backoff_task_count = 0;
-    std::cout << "\nStarting Max Delay Example:\n";
-    try {
-        retry_util::retry(task_exponential_backoff)
-            .times(5)
-            .with_delay(50ms)
-            .with_backoff(3.0)      // Would lead to 50, 150, 450, 1350ms
-            .with_max_delay(200ms)  // Caps delay at 200ms (so 50, 150, 200, 200ms)
-            .run();
-        std::cout << "Max_delay example successful." << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "Max_delay example failed: " << e.what() << std::endl;
-    }
-}
-```
-
-### 4. Overall Timeout
-
-Set a maximum total time for all retry attempts.
-
-```cpp
-int timeout_task_count = 0;
-void task_takes_long() {
-    timeout_task_count++;
-    std::cout << "Task_takes_long: Attempt " << timeout_task_count << std::endl;
-    if (timeout_task_count < 5) { // Will try to run many times
-        std::this_thread::sleep_for(70ms); // Each attempt takes time
-        throw std::runtime_error("Still failing");
-    }
-}
-
-void example_timeout() {
-    timeout_task_count = 0;
-    try {
-        retry_util::retry(task_takes_long)
-            .times(10)              // Max 10 attempts
-            .with_delay(10ms)       // Small delay between attempts
-            .timeout(200ms)         // But overall timeout is 200ms
-            .run();
-        std::cout << "Timeout example successful (should not happen if configured correctly)." << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "Timeout example correctly failed: " << e.what() << std::endl;
-    }
-}
-```
-
-### 5. Handling Specific Exceptions
-
-Only retry on specific types of exceptions or based on a predicate.
-
-```cpp
-// Custom exception types
-struct TransientError : std::runtime_error {
-    TransientError(const std::string& msg) : std::runtime_error(msg) {}
-};
-struct FatalError : std::runtime_error {
-    FatalError(const std::string& msg) : std::runtime_error(msg) {}
-};
-
-int specific_exception_count = 0;
-void task_specific_exceptions() {
-    specific_exception_count++;
-    std::cout << "Task_specific_exceptions: Attempt " << specific_exception_count << std::endl;
-    if (specific_exception_count == 1) {
-        throw TransientError("Network glitch");
-    }
-    if (specific_exception_count == 2) {
-        throw FatalError("Config missing"); // Should not retry on this
-    }
-    // Success on 3rd if TransientError was retried
-}
-
-void example_on_exception_type() {
-    specific_exception_count = 0;
-    try {
-        retry_util::retry(task_specific_exceptions)
-            .times(3)
-            .on_exception<TransientError>() // Only retry if TransientError is thrown
-            .run();
-        std::cout << "On_exception_type successful." << std::endl;
-    } catch (const FatalError& fe) {
-        std::cout << "On_exception_type correctly caught FatalError: " << fe.what() << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "On_exception_type failed with other exception: " << e.what() << std::endl;
-    }
-}
-
-void example_on_exception_predicate() {
-    specific_exception_count = 0; // Reset
-    auto should_retry_pred = [](const std::exception& e) {
-        // Example: Retry on std::runtime_error but not its derivatives like FatalError
-        // Note: dynamic_cast check for base would include derived. Be specific.
-        if (dynamic_cast<const FatalError*>(&e)) return false; // Don't retry FatalError
-        return dynamic_cast<const std::runtime_error*>(&e) != nullptr; // Retry other runtime_errors
-    };
-
-    try {
-        retry_util::retry(task_specific_exceptions)
-            .times(3)
-            .on_exception(should_retry_pred)
-            .run();
-        std::cout << "On_exception_predicate successful." << std::endl;
-    } catch (const FatalError& fe) {
-        std::cout << "On_exception_predicate correctly caught FatalError: " << fe.what() << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "On_exception_predicate failed with other: " << e.what() << std::endl;
-    }
-}
-```
-
-### 6. Value Predicate (`until`)
-
-For functions that return a value, you can specify a condition that the result must meet for the attempt to be considered successful. Retries will continue until the predicate returns `true` or attempts are exhausted.
-
-```cpp
-int until_task_count = 0;
-std::vector<int> task_until_value() {
-    until_task_count++;
-    std::cout << "Task_until_value: Attempt " << until_task_count << std::endl;
-    if (until_task_count == 1) return {1, 2};       // Not empty, but not size 3
-    if (until_task_count == 2) return {};           // Empty
-    if (until_task_count == 3) return {1, 2, 3};    // Meets condition
-    return {1, 2, 3, 4}; // Also meets condition
-}
-
-void example_until() {
-    until_task_count = 0;
-    try {
-        auto result = retry_util::retry(task_until_value)
-            .times(4)
-            .with_delay(50ms)
-            .until([](const std::vector<int>& v) { // Predicate: vector is not empty and size is >=3
-                return !v.empty() && v.size() >=3;
-            })
-            .run();
-        std::cout << "Until successful, result size: " << result.size() << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "Until ultimately failed: " << e.what() << std::endl;
-    }
-}
-```
-**Note:** `.until()` is only available for functions that do not return `void`.
-
-### 7. `on_retry` Callback
-
-Execute a callback function just before a retry attempt is made (i.e., after a failure and before the delay).
-
-```cpp
-void example_on_retry_callback() {
-    might_fail_count = 0; // Reset task_simple's counter
-    auto retry_logger = [](std::size_t attempt_num, const std::exception* e_ptr) {
-        std::cout << "[Callback] Retrying... Next attempt will be " << attempt_num << "." << std::endl;
-        if (e_ptr) {
-            std::cout << "[Callback] Failed due to exception: " << e_ptr->what() << std::endl;
-        } else {
-            std::cout << "[Callback] Failed due to value predicate." << std::endl;
-        }
-    };
-
-    try {
-        retry_util::retry(task_simple)
-            .times(3)
-            .with_delay(20ms)
-            .on_retry(retry_logger)
-            .run();
-        std::cout << "On_retry_callback example successful." << std::endl;
-    } catch (const std::exception& e) {
-        std::cout << "On_retry_callback example ultimately failed: " << e.what() << std::endl;
-    }
-}
-```
-
-## `RetryBuilder` Convenience Class
-
-The `RetryBuilder` class provides static helper methods for common retry scenarios.
-
-```cpp
-void example_retry_builder() {
-    might_fail_count = 0;
-    try {
-        // Simple retry with defaults (3 times, 100ms delay)
-        // int result = retry_util::RetryBuilder::simple(task_simple).run();
-
-        // Retry on specific exception with backoff
-        specific_exception_count = 0;
-        retry_util::RetryBuilder::on_exception<TransientError>(task_specific_exceptions, 3, 50ms)
-            .with_backoff(2.0) // Can chain further configurations
-            .run();
-        std::cout << "RetryBuilder example successful." << std::endl;
-
-    } catch (const std::exception& e) {
-        std::cout << "RetryBuilder example failed: " << e.what() << std::endl;
-    }
-}
-```
-**Note on `RetryBuilder::on_exception`**: The template parameters are `template<typename ExceptionType, typename Func>`. You call it like `RetryBuilder::on_exception<MyExceptionType>(my_function, ...)`.
-
-## Full Example List
-To run these examples, you would typically include them in a main function:
-```cpp
-// int main() {
-//     std::cout << "--- Running Simple Retry Example ---" << std::endl;
-//     example_simple_retry();
-//     std::cout << "\n--- Running Fixed Delay Example ---" << std::endl;
-//     example_fixed_delay();
-//     std::cout << "\n--- Running Exponential Backoff Example ---" << std::endl;
-//     example_exponential_backoff();
-//     std::cout << "\n--- Running Jitter Example ---" << std::endl;
-//     example_jitter(); // Needs task_exponential_backoff or similar for visible effect
-//     std::cout << "\n--- Running Max Delay Example ---" << std::endl;
-//     example_max_delay(); // Needs task_exponential_backoff or similar
-//     std::cout << "\n--- Running Timeout Example ---" << std::endl;
-//     example_timeout();
-//     std::cout << "\n--- Running On Exception Type Example ---" << std::endl;
-//     example_on_exception_type();
-//     std::cout << "\n--- Running On Exception Predicate Example ---" << std::endl;
-//     example_on_exception_predicate();
-//     std::cout << "\n--- Running Until Example ---" << std::endl;
-//     example_until();
-//     std::cout << "\n--- Running On Retry Callback Example ---" << std::endl;
-//     example_on_retry_callback();
-//     std::cout << "\n--- Running RetryBuilder Example ---" << std::endl;
-//     example_retry_builder();
-//
-//     return 0;
-// }
-```
-
-This comprehensive guide should help users understand and effectively use the `retry.h` utility.
+This retry utility offers a fluent and powerful way to make operations more resilient to transient issues by providing fine-grained control over the retry logic.
