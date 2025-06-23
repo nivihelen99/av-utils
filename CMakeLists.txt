@@ -95,6 +95,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         IntervalCounterLib
         IntervalTreeLib
         UniqueQueueLib
+        nlohmann_json::nlohmann_json # Added for jsonpatch dependency
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
@@ -112,8 +113,18 @@ endif()
 
 message(STATUS "Example executables will be built in: ${EXE_OUTPUT_PATH}/")
 
-# Google Test setup
+# nlohmann/json setup (for jsonpatch.h dependency)
 include(FetchContent)
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.11.3 # Using a recent stable tag
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+
+# Google Test setup
+include(FetchContent) # Already included, but fine
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip # Or a specific commit/tag
@@ -129,4 +140,4 @@ enable_testing()
 
 add_subdirectory(tests)
 
-message(STATUS "Google Test setup complete. Tests will be added next.")
+message(STATUS "Google Test and nlohmann/json setup complete. Tests will be added next.")

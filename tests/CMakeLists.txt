@@ -42,6 +42,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         IntervalCounterLib
         IntervalTreeLib
         UniqueQueueLib
+        nlohmann_json::nlohmann_json # Added for jsonpatch dependency
     )
 
     # Specific configurations for certain tests
