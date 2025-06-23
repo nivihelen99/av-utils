@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <cassert>
+#include <chrono>
 #include <memory>
 
 // Simple test framework
