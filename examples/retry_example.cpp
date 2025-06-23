@@ -71,7 +71,13 @@ void run_examples() {
     std::cout << "=== Retry Utility Examples ===\n\n";
     
     // Reset counters for examples
-    flaky_function(); // Call once to reset its static counter if tests run multiple times in one go
+    try{
+        flaky_function(); // Call once to reset its static counter if tests run multiple times in one go
+    } 
+    catch(...)
+    {
+    }
+            
     // This is a bit of a hack for static counters in example functions. 
     // A better way would be to pass state or use classes for test functions.
     // For now, let's assume examples are run sequentially and counters are reset manually if needed.
