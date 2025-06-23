@@ -45,6 +45,10 @@ target_include_directories(RetryUtil INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/inclu
 add_library(ScopedFlagLib INTERFACE)
 target_include_directories(ScopedFlagLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define SplitView as an interface library (header-only)
+add_library(SplitView INTERFACE)
+target_include_directories(SplitView INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -75,6 +79,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ScopedTimer
         RetryUtil
         ScopedFlagLib
+        SplitView
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
