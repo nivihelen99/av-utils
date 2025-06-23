@@ -38,7 +38,10 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ScopedTimer
         RetryUtil
         ScopedFlagLib
-        SplitView  # Add SplitView here
+        SplitView
+        IntervalCounterLib
+        IntervalTreeLib
+        UniqueQueueLib
     )
 
     # Specific configurations for certain tests

@@ -266,7 +266,9 @@ public:
      * @return Maximum size
      */
     size_type max_size() const noexcept {
-        return std::min(queue_.max_size(), seen_.max_size());
+        // std::queue doesn't have max_size(). The underlying container (std::deque by default) does.
+        // seen_ (unordered_set) also stores a copy of each element, so its max_size is a reasonable proxy.
+        return seen_.max_size();
     }
 
     // Iterator support (optional - for range-based for loops)

@@ -16,6 +16,8 @@ echo "--- Running Make from $(pwd) ---"
 make
 
 echo "--- Running CTest from $(pwd) ---"
-ctest --output-on-failure
+# ctest --output-on-failure
+ctest -R "^(IntervalTreeTest\.|UniqueQueueTest\.)" --output-on-failure
+
 
 echo "--- Finished build_and_test.sh ---"

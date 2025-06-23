@@ -49,6 +49,18 @@ target_include_directories(ScopedFlagLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/i
 add_library(SplitView INTERFACE)
 target_include_directories(SplitView INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define IntervalCounterLib as an interface library (header-only)
+add_library(IntervalCounterLib INTERFACE)
+target_include_directories(IntervalCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# Define IntervalTreeLib as an interface library (header-only)
+add_library(IntervalTreeLib INTERFACE)
+target_include_directories(IntervalTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# Define UniqueQueueLib as an interface library (header-only)
+add_library(UniqueQueueLib INTERFACE)
+target_include_directories(UniqueQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -80,6 +92,9 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         RetryUtil
         ScopedFlagLib
         SplitView
+        IntervalCounterLib
+        IntervalTreeLib
+        UniqueQueueLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

@@ -261,8 +261,20 @@ public:
     IntervalTree& operator=(const IntervalTree&) = delete;
 
     // Moveable
-    IntervalTree(IntervalTree&&) = default;
-    IntervalTree& operator=(IntervalTree&&) = default;
+    IntervalTree(IntervalTree&& other) noexcept
+        : root(std::move(other.root)), tree_size(other.tree_size) {
+        other.root = nullptr;
+        other.tree_size = 0;
+    }
+    IntervalTree& operator=(IntervalTree&& other) noexcept {
+        if (this != &other) {
+            root = std::move(other.root);
+            tree_size = other.tree_size;
+            other.root = nullptr;
+            other.tree_size = 0;
+        }
+        return *this;
+    }
 
     void insert(int64_t start, int64_t end, const T& value) {
         root = insert_impl(std::move(root), Interval<T>(start, end, value));
