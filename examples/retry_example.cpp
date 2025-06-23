@@ -376,5 +376,5 @@ int test6() {
 
 int main()
 {
-    run_examples();
+    retry_util_examples::run_examples();
 }
