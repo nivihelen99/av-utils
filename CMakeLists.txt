@@ -39,6 +39,9 @@ target_include_directories(BatcherLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 add_library(ScopedTimer INTERFACE)
 target_include_directories(ScopedTimer INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_library(RetryUtil INTERFACE)
+target_include_directories(RetryUtil INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -67,6 +70,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ZipViewLib
         BatcherLib
         ScopedTimer
+        RetryUtil
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
