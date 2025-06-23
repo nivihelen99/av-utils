@@ -244,8 +244,27 @@ void JsonPatch::generate_diff_recursive(const json& from, const json& to,
     if (from == to) {
         return; // No difference
     }
+
+    // Handle cases where one is an empty object and the other is not, at the root.
+    if (base_path.empty() && from.is_object() && to.is_object()) {
+        if (from.empty() && !to.empty()) {
+            // From is {}, To is not {}. Add all keys from To.
+            for (auto it = to.begin(); it != to.end(); ++it) {
+                operations.emplace_back(JsonPatchOperation::Type::ADD, "/" + escape_path_component(it.key()), it.value());
+            }
+            return;
+        }
+        if (!from.empty() && to.empty()) {
+            // From is not {}, To is {}. Remove all keys from From.
+            for (auto it = from.begin(); it != from.end(); ++it) {
+                operations.emplace_back(JsonPatchOperation::Type::REMOVE, "/" + escape_path_component(it.key()));
+            }
+            return;
+        }
+        // If both empty or both non-empty, proceed to normal diff.
+    }
     
-    // Handle type changes
+    // Handle type changes (if not caught by above or if not root)
     if (from.type() != to.type()) {
         operations.emplace_back(JsonPatchOperation::Type::REPLACE, base_path, to);
         return;
