@@ -40,6 +40,8 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ScopedFlagLib
         SplitView
         IntervalCounterLib
+        IntervalTreeLib
+        UniqueQueueLib
     )
 
     # Specific configurations for certain tests
