@@ -47,6 +47,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         # nlohmann_json::nlohmann_json is an INTERFACE dependency of JsonFieldMask
         DeltaMapLib
         RetainLatestLib
+        WithResourceLib # Added for with_resource_test
     )
 
     # Specific configurations for certain tests
