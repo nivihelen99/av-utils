@@ -17,7 +17,9 @@ make
 
 echo "--- Running CTest from $(pwd) ---"
 # ctest --output-on-failure
-ctest -R "^(IntervalTreeTest\.|UniqueQueueTest\.)" --output-on-failure
+# ctest -R "^(IntervalTreeTest\.|UniqueQueueTest\.)" --output-on-failure # Old filter
+# ctest -R "^json_fieldmask_test$" --output-on-failure # Incorrect filter for gtest_discover_tests
+ctest -R "^(FieldMaskTest\.|PathUtilsTest\.|FieldMaskUtilsTest\.)" --output-on-failure
 
 
 echo "--- Finished build_and_test.sh ---"
