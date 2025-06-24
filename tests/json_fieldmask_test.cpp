@@ -61,7 +61,7 @@ TEST_F(FieldMaskTest, ToString) {
 
     mask.add_path("/b/c");
     mask.add_path("/a"); // Paths are stored in std::set, so they will be ordered
-
+    
     // The order in the set will be "/a", then "/b/c"
     std::string expected_str = "FieldMask{\"/a\", \"/b/c\"}";
     ASSERT_EQ(mask.to_string(), expected_str);
@@ -85,10 +85,10 @@ TEST(PathUtilsTest, BuildPath) {
 TEST(PathUtilsTest, SplitPath) {
     ASSERT_EQ(path_utils::split_path("").size(), 0);
     ASSERT_EQ(path_utils::split_path("/").size(), 0);
-
+    
     std::vector<std::string> components1 = {"a", "b", "c"};
     ASSERT_EQ(path_utils::split_path("/a/b/c"), components1);
-
+    
     std::vector<std::string> components2 = {"foo~1bar", "baz~0qux"}; // Note: split_path does not unescape
     ASSERT_EQ(path_utils::split_path("/foo~1bar/baz~0qux"), components2);
 }
@@ -129,7 +129,7 @@ protected:
 
 TEST_F(FieldMaskUtilsTest, DiffFieldsBasic) {
     FieldMask mask = diff_fields(json_a, json_b);
-
+    
     ASSERT_TRUE(mask.contains("/name"));
     ASSERT_FALSE(mask.contains("/age")); // Should not be in mask
     ASSERT_TRUE(mask.contains("/address/city"));
@@ -137,7 +137,7 @@ TEST_F(FieldMaskUtilsTest, DiffFieldsBasic) {
     ASSERT_TRUE(mask.contains("/hobbies/1")); // "hiking" vs "cycling"
     ASSERT_FALSE(mask.contains("/hobbies/0")); // "reading" is same
     ASSERT_TRUE(mask.contains("/occupation")); // Added field
-
+    
     // Check for paths that shouldn't exist if only leaf nodes are reported for non-object/array types
     ASSERT_FALSE(mask.contains("/address")); // This would be true if parent path of changed child is added
                                              // The current implementation adds the most specific differing path.
@@ -192,12 +192,12 @@ TEST_F(FieldMaskUtilsTest, ApplyMaskedUpdate) {
 TEST_F(FieldMaskUtilsTest, ApplyMaskedUpdateCreatesPath) {
     json target = {{"user", {{"id", 1}}}};
     json source = {{"user", {{"profile", {{"status", "active"}}}}}};
-
+    
     FieldMask mask;
     mask.add_path("/user/profile/status");
-
+    
     apply_masked_update(target, source, mask);
-
+    
     ASSERT_TRUE(target["user"].contains("profile"));
     ASSERT_TRUE(target["user"]["profile"].contains("status"));
     ASSERT_EQ(target["user"]["profile"]["status"], "active");
@@ -219,7 +219,7 @@ TEST_F(FieldMaskUtilsTest, ExtractByMask) {
     ASSERT_TRUE(extracted["address"].contains("city"));
     ASSERT_EQ(extracted["address"]["city"], "Anytown");
     ASSERT_FALSE(extracted["address"].contains("street")); // Should not be present
-
+    
     ASSERT_TRUE(extracted.contains("hobbies"));
     ASSERT_TRUE(extracted["hobbies"].is_array());
     // nlohmann/json creates objects for paths. If hobbies/0 is requested,
@@ -239,7 +239,7 @@ TEST_F(FieldMaskUtilsTest, PruneRedundantPaths) {
     mask.add_path("/x"); // Parent added after child
 
     FieldMask pruned = prune_redundant_paths(mask);
-
+    
     // Paths are added to a set, so order isn't guaranteed for iteration
     // but the logic of prune_redundant_paths should ensure only minimal set.
     // The implementation iterates existing paths and adds to result if no parent is in result.
@@ -263,12 +263,12 @@ TEST_F(FieldMaskUtilsTest, PruneRedundantPaths) {
     test_mask_for_prune.add_path("/a/b/c");
     test_mask_for_prune.add_path("/x");
     test_mask_for_prune.add_path("/x/y");
-
+    
     FieldMask pruned_actual = prune_redundant_paths(test_mask_for_prune);
 
     ASSERT_TRUE(pruned_actual.contains("/a"));
     ASSERT_TRUE(pruned_actual.contains("/x"));
-    ASSERT_EQ(pruned_actual.get_paths().size(), 2);
+    ASSERT_EQ(pruned_actual.get_paths().size(), 2); 
     // This assumes the prune implementation correctly handles cases where a parent might be added after a child
     // The current implementation iterates through the input mask's paths (which are sorted due to std::set)
     // and adds a path to the result if none of its parents are *already in the result*.
@@ -299,7 +299,7 @@ TEST_F(FieldMaskUtilsTest, PruneRedundantPaths) {
 
 TEST_F(FieldMaskUtilsTest, PruneRedundantPathsRoot) {
     FieldMask mask;
-    mask.add_path("/");
+    mask.add_path("/"); 
     mask.add_path("/a");
     mask.add_path("/b/c");
 
@@ -324,7 +324,7 @@ TEST_F(FieldMaskUtilsTest, InvertMask) {
     ASSERT_TRUE(inverted.contains("/address/street"));
     ASSERT_TRUE(inverted.contains("/hobbies")); // Parent path
     ASSERT_TRUE(inverted.contains("/hobbies/0"));
-
+    
     // Paths that should NOT be in the inverted mask (i.e., fields that are different)
     ASSERT_FALSE(inverted.contains("/name"));
     ASSERT_FALSE(inverted.contains("/address/city"));
@@ -369,7 +369,7 @@ TEST_F(FieldMaskUtilsTest, DiffEmptyRootPath) {
     FieldMask mask_num = diff_fields(j_num1, j_num2);
     ASSERT_TRUE(mask_num.contains("/")); // Root path for primitive diff
     ASSERT_EQ(mask_num.get_paths().size(), 1);
-
+    
     json j_str1 = "hello";
     json j_str2 = "world";
     FieldMask mask_str = diff_fields(j_str1, j_str2);

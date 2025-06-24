@@ -207,10 +207,10 @@ using json = nlohmann::json;
 int main() {
     json target = {{"name", "Alice"}, {"role", "user"}};
     json source = {{"name", "Alice Wonderland"}, {"role", "admin"}, {"location", "virtual"}};
-
+    
     fieldmask::FieldMask update_mask;
     update_mask.add_path("/role"); // Only update the role
-
+    
     fieldmask::apply_masked_update(target, source, update_mask);
     std::cout << "Updated target: " << target.dump(2) << std::endl;
     // Output:
@@ -232,14 +232,14 @@ using json = nlohmann::json;
 
 int main() {
     json data = {
-        {"id", 7},
-        {"content", "secret data"},
+        {"id", 7}, 
+        {"content", "secret data"}, 
         {"public_info", "available to all"}
     };
     fieldmask::FieldMask mask;
     mask.add_path("/id");
     mask.add_path("/public_info");
-
+    
     json extracted_data = fieldmask::extract_by_mask(data, mask);
     std::cout << "Extracted data: " << extracted_data.dump(2) << std::endl;
     // Output:
