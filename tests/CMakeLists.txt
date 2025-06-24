@@ -17,16 +17,6 @@ file(GLOB INDIVIDUAL_TEST_FILES "*.cpp")
 foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
     get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
 
-    if(TEST_NAME STREQUAL "delta_map_test")
-        message(STATUS "Temporarily skipping GTest setup for delta_map_test due to build environment issues.")
-        # Add it as a plain executable to ensure it compiles with DeltaMapLib
-        add_executable(${TEST_NAME} ${TEST_FILE})
-        target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
-        # Link only essential libs for delta_map_test, not GTest
-        target_link_libraries(${TEST_NAME} PRIVATE DeltaMapLib Threads::Threads)
-        continue() # Skip GTest specific parts for delta_map_test
-    endif()
-
     add_executable(${TEST_NAME} ${TEST_FILE})
     target_include_directories(${TEST_NAME} PRIVATE "${CMAKE_SOURCE_DIR}/include")
 
