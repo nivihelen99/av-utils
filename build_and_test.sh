@@ -16,11 +16,10 @@ echo "--- Running CMake (cmake ..) ---"
 # it won't need to redownload.
 cmake ..
 
-echo "--- Building delta_map_example ---"
-make delta_map_example
+echo "--- Building all targets ---"
+make -j$(nproc) # Build all targets in parallel
 
-echo "--- Building delta_map_test (neutered) ---"
-make delta_map_test
+echo "--- Running CTest ---"
+ctest --output-on-failure # Run all tests and show output on failure
 
-echo "--- CTest execution skipped. ---"
-echo "--- Finished build_and_test.sh (GTests for DeltaMap were not run) ---"
+echo "--- Finished build_and_test.sh ---"

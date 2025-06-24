@@ -46,6 +46,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         JsonFieldMask # For json_fieldmask_test and its dependencies
         # nlohmann_json::nlohmann_json is an INTERFACE dependency of JsonFieldMask
         DeltaMapLib
+        RetainLatestLib
     )
 
     # Specific configurations for certain tests
