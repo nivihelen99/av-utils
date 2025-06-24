@@ -1,5 +1,4 @@
-// Temporarily commented out due to build timeout issues with GTest FetchContent
-/*
+
 #include "gtest/gtest.h"
 #include "delta_map.h"
 
@@ -352,12 +351,4 @@ TEST(DeltaMapDeductionTest, CustomComparator) {
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
-}
-*/
-
-// Minimal main to make it a compilable file without GTest for now.
-int main(int argc, char **argv) {
-    (void)argc; // Suppress unused parameter warning
-    (void)argv; // Suppress unused parameter warning
-    return 0;
 }
