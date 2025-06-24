@@ -61,6 +61,11 @@ target_include_directories(IntervalTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(UniqueQueueLib INTERFACE)
 target_include_directories(UniqueQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define JsonFieldMask as an interface library (header-only)
+add_library(JsonFieldMask INTERFACE)
+target_include_directories(JsonFieldMask INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(JsonFieldMask INTERFACE nlohmann_json::nlohmann_json) # JsonFieldMask depends on nlohmann_json
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -95,7 +100,8 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         IntervalCounterLib
         IntervalTreeLib
         UniqueQueueLib
-        nlohmann_json::nlohmann_json # Added for jsonpatch dependency
+        JsonFieldMask # Added for json_fieldmask_example and its dependencies
+        # nlohmann_json::nlohmann_json is now an INTERFACE dependency of JsonFieldMask
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

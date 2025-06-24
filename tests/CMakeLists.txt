@@ -42,7 +42,8 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         IntervalCounterLib
         IntervalTreeLib
         UniqueQueueLib
-        nlohmann_json::nlohmann_json # Added for jsonpatch dependency
+        JsonFieldMask # For json_fieldmask_test and its dependencies
+        # nlohmann_json::nlohmann_json is an INTERFACE dependency of JsonFieldMask
     )
 
     # Specific configurations for certain tests
