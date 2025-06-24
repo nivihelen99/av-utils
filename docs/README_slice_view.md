@@ -93,7 +93,7 @@ To create a reverse slice, provide a negative step. The `start` index should be 
 
     // Reverse the entire vector
     // Starts at -1 (last element) and goes towards -8 (before the first element) with a step of -1
-    auto reversed_all = slice(vec, -1, -8, -1);
+    auto reversed_all = slice(vec, -1, -8, -1); 
     print_slice(reversed_all, "slice(vec, -1, -8, -1)"); // Output: 70 60 50 40 30 20 10 (size: 7)
 
     // Reverse a sub-section: elements from index 4 down to (but not including) index 1
