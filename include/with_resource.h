@@ -4,6 +4,7 @@
 #include <type_traits>
 #include <exception>
 #include <functional>
+#include <variant>
 
 namespace raii {
 
@@ -46,7 +47,7 @@ public:
         
         // Execute the main function with the resource
         try {
-            func_(resource_);
+            func(resource_);
         } catch (...) {
             // Ensure cleanup runs even if func throws
             try_cleanup();
@@ -102,9 +103,9 @@ public:
         // Execute function and capture result
         try {
             if constexpr (std::is_void_v<ReturnType>) {
-                func_(resource_);
+                func(resource_);
             } else {
-                result_ = func_(resource_);
+                result_ = func(resource_);
             }
         } catch (...) {
             try_cleanup();
