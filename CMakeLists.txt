@@ -66,6 +66,10 @@ add_library(JsonFieldMask INTERFACE)
 target_include_directories(JsonFieldMask INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(JsonFieldMask INTERFACE nlohmann_json::nlohmann_json) # JsonFieldMask depends on nlohmann_json
 
+# Define DeltaMapLib as an interface library (header-only)
+add_library(DeltaMapLib INTERFACE)
+target_include_directories(DeltaMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -102,6 +106,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         UniqueQueueLib
         JsonFieldMask # Added for json_fieldmask_example and its dependencies
         # nlohmann_json::nlohmann_json is now an INTERFACE dependency of JsonFieldMask
+        DeltaMapLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
