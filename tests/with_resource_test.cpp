@@ -5,6 +5,7 @@
 #include <vector>
 #include <numeric> // For std::accumulate
 #include <stdexcept> // For std::runtime_error
+#include <variant>
 
 // Mock resource for testing cleanup
 struct MockResource {
