@@ -67,7 +67,9 @@ public:
         
         // Move constructor
         Scoped(Scoped&& other) noexcept 
-            : entry_(std::move(other.entry_)), lock_(std::move(other.lock_)) {}
+            : entry_(std::move(other.entry_)), lock_(std::move(other.lock_)) {
+            // other.entry_ is already moved, no need to reset
+        }
         
         // Move assignment
         Scoped& operator=(Scoped&& other) noexcept {
@@ -76,6 +78,7 @@ public:
                 reset();
                 entry_ = std::move(other.entry_);
                 lock_ = std::move(other.lock_);
+                // other.entry_ is already moved, no need to reset
             }
             return *this;
         }
@@ -101,10 +104,16 @@ public:
         
         // Release the lock early
         void reset() {
-            if (entry_ && lock_.owns_lock()) {
-                lock_.unlock();
+            if (entry_) {
+                if (lock_.owns_lock()) {
+                    lock_.unlock();
+                }
                 entry_->refcount.fetch_sub(1, std::memory_order_acq_rel);
                 entry_.reset();
+            }
+            // Also reset the lock even if entry_ was null
+            if (lock_) {
+                lock_ = std::unique_lock<std::timed_mutex>();
             }
         }
     };
@@ -124,13 +133,16 @@ public:
         TimedScoped() = default;
         
         TimedScoped(TimedScoped&& other) noexcept 
-            : entry_(std::move(other.entry_)), lock_(std::move(other.lock_)) {}
+            : entry_(std::move(other.entry_)), lock_(std::move(other.lock_)) {
+            // other.entry_ is already moved, no need to reset
+        }
         
         TimedScoped& operator=(TimedScoped&& other) noexcept {
             if (this != &other) {
                 reset();
                 entry_ = std::move(other.entry_);
                 lock_ = std::move(other.lock_);
+                // other.entry_ is already moved, no need to reset
             }
             return *this;
         }
@@ -151,10 +163,16 @@ public:
         }
         
         void reset() {
-            if (entry_ && lock_.owns_lock()) {
-                lock_.unlock();
+            if (entry_) {
+                if (lock_.owns_lock()) {
+                    lock_.unlock();
+                }
                 entry_->refcount.fetch_sub(1, std::memory_order_acq_rel);
                 entry_.reset();
+            }
+            // Also reset the lock even if entry_ was null
+            if (lock_) {
+                lock_ = std::unique_lock<std::timed_mutex>();
             }
         }
     };
