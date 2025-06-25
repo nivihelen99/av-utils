@@ -149,44 +149,46 @@ TEST_F(NamedLockTest, TestSameKeyContention) {
 }
 
 TEST_F(NamedLockTest, TestRefCountAndCleanup) {
-    // Acquire lock1
-    auto lock1 = int_locks_.acquire(100);
-    ASSERT_EQ(int_locks_.get_metrics().active_locks, 1);
-    ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);
-    ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
+    // This test verifies the reference counting and cleanup mechanism.
+    // It ensures that locks are counted, keys are tracked, and cleanup removes unused keys.
+    // Note: This test does not involve re-entrant locking on the same key by the same thread,
+    // as std::timed_mutex is not recursive.
 
-    // Acquire lock2 for the same key
-    auto lock2 = int_locks_.acquire(100); // This will block until lock1 is released if in different thread
-                                        // In same thread, would be deadlock. This test is serial.
-                                        // This actually tests if another Scoped object can be created for the same key (it can)
-                                        // and it will correctly increment refcount.
-                                        // The test is slightly misnamed, it's more about sequential acquires.
-                                        // Let's re-scope for clarity of refcounting.
-    {
-      auto l1 = int_locks_.acquire(200);
-      ASSERT_EQ(int_locks_.get_metrics().active_locks, 1); // l1 for 200
-      ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);   // key 200
-      ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
-
-      {
-        auto l2 = int_locks_.acquire(200); // Refcount for 200 should be 2
-        ASSERT_EQ(int_locks_.get_metrics().active_locks, 2);
-        ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);
-        ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
-      } // l2 released, refcount for 200 is 1
-
-      ASSERT_EQ(int_locks_.get_metrics().active_locks, 1);
-      ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);
-      ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
-    } // l1 released, refcount for 200 is 0
-
-    ASSERT_EQ(int_locks_.get_metrics().active_locks, 0);
-    ASSERT_EQ(int_locks_.get_metrics().total_keys, 1); // Key 200 still exists
-    ASSERT_EQ(int_locks_.get_metrics().unused_keys, 1); // Key 200 is unused
-
-    int_locks_.cleanup_unused();
+    // Initial state: no locks, no keys
     ASSERT_EQ(int_locks_.get_metrics().active_locks, 0);
     ASSERT_EQ(int_locks_.get_metrics().total_keys, 0);
+    ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
+    int_locks_.clear(); // Ensure a clean slate for this specific test if run after others.
+    ASSERT_EQ(int_locks_.get_metrics().active_locks, 0);
+
+
+    const int test_key = 200;
+
+    {
+        auto l1 = int_locks_.acquire(test_key);
+        ASSERT_TRUE(l1.owns_lock());
+        ASSERT_EQ(int_locks_.get_metrics().active_locks, 1); // l1 holds lock for test_key
+        ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);   // One key (test_key) exists
+        ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);  // No unused keys
+    } // l1 is released here. Refcount for test_key becomes 0.
+
+    // After l1 is released:
+    // The lock is no longer active.
+    ASSERT_EQ(int_locks_.get_metrics().active_locks, 0);
+    // The key entry itself still exists in the map, but its refcount is 0.
+    ASSERT_EQ(int_locks_.get_metrics().total_keys, 1);
+    // The key is now considered unused.
+    ASSERT_EQ(int_locks_.get_metrics().unused_keys, 1);
+
+    // Perform cleanup
+    int_locks_.cleanup_unused();
+
+    // After cleanup:
+    // No active locks.
+    ASSERT_EQ(int_locks_.get_metrics().active_locks, 0);
+    // The unused key (test_key) should have been removed.
+    ASSERT_EQ(int_locks_.get_metrics().total_keys, 0);
+    // No unused keys remaining.
     ASSERT_EQ(int_locks_.get_metrics().unused_keys, 0);
 }
 
@@ -346,20 +348,39 @@ TEST_F(NamedLockTest, TestActiveLockCountCorrectness) {
 
     // Re-test active_lock_count with clearer scope
     string_locks_.clear(); // Start fresh
+    ASSERT_EQ(string_locks_.active_lock_count(), 0);
+
 
     auto guard1 = string_locks_.acquire("k1");
-    ASSERT_EQ(string_locks_.active_lock_count(), 1);
+    ASSERT_TRUE(guard1.owns_lock());
+    ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" is active
     {
-      auto guard2 = string_locks_.acquire("k1"); // second scoped lock on same key
-      ASSERT_EQ(string_locks_.active_lock_count(), 2); // Both guard1 and guard2 contribute to refcount of "k1"
-      {
-        auto guard3 = string_locks_.acquire("k2");
-        ASSERT_EQ(string_locks_.active_lock_count(), 3); // k1 refcount 2, k2 refcount 1
-      } // guard3 released
+      // Acquire a lock on a *different* key to test total active_lock_count.
+      // Acquiring on the same key ("k1") again in the same thread would deadlock
+      // because std::timed_mutex is not recursive.
+      auto guard2 = string_locks_.acquire("k2");
+      ASSERT_TRUE(guard2.owns_lock());
+      // Now "k1" and "k2" are active. Refcount for "k1" is 1, refcount for "k2" is 1.
+      // Total active_lock_count = 1 (for k1) + 1 (for k2) = 2.
       ASSERT_EQ(string_locks_.active_lock_count(), 2);
-    } // guard2 released
-    ASSERT_EQ(string_locks_.active_lock_count(), 1);
-}
+      {
+        auto guard3 = string_locks_.acquire("k3");
+        ASSERT_TRUE(guard3.owns_lock());
+        // "k1", "k2", "k3" active. Total active_lock_count = 1+1+1 = 3.
+        ASSERT_EQ(string_locks_.active_lock_count(), 3);
+      } // guard3 released ("k3" becomes inactive, refcount 0)
+      ASSERT_EQ(string_locks_.active_lock_count(), 2); // "k1", "k2" still active
+    } // guard2 released ("k2" becomes inactive, refcount 0)
+    ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" still active
+} // guard1 released ("k1" becomes inactive, refcount 0)
+// All locks acquired in this test scope should now be released.
+// Add a final check.
+// Need to call string_locks_.active_lock_count() outside the fixture's direct scope
+// or ensure all guards are out of scope. The above structure handles guard scope.
+// So, after guard1 is released, the count should be 0.
+// This is implicitly tested if the fixture is fresh for each test.
+// Let's add an explicit check for 0 after all local guards are gone.
+// The above structure correctly tracks this.
 
 TEST_F(NamedLockTest, EmptyKeyTest) {
     // Test with an empty string key
@@ -479,4 +500,29 @@ TEST_F(NamedLockTest, DefaultConstructedScopedLock) {
     ASSERT_FALSE(default_timed_scoped.owns_lock());
     ASSERT_FALSE(default_timed_scoped); // operator bool
     default_timed_scoped.reset(); // Should be safe to call reset
+}
+
+TEST_F(NamedLockTest, TestNonReentrantAcquireBehavior) {
+    const std::string key = "reentrant_test_key";
+
+    // 1. Acquire a lock using acquire()
+    auto lock1 = string_locks_.acquire(key);
+    ASSERT_TRUE(lock1.owns_lock()) << "Initial acquire should succeed";
+    ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
+
+    // 2. Attempt to acquire the same lock again using try_acquire() from the same thread
+    auto lock2_opt = string_locks_.try_acquire(key);
+    ASSERT_FALSE(lock2_opt.has_value()) << "try_acquire on already held lock by same thread should fail";
+    
+    // Verify active_locks count is still 1 (try_acquire should handle its internal refcounting)
+    ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
+
+    // 3. Attempt to acquire the same lock again using try_acquire_for() from the same thread
+    auto lock3_opt = string_locks_.try_acquire_for(key, std::chrono::milliseconds(1));
+    ASSERT_FALSE(lock3_opt.has_value()) << "try_acquire_for on already held lock by same thread should fail";
+
+    // Verify active_locks count is still 1
+    ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
+
+    // lock1 goes out of scope and releases the lock
 }
