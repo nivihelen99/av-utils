@@ -16,17 +16,33 @@ struct BloomHash {
         // A common way to generate multiple hashes is to use two hash functions h1 and h2
         // and compute g_i(x) = h1(x) + i * h2(x) + i*i * h1(x) mod m (less effective for small m)
         // Or, more simply, use std::hash with different seeds.
-        // For this implementation, we'll use a simple seed perturbation.
-        // A more robust implementation might use something like MurmurHash3 or xxHash.
-        std::hash<T> hasher;
-        // Combine seed with the hash of the item.
-        // Based on boost::hash_combine
-        size_t h = hasher(item);
-        return h ^ (seed + 0x9e3779b9 + (h << 6) + (h >> 2));
+        // For this implementation, we'll use a combination of a base hash of the item
+        // and a perturbation based on the seed.
+        std::hash<T> primary_hasher;
+        size_t item_hash = primary_hasher(item);
+
+        // Apply mixing to item_hash to improve its bit distribution,
+        // especially important if std::hash<T> is simple (e.g., identity for integers).
+        // Using components from MurmurHash3's finalizer (fmix64 for size_t if 64-bit).
+        // This sequence is for 64-bit size_t. For 32-bit, different constants/shifts would be better.
+        // Assuming size_t is commonly 64-bit on test systems.
+        size_t mixed_hash = item_hash;
+        mixed_hash ^= mixed_hash >> 33;
+        mixed_hash *= 0xff51afd7ed558ccdULL; //ULL for 64-bit constant
+        mixed_hash ^= mixed_hash >> 33;
+        mixed_hash *= 0xc4ceb9fe1a85ec53ULL;
+        mixed_hash ^= mixed_hash >> 33;
+
+        // Combine the well-mixed item_hash with the seed.
+        // The Kirsch-Mitzenmacher optimization: hash(item) + seed * hash2(item)
+        // Here, we use a variant: mixed_hash ^ (seed_perturbation)
+        // seed_perturbation uses the seed and another derivative of mixed_hash.
+        // (seed + C1 + (mixed_hash << S1) + (mixed_hash >> S2)) is a common way.
+        return mixed_hash ^ (seed + 0x9e3779b9 + (mixed_hash << 6) + (mixed_hash >> 2));
     }
 };
 
-// Specialization for std::string to avoid issues with std::hash<std::string> and small perturbations
+// Specialization for std::string
 template <>
 struct BloomHash<std::string> {
     size_t operator()(const std::string& item, size_t seed) const {
