@@ -35,6 +35,7 @@ It features:
 *   **Queues:** `heap_queue.h` (priority queue), `round_robin_queue.h`, `unique_queue.h` (elements are unique), `spsc.h` (single-producer, single-consumer).
 *   **Specialized Maps:** `interval_map.h` (maps values to intervals, distinct from `interval_tree.h`), `enum_map.h` (map keyed by enum values).
 *   **Sorted Lists:** `sorted_list.h` (elements kept sorted).
+*   **Probabilistic Data Structures:** `bloom_filter.h` (space-efficient probabilistic set membership).
 
 ### Caching Libraries
 These components offer various caching mechanisms to improve performance by storing frequently accessed data.
@@ -76,6 +77,7 @@ This includes:
 Many components have dedicated README files in the `docs/` directory, providing more detailed explanations, usage examples, and API references. Users are encouraged to consult these for in-depth information on specific libraries.
 
 For example, to learn more about `AsyncEventQueue.h`, you can read `docs/README_AsyncEventQueue.md`.
+Similarly, details for the Bloom Filter can be found in `docs/README_bloom_filter.md`.
 
 ## Building and Testing Examples and Tests
 
