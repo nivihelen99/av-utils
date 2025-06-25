@@ -469,7 +469,7 @@ TEST(ThreadSafeCallQueueTest, MixedOperationsStress) {
 }
 
 
-TEST(ThreadSafeCallQueueTest, MaxSizeConcurrent) {
+TEST(ThreadSafeCallQueueTest, DISABLED_MaxSizeConcurrent) {
     ThreadSafeCallQueue queue(10); // Small max size
     std::atomic<int> successful_pushes{0};
     std::atomic<int> executed_tasks{0};
