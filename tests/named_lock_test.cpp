@@ -329,50 +329,47 @@ TEST_F(NamedLockTest, TestStressConcurrentAccess) {
     EXPECT_EQ(stress_locks.key_count(), 0); // All keys should be cleaned up
 }
 
+
+// Here's the corrected version of the problematic test:
+
 TEST_F(NamedLockTest, TestActiveLockCountCorrectness) {
-    const std::string key = "active_count_key";
+    // Start with a clean slate
+    string_locks_.clear();
     ASSERT_EQ(string_locks_.active_lock_count(), 0);
 
-    auto l1 = string_locks_.acquire(key);
-    ASSERT_EQ(string_locks_.active_lock_count(), 1);
-
-    std::thread t1([this, &key]() {
-        auto l_thread = string_locks_.acquire(key); // This will block until l1 is released
-                                                    // Or, if we want true concurrent count, different key or more complex setup.
-                                                    // For now, this tests sequential refcounting.
-                                                    // Let's adjust to make threads try to acquire simultaneously for a short period
-    });
-    // To test concurrent active_lock_count, we need locks held across threads.
-    // This test is actually testing sequential increments.
-    // Let's simplify the test to be more about the definition of active_lock_count.
-
-    // Re-test active_lock_count with clearer scope
-    string_locks_.clear(); // Start fresh
-    ASSERT_EQ(string_locks_.active_lock_count(), 0);
-
-
-    auto guard1 = string_locks_.acquire("k1");
-    ASSERT_TRUE(guard1.owns_lock());
-    ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" is active
+    // Test with different keys to avoid deadlock
     {
-      // Acquire a lock on a *different* key to test total active_lock_count.
-      // Acquiring on the same key ("k1") again in the same thread would deadlock
-      // because std::timed_mutex is not recursive.
-      auto guard2 = string_locks_.acquire("k2");
-      ASSERT_TRUE(guard2.owns_lock());
-      // Now "k1" and "k2" are active. Refcount for "k1" is 1, refcount for "k2" is 1.
-      // Total active_lock_count = 1 (for k1) + 1 (for k2) = 2.
-      ASSERT_EQ(string_locks_.active_lock_count(), 2);
-      {
-        auto guard3 = string_locks_.acquire("k3");
-        ASSERT_TRUE(guard3.owns_lock());
-        // "k1", "k2", "k3" active. Total active_lock_count = 1+1+1 = 3.
-        ASSERT_EQ(string_locks_.active_lock_count(), 3);
-      } // guard3 released ("k3" becomes inactive, refcount 0)
-      ASSERT_EQ(string_locks_.active_lock_count(), 2); // "k1", "k2" still active
-    } // guard2 released ("k2" becomes inactive, refcount 0)
-    ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" still active
-} // guard1 released ("k1" becomes inactive, refcount 0)
+        auto guard1 = string_locks_.acquire("k1");
+        ASSERT_TRUE(guard1.owns_lock());
+        ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" is active
+        
+        {
+            // Acquire a lock on a *different* key to test total active_lock_count.
+            // Acquiring on the same key ("k1") again in the same thread would deadlock
+            // because std::timed_mutex is not recursive.
+            auto guard2 = string_locks_.acquire("k2");
+            ASSERT_TRUE(guard2.owns_lock());
+            // Now "k1" and "k2" are active. Refcount for "k1" is 1, refcount for "k2" is 1.
+            // Total active_lock_count = 1 (for k1) + 1 (for k2) = 2.
+            ASSERT_EQ(string_locks_.active_lock_count(), 2);
+            
+            {
+                auto guard3 = string_locks_.acquire("k3");
+                ASSERT_TRUE(guard3.owns_lock());
+                // "k1", "k2", "k3" active. Total active_lock_count = 1+1+1 = 3.
+                ASSERT_EQ(string_locks_.active_lock_count(), 3);
+            } // guard3 released ("k3" becomes inactive, refcount 0)
+            ASSERT_EQ(string_locks_.active_lock_count(), 2); // "k1", "k2" still active
+        } // guard2 released ("k2" becomes inactive, refcount 0)
+        ASSERT_EQ(string_locks_.active_lock_count(), 1); // "k1" still active
+    } // guard1 released ("k1" becomes inactive, refcount 0)
+    
+    // Final verification - all locks should be released
+    ASSERT_EQ(string_locks_.active_lock_count(), 0);
+}
+
+
+
 // All locks acquired in this test scope should now be released.
 // Add a final check.
 // Need to call string_locks_.active_lock_count() outside the fixture's direct scope
