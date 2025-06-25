@@ -11,7 +11,7 @@ template <typename T>
 class NamedLock {
 private:
     struct LockEntry {
-        std::timed_mutex mtx;  // Changed from std::mutex to support try_lock_for
+        std::timed_mutex mtx;
         std::atomic<size_t> refcount{0};
         
         LockEntry() = default;
@@ -26,11 +26,34 @@ private:
     mutable std::mutex global_mutex_;
     std::unordered_map<T, std::shared_ptr<LockEntry>> lock_map_;
 
+    // Helper function to get or create lock entry with proper refcount management
+    std::shared_ptr<LockEntry> get_or_create_entry(const T& key) {
+        std::lock_guard<std::mutex> global_lock(global_mutex_);
+        auto it = lock_map_.find(key);
+        if (it != lock_map_.end()) {
+            auto entry = it->second;
+            entry->refcount.fetch_add(1, std::memory_order_acq_rel);
+            return entry;
+        } else {
+            auto entry = std::make_shared<LockEntry>();
+            entry->refcount.fetch_add(1, std::memory_order_acq_rel);
+            lock_map_[key] = entry;
+            return entry;
+        }
+    }
+
+    // Helper function to decrement refcount
+    void decrement_refcount(std::shared_ptr<LockEntry> entry) {
+        if (entry) {
+            entry->refcount.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    }
+
 public:
     class Scoped {
     private:
         std::shared_ptr<LockEntry> entry_;
-        std::unique_lock<std::timed_mutex> lock_;  // Changed to timed_mutex
+        std::unique_lock<std::timed_mutex> lock_;
         
         friend class NamedLock<T>;
         
@@ -90,7 +113,7 @@ public:
     class TimedScoped {
     private:
         std::shared_ptr<LockEntry> entry_;
-        std::unique_lock<std::timed_mutex> lock_;  // Changed to timed_mutex
+        std::unique_lock<std::timed_mutex> lock_;
         
         friend class NamedLock<T>;
         
@@ -148,21 +171,7 @@ public:
     
     // Acquire a scoped lock for a key (blocking)
     Scoped acquire(const T& key) {
-        std::shared_ptr<LockEntry> entry;
-        
-        // Critical section: get or create the lock entry
-        {
-            std::lock_guard<std::mutex> global_lock(global_mutex_);
-            auto it = lock_map_.find(key);
-            if (it != lock_map_.end()) {
-                entry = it->second;
-            } else {
-                entry = std::make_shared<LockEntry>();
-                lock_map_[key] = entry;
-            }
-            // Increment refcount while holding global mutex to prevent races
-            entry->refcount.fetch_add(1, std::memory_order_acq_rel);
-        }
+        auto entry = get_or_create_entry(key);
         
         // Acquire the per-key lock (outside global mutex to avoid contention)
         std::unique_lock<std::timed_mutex> lock(entry->mtx);
@@ -172,20 +181,7 @@ public:
     
     // Try to acquire a scoped lock for a key (non-blocking)
     std::optional<Scoped> try_acquire(const T& key) {
-        std::shared_ptr<LockEntry> entry;
-        
-        // Critical section: get or create the lock entry
-        {
-            std::lock_guard<std::mutex> global_lock(global_mutex_);
-            auto it = lock_map_.find(key);
-            if (it != lock_map_.end()) {
-                entry = it->second;
-            } else {
-                entry = std::make_shared<LockEntry>();
-                lock_map_[key] = entry;
-            }
-            entry->refcount.fetch_add(1, std::memory_order_acq_rel);
-        }
+        auto entry = get_or_create_entry(key);
         
         // Try to acquire the per-key lock
         std::unique_lock<std::timed_mutex> lock(entry->mtx, std::try_to_lock);
@@ -194,7 +190,7 @@ public:
             return Scoped(std::move(entry), std::move(lock));
         } else {
             // Failed to acquire, decrement refcount
-            entry->refcount.fetch_sub(1, std::memory_order_acq_rel);
+            decrement_refcount(entry);
             return std::nullopt;
         }
     }
@@ -203,26 +199,14 @@ public:
     template<typename Rep, typename Period>
     std::optional<TimedScoped> try_acquire_for(const T& key, 
                                                const std::chrono::duration<Rep, Period>& timeout) {
-        std::shared_ptr<LockEntry> entry;
-        
-        {
-            std::lock_guard<std::mutex> global_lock(global_mutex_);
-            auto it = lock_map_.find(key);
-            if (it != lock_map_.end()) {
-                entry = it->second;
-            } else {
-                entry = std::make_shared<LockEntry>();
-                lock_map_[key] = entry;
-            }
-            entry->refcount.fetch_add(1, std::memory_order_acq_rel);
-        }
+        auto entry = get_or_create_entry(key);
         
         std::unique_lock<std::timed_mutex> lock(entry->mtx, std::defer_lock);
         
         if (lock.try_lock_for(timeout)) {
             return TimedScoped(std::move(entry), std::move(lock));
         } else {
-            entry->refcount.fetch_sub(1, std::memory_order_acq_rel);
+            decrement_refcount(entry);
             return std::nullopt;
         }
     }
