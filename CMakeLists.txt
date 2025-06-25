@@ -78,6 +78,10 @@ target_include_directories(RetainLatestLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(WithResourceLib INTERFACE)
 target_include_directories(WithResourceLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define BloomFilterLib as an interface library (header-only)
+add_library(BloomFilterLib INTERFACE)
+target_include_directories(BloomFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
