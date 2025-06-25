@@ -97,6 +97,10 @@ target_include_directories(GraphLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 add_library(TreapLib INTERFACE)
 target_include_directories(TreapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define CountMinSketchLib as an interface library (header-only)
+add_library(CountMinSketchLib INTERFACE)
+target_include_directories(CountMinSketchLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -140,6 +144,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         TrieLib # Added for trie_example
         GraphLib # Added for graph_example
         TreapLib # Added for treap_example
+        CountMinSketchLib # Added for count_min_sketch_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

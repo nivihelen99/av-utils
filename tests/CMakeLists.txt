@@ -52,6 +52,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         TrieLib # Added for trie_test
         GraphLib # Added for graph_test
         TreapLib # Added for treap_test
+        CountMinSketchLib # Added for count_min_sketch_test
     )
 
     # Specific configurations for certain tests
