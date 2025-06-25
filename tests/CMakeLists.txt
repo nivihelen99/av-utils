@@ -48,6 +48,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         DeltaMapLib
         RetainLatestLib
         WithResourceLib # Added for with_resource_test
+        CppLibRateLimiter
     )
 
     # Specific configurations for certain tests
