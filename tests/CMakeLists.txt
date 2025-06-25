@@ -53,6 +53,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         GraphLib # Added for graph_test
         TreapLib # Added for treap_test
         CountMinSketchLib # Added for count_min_sketch_test
+        CountingBloomFilterLib
     )
 
     # Specific configurations for certain tests
