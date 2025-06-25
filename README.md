@@ -28,7 +28,7 @@ This section provides an overview of some of the key categories and components a
 ### Core Data Structures
 This category includes fundamental and advanced data structures for efficient data storage and retrieval.
 It features:
-*   **Tree and List Structures:** `skiplist.h`, `trie.h`, `fenwick_tree.h`, `interval_tree.h` (maps intervals to values).
+*   **Tree and List Structures:** `skiplist.h`, `trie.h`, `fenwick_tree.h`, `interval_tree.h` (maps intervals to values), `treap.h` (randomized binary search tree).
 *   **Associative Containers:** `bimap.h` (bi-directional map), `dict.h` (Python-style dictionary), `const_dict.h` (compile-time constant dictionary), `flatMap.h` (sorted vector-based map), `chain_map.h` (view over multiple maps), `delta_map.h` (tracks changes to a map).
 *   **Set-like Structures:** `ordered_set.h` (preserves insertion order), `bounded_set.h` (fixed-capacity with FIFO eviction), `disjoint_set_union.h` (DSU, for tracking disjoint sets).
 *   **Specialized Arrays and Storage:** `persist_array.h` (memory-mapped array), `SlotMap.h` (stable keyed storage with O(1) operations).
@@ -78,6 +78,7 @@ Many components have dedicated README files in the `docs/` directory, providing 
 
 For example, to learn more about `AsyncEventQueue.h`, you can read `docs/README_AsyncEventQueue.md`.
 Similarly, details for the Bloom Filter can be found in `docs/README_bloom_filter.md`.
+Information on the Treap data structure is available in `docs/README_treap.md`.
 
 ## Building and Testing Examples and Tests
 

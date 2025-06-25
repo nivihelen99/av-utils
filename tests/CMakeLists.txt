@@ -51,6 +51,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         CppLibRateLimiter
         TrieLib # Added for trie_test
         GraphLib # Added for graph_test
+        TreapLib # Added for treap_test
     )
 
     # Specific configurations for certain tests
