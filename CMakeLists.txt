@@ -85,6 +85,10 @@ target_include_directories(BloomFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 add_library(CppLibRateLimiter INTERFACE)
 target_include_directories(CppLibRateLimiter INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define TrieLib as an interface library (header-only)
+add_library(TrieLib INTERFACE)
+target_include_directories(TrieLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -125,6 +129,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         RetainLatestLib
         WithResourceLib # Added for with_resource_example
         CppLibRateLimiter
+        TrieLib # Added for trie_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
@@ -144,25 +149,34 @@ message(STATUS "Example executables will be built in: ${EXE_OUTPUT_PATH}/")
 
 # nlohmann/json setup (for jsonpatch.h dependency)
 include(FetchContent)
+message(STATUS "Declaring nlohmann_json FetchContent...")
 FetchContent_Declare(
   nlohmann_json
   GIT_REPOSITORY https://github.com/nlohmann/json.git
   GIT_TAG v3.11.3 # Using a recent stable tag
+  # Adding QUIET option to suppress verbose output unless there's an error
+  # However, for debugging, we might remove QUIET temporarily if needed
+  # For now, let's assume default verbosity is okay.
 )
+message(STATUS "Making nlohmann_json available...")
 FetchContent_MakeAvailable(nlohmann_json)
+message(STATUS "nlohmann_json FetchContent complete.")
 
 
 # Google Test setup
-include(FetchContent) # Already included, but fine
+# include(FetchContent) # Already included, but fine
+message(STATUS "Declaring googletest FetchContent...")
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip # Or a specific commit/tag
+  # Adding QUIET option to suppress verbose output unless there's an error
 )
-
+message(STATUS "Making googletest available...")
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
+message(STATUS "googletest FetchContent complete.")
 
 # Enable testing for the project
 enable_testing()

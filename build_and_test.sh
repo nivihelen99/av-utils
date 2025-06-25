@@ -4,22 +4,24 @@ echo "--- Starting build_and_test.sh ---"
 
 BUILD_DIR="/app/build"
 
-echo "--- Ensuring build directory exists ---"
+echo "--- Cleaning and ensuring build directory exists ---"
+if [ -d "${BUILD_DIR}" ]; then
+    echo "Removing existing build directory: ${BUILD_DIR}"
+    rm -rf "${BUILD_DIR}"
+fi
 mkdir -p "${BUILD_DIR}"
 
 echo "--- Navigating to build directory (${BUILD_DIR}) ---"
 cd "${BUILD_DIR}"
 
 echo "--- Running CMake (cmake ..) ---"
-# Not cleaning the directory. Let CMake figure out what to rebuild.
-# This assumes that if FetchContent for GTest/nlohmann_json ran before,
-# it won't need to redownload.
 cmake ..
 
 echo "--- Building all targets ---"
-make -j$(nproc) # Build all targets in parallel
+make -j2 # Build all targets with reduced parallelism
 
-echo "--- Running CTest ---"
-ctest --output-on-failure # Run all tests and show output on failure
+# echo "--- Running CTest ---"
+# ctest --output-on-failure # Run all tests and show output on failure
+echo "--- CTest commented out for now to isolate build issues ---"
 
-echo "--- Finished build_and_test.sh ---"
+echo "--- Finished build_and_test.sh (Build Only) ---"

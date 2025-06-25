@@ -49,6 +49,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         RetainLatestLib
         WithResourceLib # Added for with_resource_test
         CppLibRateLimiter
+        TrieLib # Added for trie_test
     )
 
     # Specific configurations for certain tests
