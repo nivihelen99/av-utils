@@ -36,38 +36,77 @@ private:
 
 public:
     TreapIterator() = default;
-    TreapIterator(NodeType* start_node, const Treap<Key, Value, Compare>* treap_instance)
+public: // Ensure constructors are public
+    // Constructor for begin(), end(), and direct pointing (e.g. for insert's return)
+    explicit TreapIterator(NodeType* node, const Treap<Key, Value, Compare>* treap_instance, bool direct_construction = false)
         : treap_(treap_instance) {
-        push_left_path(start_node);
-        if (!path_.empty()) {
-            current_node_ = path_.back();
+        if (direct_construction) {
+            // Used by insert() to point directly at the node.
+            // Path is made to contain only this node initially.
+            current_node_ = node;
+            if (current_node_) {
+                // Ensure path_ is not empty if current_node_ is valid, so ++ can pop.
+                // However, this path isn't the full ancestor path.
+                // operator++ handles this by starting fresh from node->right.
+                path_.push_back(current_node_);
+            }
         } else {
-            current_node_ = nullptr;
+            // Used by begin() and end(). 'node' is root for begin(), or nullptr for end().
+            if (node == nullptr) { // end() iterator
+                current_node_ = nullptr;
+                // path_ remains empty
+            } else { // begin() iterator
+                push_left_path(node); // node is root, build path to actual minimum
+                current_node_ = path_.empty() ? nullptr : path_.back();
+            }
         }
     }
 
     reference operator*() const {
+        if (!current_node_) {
+            throw std::out_of_range("Dereferencing end() or invalid iterator");
+        }
         return current_node_->data;
     }
 
     pointer operator->() const {
+        if (!current_node_) {
+            throw std::out_of_range("Dereferencing end() or invalid iterator pointer");
+        }
         return &operator*();
     }
 
     TreapIterator& operator++() {
+        if (!current_node_) { // Already at end or invalid
+            // throw std::out_of_range("Incrementing end() or invalid iterator");
+            // Standard library iterators typically make this UB or no-op.
+            // Let's ensure it stays at "end".
+            path_.clear(); // Ensure path is empty for an end-like state
+            return *this;
+        }
+
         if (path_.empty()) {
+            // This state should ideally not be reached if current_node_ is valid.
+            // It implies an iterator was directly constructed to a node,
+            // and its path was not properly set or it was already incremented past its "single node" path.
+            // Or, it was an end iterator that somehow had current_node_ non-null.
+            // To be safe, treat as if we are at the end.
             current_node_ = nullptr;
             return *this;
         }
 
-        NodeType* node = path_.back();
+        NodeType* last_visited_node = path_.back(); // This should be current_node_ or its representative on stack
         path_.pop_back();
 
-        push_left_path(node->right.get());
+        // After visiting last_visited_node, next is the leftmost node of its right subtree
+        push_left_path(last_visited_node->right.get());
 
         if (!path_.empty()) {
             current_node_ = path_.back();
         } else {
+            // If path_ is empty, it means last_visited_node's right subtree was empty,
+            // and last_visited_node had no inorder successor ancestor on the stack.
+            // This means we have reached the end of the traversal.
             current_node_ = nullptr;
         }
         return *this;
@@ -276,18 +315,18 @@ public:
         auto result_pair = insertRecursiveWithResult(std::move(root_), std::move(k_copy), std::move(v_copy), inserted_new);
         root_ = std::move(result_pair.first);
         Node* result_node = findRecursive(root_.get(), key);
-        return {iterator(result_node, this), inserted_new};
+        return {iterator(result_node, this, true), inserted_new}; // Use direct_construction = true
     }
 
     std::pair<iterator, bool> insert(Key&& key, Value&& value) {
         bool inserted_new = false;
-        Key key_for_lookup = key; // Make a copy for lookup BEFORE `key` is moved from.
+        Key key_for_lookup = key;
 
         auto result_node_pair = insertRecursiveWithResult(std::move(root_), std::forward<Key>(key), std::forward<Value>(value), inserted_new);
         root_ = std::move(result_node_pair.first);
 
-        Node* found_node = findRecursive(root_.get(), key_for_lookup); // Use the pre-move copy for lookup
-        return {iterator(found_node, this), inserted_new};
+        Node* found_node = findRecursive(root_.get(), key_for_lookup);
+        return {iterator(found_node, this, true), inserted_new}; // Use direct_construction = true
     }
 
     Value& operator[](const Key& key) {
@@ -356,18 +395,15 @@ public:
     }
 
     iterator begin() {
-        Node* min_node = getMinNode(root_.get());
-        return iterator(min_node, this);
+        return iterator(root_.get(), this);
     }
 
     const_iterator begin() const {
-        Node* min_node = getMinNode(root_.get());
-        return const_iterator(min_node, this);
+        return const_iterator(root_.get(), this);
     }
 
     const_iterator cbegin() const {
-        Node* min_node = getMinNode(root_.get());
-        return const_iterator(min_node, this);
+        return const_iterator(root_.get(), this);
     }
 
     iterator end() {
