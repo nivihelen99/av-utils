@@ -50,6 +50,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         WithResourceLib # Added for with_resource_test
         CppLibRateLimiter
         TrieLib # Added for trie_test
+        GraphLib # Added for graph_test
     )
 
     # Specific configurations for certain tests
