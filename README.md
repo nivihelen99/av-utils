@@ -61,7 +61,7 @@ This includes:
 *   **Metaprogramming and Reflection:** `named_struct.h`, `named_tuple.h`, `enum_reflect.h` (compile-time enum reflection), `type_name.h` (get string representation of a type).
 *   **Concurrency, Timing, and Asynchronous Operations:**
     *   Queues: `AsyncEventQueue.h` (thread-safe event queue), `call_queue.h` (queue for function calls).
-    *   Execution Control: `delayed_call.h` (deferred execution), `retry.h` (retry logic for operations), `run_once.h` (ensure a function runs only once).
+    *   Execution Control: `delayed_call.h` (deferred execution), `retry.h` (retry logic for operations), `run_once.h` (ensure a function runs only once), `rate_limiter.h` (token bucket rate limiting).
     *   Timing: `timer_wheel.h` (efficient timer management), `timer_queue.h`, `scoped_timer.h` (measure execution time).
     *   Synchronization: `named_lock.h` (named global locks).
     *   Threading: `thread_pool.h`, `worker_pool.h`.
