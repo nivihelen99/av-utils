@@ -89,6 +89,10 @@ target_include_directories(CppLibRateLimiter INTERFACE ${CMAKE_CURRENT_SOURCE_DI
 add_library(TrieLib INTERFACE)
 target_include_directories(TrieLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define GraphLib as an interface library (header-only)
+add_library(GraphLib INTERFACE)
+target_include_directories(GraphLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -130,6 +134,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         WithResourceLib # Added for with_resource_example
         CppLibRateLimiter
         TrieLib # Added for trie_example
+        GraphLib # Added for graph_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
