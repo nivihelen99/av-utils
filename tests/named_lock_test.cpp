@@ -194,48 +194,109 @@ TEST_F(NamedLockTest, TestRefCountAndCleanup) {
 
 
 TEST_F(NamedLockTest, TestScopedLockMove) {
-    NamedLock<std::string>::Scoped lock1;
-    ASSERT_FALSE(lock1.owns_lock());
-    ASSERT_FALSE(lock1);
+    // Part 1: Test move assignment for Scoped
+    { // Scope for lock1_outer and initial_lock_assign
+        NamedLock<std::string>::Scoped lock1_outer;
+        ASSERT_FALSE(lock1_outer.owns_lock());
+        ASSERT_FALSE(lock1_outer);
 
-    {
-        auto initial_lock = string_locks_.acquire("move_key");
-        ASSERT_TRUE(initial_lock.owns_lock());
-        ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
+        { // Inner scope for initial_lock_assign
+            auto initial_lock_assign = string_locks_.acquire("move_key_assign");
+            ASSERT_TRUE(initial_lock_assign.owns_lock());
+            ASSERT_EQ(string_locks_.get_metrics().active_locks, 1); // "move_key_assign" active
+            
+            lock1_outer = std::move(initial_lock_assign); // Move assignment
+            ASSERT_FALSE(initial_lock_assign.owns_lock()); 
+            ASSERT_FALSE(initial_lock_assign);
+            ASSERT_TRUE(lock1_outer.owns_lock());
+            ASSERT_TRUE(lock1_outer);
+            ASSERT_EQ(string_locks_.get_metrics().active_locks, 1); // "move_key_assign" still active, via lock1_outer
+        } // initial_lock_assign destructed (empty)
         
-        lock1 = std::move(initial_lock); // Move assignment
-        ASSERT_FALSE(initial_lock.owns_lock()); // initial_lock should be invalid
-        ASSERT_FALSE(initial_lock);
-        ASSERT_TRUE(lock1.owns_lock());
-        ASSERT_TRUE(lock1);
+        // lock1_outer still holds the lock for "move_key_assign"
+        ASSERT_TRUE(lock1_outer.owns_lock());
         ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
-    } // lock1 goes out of scope, releases the lock
+    } // lock1_outer destructed. Lock for "move_key_assign" released.
 
-    ASSERT_EQ(string_locks_.get_metrics().active_locks, 0);
-    ASSERT_EQ(string_locks_.get_metrics().unused_keys, 1);
+    // Check after lock1_outer is destructed
+    auto metrics_assign_released = string_locks_.get_metrics();
+    ASSERT_EQ(metrics_assign_released.active_locks, 0);
+    ASSERT_EQ(metrics_assign_released.unused_keys, 1);  // "move_key_assign" is now unused
+    ASSERT_EQ(metrics_assign_released.total_keys, 1);
 
-    // Test move constructor
-    auto lock2_source = string_locks_.acquire("move_key_ctor");
-    ASSERT_TRUE(lock2_source.owns_lock());
-    ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
 
-    NamedLock<std::string>::Scoped lock2_dest(std::move(lock2_source));
-    ASSERT_FALSE(lock2_source.owns_lock());
-    ASSERT_TRUE(lock2_dest.owns_lock());
-    ASSERT_EQ(string_locks_.get_metrics().active_locks, 1);
+    // Part 2: Test move constructor for Scoped
+    { // Scope for lock2_dest
+        auto lock2_source = string_locks_.acquire("move_key_ctor"); // "move_key_ctor" active
+                                                                    // "move_key_assign" is unused.
+        ASSERT_TRUE(lock2_source.owns_lock());
+        // Metrics check:
+        auto metrics_ctor_acq = string_locks_.get_metrics();
+        ASSERT_EQ(metrics_ctor_acq.active_locks, 1); // "move_key_ctor"
+        ASSERT_EQ(metrics_ctor_acq.unused_keys, 1);  // "move_key_assign"
+        ASSERT_EQ(metrics_ctor_acq.total_keys, 2);
+
+        NamedLock<std::string>::Scoped lock2_dest(std::move(lock2_source)); // Move constructor
+        ASSERT_FALSE(lock2_source.owns_lock());
+        ASSERT_TRUE(lock2_dest.owns_lock());
+        // Metrics should be the same, lock just moved owner
+        auto metrics_ctor_moved = string_locks_.get_metrics();
+        ASSERT_EQ(metrics_ctor_moved.active_locks, 1);
+        ASSERT_EQ(metrics_ctor_moved.unused_keys, 1);
+        ASSERT_EQ(metrics_ctor_moved.total_keys, 2);
+    } // lock2_dest destructed. Lock for "move_key_ctor" released.
+
+    // Check after lock2_dest is destructed
+    // "move_key_assign" unused, "move_key_ctor" unused
+    auto metrics_ctor_released = string_locks_.get_metrics();
+    ASSERT_EQ(metrics_ctor_released.active_locks, 0);
+    ASSERT_EQ(metrics_ctor_released.unused_keys, 2);
+    ASSERT_EQ(metrics_ctor_released.total_keys, 2);
     
-    // Test TimedScoped move
-    NamedLock<std::string>::TimedScoped timed_lock1;
-    ASSERT_FALSE(timed_lock1.owns_lock());
-    auto initial_timed_lock_opt = string_locks_.try_acquire_for("timed_move_key", std::chrono::milliseconds(10));
-    ASSERT_TRUE(initial_timed_lock_opt.has_value());
-    auto initial_timed_lock = std::move(*initial_timed_lock_opt);
+    // Part 3: Test move assignment for TimedScoped
+    { // Scope for timed_lock1_outer
+        NamedLock<std::string>::TimedScoped timed_lock1_outer;
+        ASSERT_FALSE(timed_lock1_outer.owns_lock());
 
-    ASSERT_TRUE(initial_timed_lock.owns_lock());
-    timed_lock1 = std::move(initial_timed_lock);
-    ASSERT_FALSE(initial_timed_lock.owns_lock());
-    ASSERT_TRUE(timed_lock1.owns_lock());
+        std::optional<NamedLock<std::string>::TimedScoped> initial_timed_lock_opt = 
+            string_locks_.try_acquire_for("timed_move_key", std::chrono::milliseconds(10));
+        ASSERT_TRUE(initial_timed_lock_opt.has_value());
+        
+        NamedLock<std::string>::TimedScoped initial_timed_lock = std::move(initial_timed_lock_opt.value());
+        // initial_timed_lock_opt.reset(); // Not strictly necessary as .value() on rvalue optional moves from contained value
 
+        ASSERT_TRUE(initial_timed_lock.owns_lock());
+        // Metrics: "timed_move_key" active. "move_key_assign", "move_key_ctor" unused.
+        auto metrics_timed_acq = string_locks_.get_metrics();
+        ASSERT_EQ(metrics_timed_acq.active_locks, 1); // "timed_move_key"
+        ASSERT_EQ(metrics_timed_acq.unused_keys, 2);  // "move_key_assign", "move_key_ctor"
+        ASSERT_EQ(metrics_timed_acq.total_keys, 3);
+
+        timed_lock1_outer = std::move(initial_timed_lock); // Move assignment for TimedScoped
+        ASSERT_FALSE(initial_timed_lock.owns_lock());
+        ASSERT_TRUE(timed_lock1_outer.owns_lock());
+        // Metrics should be the same
+        auto metrics_timed_moved = string_locks_.get_metrics();
+        ASSERT_EQ(metrics_timed_moved.active_locks, 1);
+        ASSERT_EQ(metrics_timed_moved.unused_keys, 2);
+        ASSERT_EQ(metrics_timed_moved.total_keys, 3);
+    } // timed_lock1_outer destructed. Lock for "timed_move_key" released.
+
+    // Check after timed_lock1_outer is destructed
+    // "move_key_assign", "move_key_ctor", "timed_move_key" all unused.
+    auto metrics_timed_released = string_locks_.get_metrics();
+    ASSERT_EQ(metrics_timed_released.active_locks, 0);
+    ASSERT_EQ(metrics_timed_released.unused_keys, 3);
+    ASSERT_EQ(metrics_timed_released.total_keys, 3);
+
+    // Cleanup for this test specifically, to ensure it doesn't affect other tests
+    // if they share the same string_locks_ instance (though gtest usually creates fresh fixture per test)
+    string_locks_.cleanup_unused();
+    ASSERT_EQ(string_locks_.key_count(), 0);
+    auto metrics_final_cleanup = string_locks_.get_metrics();
+    ASSERT_EQ(metrics_final_cleanup.active_locks, 0);
+    ASSERT_EQ(metrics_final_cleanup.unused_keys, 0);
+    ASSERT_EQ(metrics_final_cleanup.total_keys, 0);
 }
 
 
