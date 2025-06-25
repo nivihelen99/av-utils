@@ -8,67 +8,74 @@
 #include <limits> // For std::numeric_limits
 #include <stdexcept> // For std::invalid_argument
 
-// Forward declaration for hashing
+// Hashing utilities within detail namespace
 namespace detail {
+
+// FNV-1a constants for size_t
+#if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__) || defined(__aarch64__)
+constexpr size_t FNV_PRIME = 1099511628211ULL;
+constexpr size_t FNV_OFFSET_BASIS = 14695981039346656037ULL;
+#else // 32-bit
+constexpr size_t FNV_PRIME = 16777619U;
+constexpr size_t FNV_OFFSET_BASIS = 2166136261U;
+#endif
+
+// A secondary basis for generating a second hash function (h2)
+// Derived by XORing with a constant pattern.
+constexpr size_t FNV_OFFSET_BASIS_2 = FNV_OFFSET_BASIS ^
+    (sizeof(size_t) == 8 ? 0x5A5A5A5A5A5A5A5AULL : 0x5A5A5A5AU);
+
+
+// Helper to apply FNV-1a to a block of memory
+inline size_t fnv1a_hash_bytes(const unsigned char* data, size_t len, size_t basis, size_t prime) {
+    size_t hash_val = basis;
+    for (size_t i = 0; i < len; ++i) {
+        hash_val ^= static_cast<size_t>(data[i]);
+        hash_val *= prime;
+    }
+    return hash_val;
+}
+
+// Generic BloomHash for arithmetic types (integers, float, double, etc.)
+// and any type T where taking its address and sizeof(T) is meaningful for hashing.
+// This uses the h(x) = h1(x) + seed * h2(x) construction.
+// This is a primary template. It will be used if T is not std::string.
 template <typename T>
 struct BloomHash {
     size_t operator()(const T& item, size_t seed) const {
-        // A common way to generate multiple hashes is to use two hash functions h1 and h2
-        // and compute g_i(x) = h1(x) + i * h2(x) + i*i * h1(x) mod m (less effective for small m)
-        // Or, more simply, use std::hash with different seeds.
-        // For this implementation, we'll use a combination of a base hash of the item
-        // and a perturbation based on the seed.
-        std::hash<T> primary_hasher;
-        size_t item_hash = primary_hasher(item);
+        // Ensure T is trivially copyable or that this approach is safe.
+        // For fundamental types like int, float, etc., this is fine.
+        // For user-defined structs, they should be simple data containers for this to work well.
+        static_assert(std::is_trivially_copyable<T>::value || std::is_standard_layout<T>::value,
+                      "BloomHash<T> default implementation relies on byte representation. Ensure T is suitable.");
 
-        // Apply mixing to item_hash to improve its bit distribution,
-        // especially important if std::hash<T> is simple (e.g., identity for integers).
-        // Using components from MurmurHash3's finalizer (fmix64 for size_t if 64-bit).
-        // This sequence is for 64-bit size_t. For 32-bit, different constants/shifts would be better.
-        // Assuming size_t is commonly 64-bit on test systems.
-        size_t mixed_hash = item_hash;
-        mixed_hash ^= mixed_hash >> 33;
-        mixed_hash *= 0xff51afd7ed558ccdULL; //ULL for 64-bit constant
-        mixed_hash ^= mixed_hash >> 33;
-        mixed_hash *= 0xc4ceb9fe1a85ec53ULL;
-        mixed_hash ^= mixed_hash >> 33;
+        const unsigned char* item_bytes = reinterpret_cast<const unsigned char*>(&item);
+        size_t item_len = sizeof(T);
 
-        // Combine the well-mixed item_hash with the seed.
-        // The Kirsch-Mitzenmacher optimization: hash(item) + seed * hash2(item)
-        // Here, we use a variant: mixed_hash ^ (seed_perturbation)
-        // seed_perturbation uses the seed and another derivative of mixed_hash.
-        // (seed + C1 + (mixed_hash << S1) + (mixed_hash >> S2)) is a common way.
-        return mixed_hash ^ (seed + 0x9e3779b9 + (mixed_hash << 6) + (mixed_hash >> 2));
+        size_t h1 = fnv1a_hash_bytes(item_bytes, item_len, FNV_OFFSET_BASIS, FNV_PRIME);
+        // Using a different basis for h2 to make it a different hash function.
+        size_t h2 = fnv1a_hash_bytes(item_bytes, item_len, FNV_OFFSET_BASIS_2, FNV_PRIME);
+
+        // Classic construction for multiple hashes: h1 + seed * h2
+        // This should provide better distribution than perturbing a single hash.
+        return h1 + seed * h2;
     }
 };
 
 // Specialization for std::string
+// (To be refined in next step, for now using a basic FNV approach with seed for consistency)
 template <>
 struct BloomHash<std::string> {
     size_t operator()(const std::string& item, size_t seed) const {
-        std::hash<std::string> string_hasher;
-        // Simple combination: hash the concatenation of seed (as string) and item
-        // This is not ideal but works for demonstration.
-        // A better approach would be to use a proper hashing library that supports seeding.
-        // For this example, we'll use a sequence of hashes based on appending seed.
-        // This is not cryptographically secure or statistically perfect but serves the purpose.
+        const unsigned char* item_bytes = reinterpret_cast<const unsigned char*>(item.data());
+        size_t item_len = item.length();
 
-        // Using FNV-1a like approach for combining
-        size_t h = 2166136261u; // FNV offset basis
+        // For strings, we can use a similar h1 + seed * h2 approach.
+        // h1 can be FNV on string. h2 can be FNV with different basis or a simple string hash.
+        size_t h1 = fnv1a_hash_bytes(item_bytes, item_len, FNV_OFFSET_BASIS, FNV_PRIME);
+        size_t h2 = fnv1a_hash_bytes(item_bytes, item_len, FNV_OFFSET_BASIS_2, FNV_PRIME);
 
-        // Incorporate seed
-        std::string seed_str = std::to_string(seed);
-        for (char c : seed_str) {
-            h ^= static_cast<size_t>(c);
-            h *= 16777619u; // FNV prime
-        }
-
-        // Incorporate item
-        for (char c : item) {
-            h ^= static_cast<size_t>(c);
-            h *= 16777619u; // FNV prime
-        }
-        return h;
+        return h1 + seed * h2;
     }
 };
 
