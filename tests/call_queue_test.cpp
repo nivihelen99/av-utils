@@ -468,67 +468,74 @@ TEST(ThreadSafeCallQueueTest, MixedOperationsStress) {
               << ", Final coalesced val for some key: " << coalesced_final_val.load() << std::endl;
 }
 
+
 TEST(ThreadSafeCallQueueTest, MaxSizeConcurrent) {
     ThreadSafeCallQueue queue(10); // Small max size
     std::atomic<int> successful_pushes{0};
-    std::atomic<bool> producers_finished{false}; // Added for signaling
+    std::atomic<int> executed_tasks{0};
     const int num_threads = 5;
     const int pushes_per_thread = 20; // More than max_size
 
+    // Start consumer first to ensure it's always draining
+    std::atomic<bool> stop_consumer{false};
+    std::thread consumer([&]() {
+        while (!stop_consumer.load(std::memory_order_acquire)) {
+            if (!queue.drain_one()) {
+                // No work available, sleep briefly to avoid busy waiting
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+            }
+        }
+        // Final drain after stop signal
+        while (queue.drain_one()) {
+            // Keep draining until empty
+        }
+    });
+
+    // Now start producers
     std::vector<std::thread> producers;
     for (int t = 0; t < num_threads; ++t) {
         producers.emplace_back([&]() {
             for (int i = 0; i < pushes_per_thread; ++i) {
-                if (queue.push([](){ /* no-op */ })) {
+                if (queue.push([&executed_tasks](){ 
+                    executed_tasks.fetch_add(1); 
+                })) {
                     successful_pushes.fetch_add(1);
                 }
-                 // Brief sleep to allow other threads to interleave and fill/drain the queue
+                // Brief sleep to allow other threads to interleave
                 std::this_thread::sleep_for(std::chrono::microseconds(t*10 + i*5));
             }
         });
     }
 
-    std::thread consumer([&]() {
-        int drained_count = 0; // Renamed for clarity
-        while (true) {
-            if (queue.drain_one()) {
-                drained_count++;
-            } else {
-                // Queue is empty
-                if (producers_finished.load(std::memory_order_acquire)) {
-                    // Producers are done, and queue is empty, so consumer can exit.
-                    break;
-                }
-                // Queue is empty, but producers might still be running, so wait.
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-        }
-        // Optional: std::cout << "Consumer drained: " << drained_count << std::endl;
-    });
-
-
+    // Wait for all producers to complete
     for (auto& t : producers) {
         t.join();
     }
-    producers_finished.store(true, std::memory_order_release); // Signal producers are done
 
+    // Give a moment for any final items to be processed
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    // Signal consumer to stop and wait for it to finish
+    stop_consumer.store(true, std::memory_order_release);
     consumer.join();
-    // It's good practice to ensure the queue is fully drained by the consumer logic.
-    // However, a final drain_all() here can catch any items potentially missed by
-    // intricate timing, though the new consumer loop should handle it.
-    // Given the consumer loop waits for producers_finished AND queue.empty(),
-    // this drain_all might not be strictly necessary but is harmless.
-    queue.drain_all();
 
-
-    // successful_pushes can be up to total pushes if consumer is fast enough,
-    // or less if queue gets full.
-    // The key is that queue.size() should not exceed max_size.
-    // This is hard to assert directly without instrumenting the queue or complex sync.
-    // We mainly test for stability and that it doesn't deadlock.
-    EXPECT_LE(queue.size(), queue.max_size()); // This should be 0 if consumer and drain_all worked
-    std::cout << "MaxSizeConcurrent: Successful pushes: " << successful_pushes.load() << std::endl;
-    ASSERT_TRUE(queue.empty()); // This is the critical check for emptiness
+    // Verify results
+    EXPECT_EQ(executed_tasks.load(), successful_pushes.load()) 
+        << "All successfully pushed tasks should have been executed";
+    
+    EXPECT_LE(successful_pushes.load(), num_threads * pushes_per_thread)
+        << "Can't have more successful pushes than total attempts";
+    
+    EXPECT_GT(successful_pushes.load(), 0)
+        << "At least some pushes should have succeeded";
+    
+    ASSERT_TRUE(queue.empty()) 
+        << "Queue should be completely empty after test";
+    
+    std::cout << "MaxSizeConcurrent: Successful pushes: " << successful_pushes.load() 
+              << "/" << (num_threads * pushes_per_thread)
+              << ", Executed: " << executed_tasks.load() 
+              << ", Queue max size: " << queue.max_size() << std::endl;
 }
 
 TEST(ThreadSafeCallQueueTest, ThreadSafeDrainAllReentrancy) {
