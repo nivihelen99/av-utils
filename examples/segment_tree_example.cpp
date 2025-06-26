@@ -126,6 +126,18 @@ int main() {
     default_st.update(2, 10); // {7,7,10,7,7}
     std::cout << "After updating index 2 to 10, sum: " << default_st.query(0, tree_size) << std::endl; // Expected: 7+7+10+7+7 = 38
 
+    std::cout << "\n--- Segment Tree with empty initial data ---" << std::endl;
+    std::vector<int> empty_initial_data;
+    cpp_utils::SegmentTree<int> empty_st(empty_initial_data, std::plus<int>(), 0);
+    std::cout << "Tree initialized with empty vector. Size: " << empty_st.size() << std::endl;
+    std::cout << "Query on empty tree for range [0,0): " << empty_st.query(0,0) << std::endl; // Expected: 0 (identity)
+    try {
+        std::cout << "Query on empty tree for range [0,1) (should throw): ";
+        empty_st.query(0,1);
+    } catch (const std::out_of_range& e) {
+        std::cout << "Caught expected exception: " << e.what() << std::endl;
+    }
+
 
     return 0;
 }
