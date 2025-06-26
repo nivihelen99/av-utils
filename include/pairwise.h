@@ -52,14 +52,19 @@ public:
 
     pairwise_iterator& operator++() {
         if (valid_) {
-            ++current_;
-            if (next_ != end_) { // Prevent advancing next_ past end if current_ is now end_
-                 ++next_;
+            current_ = next_; // current_ takes the place of the former next_
+
+            if (next_ != end_) { // If next_ was not already an end sentinel for pairs
+                 ++next_;        // Advance next_ to the subsequent element for the new pair.
             }
+            // advance_to_valid() will determine if a new valid pair can be formed.
             advance_to_valid();
         } else {
-            current_ = end_;
-            next_ = end_;
+            // If not valid to begin with, ensure iterators are in the canonical end state.
+            // This path might not be strictly necessary if valid_ is managed correctly,
+            // but it's safe.
+            current_ = end_; // Or some other canonical end state if default ctor isn't enough
+            next_ = end_;    // Or some other canonical end state
             valid_ = false;
         }
         return *this;
