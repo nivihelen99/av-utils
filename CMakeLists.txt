@@ -131,6 +131,10 @@ target_include_directories(DequeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 add_library(SkipListLib INTERFACE)
 target_include_directories(SkipListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define PairwiseLib as an interface library (header-only)
+add_library(PairwiseLib INTERFACE)
+target_include_directories(PairwiseLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -187,7 +191,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
 
         DequeLib             # Added for deque_example
         SkipListLib          # Added for skip_list_example
-
+        PairwiseLib          # Added for pairwise_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
