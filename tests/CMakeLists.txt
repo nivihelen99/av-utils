@@ -63,6 +63,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
 
 
         DequeLib             # Added for deque_test
+        SkipListLib          # Added for skip_list_test
 
     )
 
