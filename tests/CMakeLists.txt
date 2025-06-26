@@ -54,6 +54,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         TreapLib # Added for treap_test
         CountMinSketchLib # Added for count_min_sketch_test
         CountingBloomFilterLib
+        UnorderedMultisetLib # Added for unordered_multiset_test
     )
 
     # Specific configurations for certain tests
