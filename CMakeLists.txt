@@ -105,6 +105,10 @@ target_include_directories(CountMinSketchLib INTERFACE ${CMAKE_CURRENT_SOURCE_DI
 add_library(CountingBloomFilterLib INTERFACE)
 target_include_directories(CountingBloomFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define SegmentTreeLib as an interface library (header-only)
+add_library(SegmentTreeLib INTERFACE)
+target_include_directories(SegmentTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
