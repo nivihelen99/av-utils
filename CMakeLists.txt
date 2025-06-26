@@ -109,9 +109,15 @@ target_include_directories(CountingBloomFilterLib INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(SegmentTreeLib INTERFACE)
 target_include_directories(SegmentTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+
+# Define FrozenSetLib as an interface library (header-only)
+add_library(FrozenSetLib INTERFACE)
+target_include_directories(FrozenSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define UnorderedMultisetLib as an interface library (header-only)
 add_library(UnorderedMultisetLib INTERFACE)
 target_include_directories(UnorderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -158,7 +164,11 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         TreapLib # Added for treap_example
         CountMinSketchLib # Added for count_min_sketch_example
         CountingBloomFilterLib
+
+        FrozenSetLib # Added for frozen_set_example
+
         UnorderedMultisetLib # Added for unordered_multiset_example
+
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
