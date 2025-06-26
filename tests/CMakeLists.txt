@@ -58,7 +58,11 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         FrozenSetLib # Added for frozen_set_test
 
         UnorderedMultisetLib # Added for unordered_multiset_test
+
         OrderedMultisetLib # Added for ordered_multiset_test
+
+
+        DequeLib             # Added for deque_test
 
     )
 
