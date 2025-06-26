@@ -109,6 +109,10 @@ target_include_directories(CountingBloomFilterLib INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(SegmentTreeLib INTERFACE)
 target_include_directories(SegmentTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define UnorderedMultisetLib as an interface library (header-only)
+add_library(UnorderedMultisetLib INTERFACE)
+target_include_directories(UnorderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Future steps will add examples and tests here
 
 # Automatically add executables for all files in the examples/ directory
@@ -154,6 +158,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         TreapLib # Added for treap_example
         CountMinSketchLib # Added for count_min_sketch_example
         CountingBloomFilterLib
+        UnorderedMultisetLib # Added for unordered_multiset_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
