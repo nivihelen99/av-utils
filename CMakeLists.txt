@@ -135,6 +135,10 @@ target_include_directories(SkipListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/inc
 add_library(PairwiseLib INTERFACE)
 target_include_directories(PairwiseLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define RedBlackTreeLib as an interface library (header-only)
+add_library(RedBlackTreeLib INTERFACE)
+target_include_directories(RedBlackTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -192,6 +196,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         DequeLib             # Added for deque_example
         SkipListLib          # Added for skip_list_example
         PairwiseLib          # Added for pairwise_example
+        RedBlackTreeLib      # Added for red_black_tree_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
