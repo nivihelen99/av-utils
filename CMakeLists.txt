@@ -118,6 +118,10 @@ target_include_directories(FrozenSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/in
 add_library(UnorderedMultisetLib INTERFACE)
 target_include_directories(UnorderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define DequeLib as an interface library (header-only)
+add_library(DequeLib INTERFACE)
+target_include_directories(DequeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -168,7 +172,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         FrozenSetLib # Added for frozen_set_example
 
         UnorderedMultisetLib # Added for unordered_multiset_example
-
+        DequeLib             # Added for deque_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
