@@ -65,6 +65,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         DequeLib             # Added for deque_test
         SkipListLib          # Added for skip_list_test
         PairwiseLib          # Added for pairwise_test
+        RedBlackTreeLib      # Added for red_black_tree_test
     )
 
     # Specific configurations for certain tests
