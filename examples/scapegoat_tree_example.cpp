@@ -1,4 +1,4 @@
-#include "include/ScapegoatTree.h" // Adjust path if necessary based on build setup
+#include "ScapegoatTree.h" 
 #include <iostream>
 #include <string>
 
