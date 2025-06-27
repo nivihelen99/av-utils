@@ -61,6 +61,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
 
         OrderedMultisetLib # Added for ordered_multiset_test
 
+        FrozenDictLib        # Added for frozen_dict_test
 
         DequeLib             # Added for deque_test
         SkipListLib          # Added for skip_list_test
