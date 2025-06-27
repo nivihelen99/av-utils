@@ -126,6 +126,10 @@ target_include_directories(UnorderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE
 add_library(OrderedMultisetLib INTERFACE)
 target_include_directories(OrderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define FrozenDictLib as an interface library (header-only)
+add_library(FrozenDictLib INTERFACE)
+target_include_directories(FrozenDictLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define ScapegoatTreeLib as an interface library (header-only)
 add_library(ScapegoatTreeLib INTERFACE)
 target_include_directories(ScapegoatTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -207,6 +211,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
 
         OrderedMultisetLib # Added for ordered_multiset_example
 
+        FrozenDictLib        # Added for frozen_dict_example
 
         DequeLib             # Added for deque_example
         SkipListLib          # Added for skip_list_example
