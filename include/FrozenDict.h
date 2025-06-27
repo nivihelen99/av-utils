@@ -133,31 +133,58 @@ public:
     }
 
     // Copy constructor
-    FrozenDict(const FrozenDict& other) = default; // Will copy key_hasher_ too
+    FrozenDict(const FrozenDict& other)
+      : data_(), // Default construct, then populate
+        key_comparator_(other.key_comparator_),
+        key_hasher_(other.key_hasher_) {
+        // If other.data_ uses a different allocator, this might be an issue.
+        // For simplicity, assume default allocator or compatible.
+        // A more robust solution would pass other.data_.get_allocator() if appropriate.
+        data_.reserve(other.data_.size());
+        for(const auto& elem : other.data_) {
+            data_.emplace_back(elem.first, elem.second); // Copy constructs pairs
+        }
+    }
+
     FrozenDict(const FrozenDict& other, const Allocator& alloc)
-        : data_(other.data_, alloc),
+        : data_(alloc),
           key_comparator_(other.key_comparator_),
-          key_hasher_(other.key_hasher_) {}
+          key_hasher_(other.key_hasher_) {
+        data_.reserve(other.data_.size());
+        for(const auto& elem : other.data_) {
+            data_.emplace_back(elem.first, elem.second); // Copy constructs pairs
+        }
+    }
 
     // Move constructor
-    FrozenDict(FrozenDict&& other) noexcept = default; // Will move key_hasher_ too
+    FrozenDict(FrozenDict&& other) noexcept = default; // Default move is fine as vector moves efficiently
     FrozenDict(FrozenDict&& other, const Allocator& alloc) noexcept
-        : data_(std::move(other.data_), alloc),
+        : data_(std::move(other.data_), alloc), // vector move constructor with allocator
           key_comparator_(std::move(other.key_comparator_)),
           key_hasher_(std::move(other.key_hasher_)) {}
 
     // Destructor
     ~FrozenDict() = default;
 
-    // Assignment operators (though less common for immutable types, can be useful for reassignment)
-    // For true immutability, these would be deleted.
-    // For now, let's assume "frozen after construction" means the object itself can be reassigned
-    // to a new FrozenDict instance.
-    FrozenDict& operator=(const FrozenDict& other) = default;
-    FrozenDict& operator=(FrozenDict&& other) noexcept = default;
+    // Assignment operators
+    FrozenDict& operator=(const FrozenDict& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        // Create a temporary copy using the copy constructor, then swap.
+        // This provides strong exception guarantee and handles allocators correctly (POCMA).
+        FrozenDict temp(other); // Uses copy constructor which should be correct.
+        swap(temp); // Use our own swap method
+
+        // key_comparator_ and key_hasher_ are part of the swap.
+        return *this;
+    }
+
+    FrozenDict& operator=(FrozenDict&& other) noexcept = default; // Default move assignment
 
     FrozenDict& operator=(std::initializer_list<value_type> ilist) {
-        // Rebuild from the initializer list
+        // Rebuild from the initializer list. Use a temporary.
         // Need to ensure key_comparator_ is handled if it was set differently.
         // For simplicity, assume it remains.
         build_from_range(ilist.begin(), ilist.end());
