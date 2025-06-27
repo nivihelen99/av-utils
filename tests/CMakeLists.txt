@@ -69,6 +69,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         DictWrapperLib       # Added for dict_wrapper_test
         PriorityQueueMapLib  # Added for priority_queue_map_test
         ScapegoatTreeLib     # Added for scapegoat_tree_test
+        SuffixArrayLib       # Added for suffix_array_test
     )
 
     # Specific configurations for certain tests

@@ -130,6 +130,10 @@ target_include_directories(OrderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_D
 add_library(ScapegoatTreeLib INTERFACE)
 target_include_directories(ScapegoatTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define SuffixArrayLib as an interface library (header-only)
+add_library(SuffixArrayLib INTERFACE)
+target_include_directories(SuffixArrayLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define DequeLib as an interface library (header-only)
 add_library(DequeLib INTERFACE)
 target_include_directories(DequeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -211,6 +215,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         DictWrapperLib       # Added for dict_wrapper_example
         PriorityQueueMapLib  # Added for priority_queue_map_example
         ScapegoatTreeLib     # Added for scapegoat_tree_example
+        SuffixArrayLib       # Added for suffix_array_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
