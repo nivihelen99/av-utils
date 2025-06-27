@@ -66,6 +66,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SkipListLib          # Added for skip_list_test
         PairwiseLib          # Added for pairwise_test
         RedBlackTreeLib      # Added for red_black_tree_test
+        DictWrapperLib       # Added for dict_wrapper_test
     )
 
     # Specific configurations for certain tests
