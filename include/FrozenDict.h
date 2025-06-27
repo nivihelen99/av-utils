@@ -1,4 +1,5 @@
-#pragma once
+#ifndef FROZEN_DICT_H
+#define FROZEN_DICT_H
 
 #include <vector>
 #include <utility>      // For std::pair, std::move
