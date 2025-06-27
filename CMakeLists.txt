@@ -109,6 +109,9 @@ target_include_directories(CountingBloomFilterLib INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(SegmentTreeLib INTERFACE)
 target_include_directories(SegmentTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define DictWrapperLib as an interface library (header-only)
+add_library(DictWrapperLib INTERFACE)
+target_include_directories(DictWrapperLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Define FrozenSetLib as an interface library (header-only)
 add_library(FrozenSetLib INTERFACE)
@@ -197,6 +200,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         SkipListLib          # Added for skip_list_example
         PairwiseLib          # Added for pairwise_example
         RedBlackTreeLib      # Added for red_black_tree_example
+        DictWrapperLib       # Added for dict_wrapper_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
