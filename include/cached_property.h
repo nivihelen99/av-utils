@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <optional>
+#include <stdexcept> // For std::invalid_argument
 #include <utility> // For std::forward, std::move
 
 // Forward declaration for the case where Owner is the class containing CachedProperty
