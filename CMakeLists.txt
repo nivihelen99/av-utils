@@ -126,6 +126,10 @@ target_include_directories(UnorderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE
 add_library(OrderedMultisetLib INTERFACE)
 target_include_directories(OrderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define ScapegoatTreeLib as an interface library (header-only)
+add_library(ScapegoatTreeLib INTERFACE)
+target_include_directories(ScapegoatTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define DequeLib as an interface library (header-only)
 add_library(DequeLib INTERFACE)
 target_include_directories(DequeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -206,6 +210,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         RedBlackTreeLib      # Added for red_black_tree_example
         DictWrapperLib       # Added for dict_wrapper_example
         PriorityQueueMapLib  # Added for priority_queue_map_example
+        ScapegoatTreeLib     # Added for scapegoat_tree_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
