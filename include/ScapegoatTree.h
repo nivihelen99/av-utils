@@ -556,12 +556,12 @@ private:
         void find_leftmost_leaf(Node* node) {
             while (node) {
                 path_stack_.push_back(node);
-                if (!node->is_deleted && node->left && get_active_nodes(node->left) > 0) {
+                if (!node->is_deleted && node->left && tree_ptr_->get_active_nodes(node->left) > 0) {
                      node = node->left.get();
                 } else if (!node->is_deleted) { // Current node is active and no more left active children
                     current_node_ = node;
                     return;
-                } else if (node->right && get_active_nodes(node->right) > 0) { // Current node deleted, try right
+                } else if (node->right && tree_ptr_->get_active_nodes(node->right) > 0) { // Current node deleted, try right
                     node = node->right.get();
                 } else { // Current node deleted, no active right child, pop and try parent's right
                     break;
