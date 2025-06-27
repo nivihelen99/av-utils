@@ -158,6 +158,10 @@ target_include_directories(PriorityQueueMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_
 add_library(RedBlackTreeLib INTERFACE)
 target_include_directories(RedBlackTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define CachedPropertyLib as an interface library (header-only)
+add_library(CachedPropertyLib INTERFACE)
+target_include_directories(CachedPropertyLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -221,6 +225,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         PriorityQueueMapLib  # Added for priority_queue_map_example
         ScapegoatTreeLib     # Added for scapegoat_tree_example
         SuffixArrayLib       # Added for suffix_array_example
+        CachedPropertyLib    # Added for cached_property_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

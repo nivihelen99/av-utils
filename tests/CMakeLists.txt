@@ -71,6 +71,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         PriorityQueueMapLib  # Added for priority_queue_map_test
         ScapegoatTreeLib     # Added for scapegoat_tree_test
         SuffixArrayLib       # Added for suffix_array_test
+        CachedPropertyLib    # Added for cached_property_test
     )
 
     # Specific configurations for certain tests
