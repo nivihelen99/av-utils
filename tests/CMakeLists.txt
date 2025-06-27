@@ -67,6 +67,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         PairwiseLib          # Added for pairwise_test
         RedBlackTreeLib      # Added for red_black_tree_test
         DictWrapperLib       # Added for dict_wrapper_test
+        PriorityQueueMapLib  # Added for priority_queue_map_test
     )
 
     # Specific configurations for certain tests

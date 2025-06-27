@@ -32,7 +32,7 @@ It features:
 *   **Associative Containers:** `bimap.h` (bi-directional map), `dict.h` (Python-style dictionary), `const_dict.h` (compile-time constant dictionary), `flatMap.h` (sorted vector-based map), `chain_map.h` (view over multiple maps), `delta_map.h` (tracks changes to a map).
 *   **Set-like Structures:** `ordered_set.h` (preserves insertion order), `bounded_set.h` (fixed-capacity with FIFO eviction), `disjoint_set_union.h` (DSU, for tracking disjoint sets).
 *   **Specialized Arrays and Storage:** `persist_array.h` (memory-mapped array), `SlotMap.h` (stable keyed storage with O(1) operations).
-*   **Queues:** `heap_queue.h` (priority queue), `round_robin_queue.h`, `unique_queue.h` (elements are unique), `spsc.h` (single-producer, single-consumer), `deque.h` ([Deque](docs/README_Deque.md) - double-ended queue).
+*   **Queues:** `heap_queue.h` (priority queue), `PriorityQueueMap.h` ([PriorityQueueMap / Indexed Priority Queue](docs/README_PriorityQueueMap.md) - priority queue with key-based updates and removals), `round_robin_queue.h`, `unique_queue.h` (elements are unique), `spsc.h` (single-producer, single-consumer), `deque.h` ([Deque](docs/README_Deque.md) - double-ended queue).
 *   **Specialized Maps:** `interval_map.h` (maps values to intervals, distinct from `interval_tree.h`), `enum_map.h` (map keyed by enum values).
 *   **Sorted Lists:** `sorted_list.h` (elements kept sorted).
 *   **Probabilistic Data Structures:** `bloom_filter.h` (space-efficient probabilistic set membership).
