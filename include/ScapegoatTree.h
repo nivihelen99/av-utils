@@ -548,78 +548,63 @@ private:
 
 
     private:
-        Node* current_node_;
-        std::vector<Node*> path_stack_; // Stack to keep track of the path for inorder traversal
-        const ScapegoatTree* tree_ptr_; // Pointer to the tree, needed for end iterator comparison
+        Node* current_node_; // Pointer to the current node the iterator refers to.
+        std::vector<Node*> path_stack_; // Stack to manage traversal state. Top of stack is usually related to current_node_ or its successor search path.
+        const ScapegoatTree* tree_ptr_; // Pointer to the tree, mainly for context (e.g. constructing end iterator).
 
-        // Helper to find the leftmost non-deleted node from a given node
-        void find_leftmost_leaf(Node* node) {
-            while (node) {
-                path_stack_.push_back(node);
-                if (!node->is_deleted && node->left && tree_ptr_->get_active_nodes(node->left) > 0) {
-                     node = node->left.get();
-                } else if (!node->is_deleted) { // Current node is active and no more left active children
-                    current_node_ = node;
-                    return;
-                } else if (node->right && tree_ptr_->get_active_nodes(node->right) > 0) { // Current node deleted, try right
-                    node = node->right.get();
-                } else { // Current node deleted, no active right child, pop and try parent's right
-                    break;
-                }
-            }
-            // If loop finishes, current_node_ might be null or stack is used to find next.
-            // This initial setup might be complex. A simpler way:
-            // Push all left children until null. Then current is top of stack if not deleted.
-            // If deleted, advance.
-
-            path_stack_.clear(); // Reset stack for simpler find_leftmost
+        // Helper to push a node and all its left children onto the path_stack_.
+        void push_left_spine(Node* node) {
             Node* p = node;
-            while(p) {
+            while (p) {
                 path_stack_.push_back(p);
                 p = p->left.get();
             }
-            advance_to_valid_node(); // Find the first valid node
         }
 
-        // Advance to the next valid (non-deleted) node in-order
-        void advance_to_valid_node() {
+        // Finds the next valid (non-deleted) node by processing the path_stack_.
+        // Sets current_node_ to the found valid node, or nullptr if the end is reached.
+        // Assumes path_stack_ has candidates (e.g., after push_left_spine or exploring a right subtree).
+        void find_next_valid_node_on_stack() {
             while (!path_stack_.empty()) {
-                current_node_ = path_stack_.back();
+                Node* candidate = path_stack_.back(); // Peek at the top candidate
+
+                if (!candidate->is_deleted) {
+                    current_node_ = candidate; // Found an active node. It's the current one.
+                                               // The stack top remains this candidate.
+                    return;
+                }
+
+                // Candidate at stack top is deleted. Pop it.
                 path_stack_.pop_back();
-
-                if (!current_node_->is_deleted) {
-                    // Found an active node. Now, prepare for the next call to ++
-                    // by adding its right child and all left children of the right child.
-                    Node* p = current_node_->right.get();
-                    while (p) {
-                        path_stack_.push_back(p);
-                        p = p->left.get();
-                    }
-                    return; // current_node_ is now the valid node
+                // Explore its right subtree by pushing the left spine of the right child.
+                if (candidate->right) {
+                    push_left_spine(candidate->right.get());
                 }
-                // If current_node_ is deleted, try its right subtree
-                Node* p = current_node_->right.get();
-                while (p) {
-                    path_stack_.push_back(p);
-                    p = p->left.get();
-                }
-                // Continue loop to find next valid node from stack
+                // Loop to check the new stack top (which will be the leftmost of the pushed spine, or an ancestor).
             }
-            current_node_ = nullptr; // Reached end
+            current_node_ = nullptr; // Stack became empty, no active node found. End of iteration.
         }
-
 
     public:
-        // Default constructor (end iterator)
-        ScapegoatTreeIterator(const ScapegoatTree* tree = nullptr) : current_node_(nullptr), tree_ptr_(tree) {}
+        // Default constructor (used for end iterator)
+        ScapegoatTreeIterator(const ScapegoatTree* tree = nullptr)
+            : current_node_(nullptr), tree_ptr_(tree) {}
 
         // Begin iterator constructor
-        ScapegoatTreeIterator(Node* start_node, const ScapegoatTree* tree) : tree_ptr_(tree) {
-            find_leftmost_leaf(start_node); // Sets current_node_ and path_stack_
+        ScapegoatTreeIterator(Node* start_node, const ScapegoatTree* tree)
+            : current_node_(nullptr), tree_ptr_(tree) { // current_node_ starts null
+            if (start_node) { // Only proceed if the tree is not empty
+                path_stack_.clear();
+                push_left_spine(start_node);     // Push initial left spine from the starting node (usually root)
+                find_next_valid_node_on_stack(); // Find the first actual current_node_
+            }
+            // If start_node is null (empty tree), current_node_ remains nullptr, path_stack_ is empty,
+            // which correctly represents an end iterator or an iterator for an empty range.
         }
 
         reference operator*() const {
-            // Should only be called on valid, non-end iterators
+            // Behavior is undefined if current_node_ is nullptr (iterator is at end or uninitialized).
+            // Rely on user to check iterator against end().
             return {current_node_->key, current_node_->value};
         }
 
@@ -628,13 +613,40 @@ private:
         }
 
         ScapegoatTreeIterator& operator++() { // Prefix increment
-            advance_to_valid_node();
+            if (!current_node_) {
+                // Already at end or iterator is invalid; further incrementing is undefined or no-op.
+                return *this;
+            }
+
+            // current_node_ is the node we are moving FROM.
+            // As per find_next_valid_node_on_stack, current_node_ should be path_stack_.back().
+            if (path_stack_.empty() || path_stack_.back() != current_node_) {
+                // This indicates an inconsistent iterator state. This shouldn't happen with correct logic.
+                // To prevent crashes or infinite loops, treat as if end is reached.
+                current_node_ = nullptr;
+                path_stack_.clear();
+                return *this;
+            }
+
+            path_stack_.pop_back(); // Pop the current_node_ we just processed/iterated.
+
+            // Now, find the actual successor.
+            // Successor is either in the right subtree of the node we just popped (current_node_),
+            // or it's an ancestor (which is now exposed on stack top after pop, or further down).
+
+            if (current_node_->right) { // If there was a right child for the node we just left...
+                push_left_spine(current_node_->right.get()); // ...its left spine contains the next candidates.
+            }
+            // If no right child, the next candidate is already at the top of path_stack_ (an ancestor),
+            // or stack might become empty if current_node_ was the last overall node in traversal.
+
+            find_next_valid_node_on_stack(); // Find the new current_node_ from whatever is on stack now.
             return *this;
         }
 
         ScapegoatTreeIterator operator++(int) { // Postfix increment
             ScapegoatTreeIterator temp = *this;
-            ++(*this);
+            ++(*this); // Call prefix increment
             return temp;
         }
 
