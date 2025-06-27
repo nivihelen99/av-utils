@@ -66,15 +66,15 @@ private:
 
     // Recursive helper for find
     Node* find_node(Node* node, const Key& key) const {
-        if (!node || node->is_deleted) { // Also check is_deleted for find
+        if (!node) {
             return nullptr;
         }
         if (compare_(key, node->key)) {
             return find_node(node->left.get(), key);
         } else if (compare_(node->key, key)) {
             return find_node(node->right.get(), key);
-        } else {
-            return node; // Key matches
+        } else { // Keys match
+            return node->is_deleted ? nullptr : node; // Return node only if active
         }
     }
 
