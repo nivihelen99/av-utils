@@ -1,4 +1,4 @@
-#include "include/ScapegoatTree.h"
+#include "ScapegoatTree.h"
 #include <gtest/gtest.h>
 #include <vector>
 #include <string>
