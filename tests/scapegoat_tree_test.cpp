@@ -26,9 +26,9 @@ protected:
 TEST_F(ScapegoatTreeTest, Constructor) {
     EXPECT_TRUE(tree.empty());
     EXPECT_EQ(tree.size(), 0);
-    EXPECT_THROW(ScapegoatTree<int, int> tree_invalid_alpha_low(0.5), std::invalid_argument);
-    EXPECT_THROW(ScapegoatTree<int, int> tree_invalid_alpha_high(1.0), std::invalid_argument);
-    EXPECT_NO_THROW(ScapegoatTree<int, int> tree_valid_alpha(0.75));
+    EXPECT_THROW({ ScapegoatTree<int, int> tree_invalid_alpha_low(0.5); }, std::invalid_argument);
+    EXPECT_THROW({ ScapegoatTree<int, int> tree_invalid_alpha_high(1.0); }, std::invalid_argument);
+    EXPECT_NO_THROW({ ScapegoatTree<int, int> tree_valid_alpha(0.75); });
 }
 
 TEST_F(ScapegoatTreeTest, InsertBasic) {
