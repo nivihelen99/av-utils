@@ -168,13 +168,13 @@ TEST_F(CachedPropertyTest, DifferentOwnerInstance) {
 // Test constructor with null owner
 TEST_F(CachedPropertyTest, ConstructorNullOwner) {
     auto lambda = [](TestOwner* o) { return o->id; };
-    ASSERT_THROW(CachedProperty<TestOwner, int>(nullptr, lambda), std::invalid_argument);
+    ASSERT_THROW((CachedProperty<TestOwner, int>(nullptr, lambda)), std::invalid_argument);
 }
 
 // Test constructor with null compute function
 TEST_F(CachedPropertyTest, ConstructorNullComputeFunc) {
     typename CachedProperty<TestOwner, int>::compute_func_type func = nullptr;
-    ASSERT_THROW(CachedProperty<TestOwner, int>(&owner, func), std::invalid_argument);
+    ASSERT_THROW((CachedProperty<TestOwner, int>(&owner, func)), std::invalid_argument);
 }
 
 // Test is_cached before and after access
