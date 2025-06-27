@@ -138,6 +138,10 @@ target_include_directories(SkipListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/inc
 add_library(PairwiseLib INTERFACE)
 target_include_directories(PairwiseLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define PriorityQueueMapLib as an interface library (header-only)
+add_library(PriorityQueueMapLib INTERFACE)
+target_include_directories(PriorityQueueMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define RedBlackTreeLib as an interface library (header-only)
 add_library(RedBlackTreeLib INTERFACE)
 target_include_directories(RedBlackTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -201,6 +205,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         PairwiseLib          # Added for pairwise_example
         RedBlackTreeLib      # Added for red_black_tree_example
         DictWrapperLib       # Added for dict_wrapper_example
+        PriorityQueueMapLib  # Added for priority_queue_map_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
