@@ -82,9 +82,11 @@ private:
         // The map uses the FrozenDict's key_comparator_ for ordering keys.
         std::map<key_type, mapped_type, key_compare> temp_map(key_comparator_);
         for (InputIt it = first; it != last; ++it) {
-            // operator[] on std::map updates if key exists, or inserts if new.
-            // This naturally achieves "last one wins" if input has duplicate keys.
-            temp_map[it->first] = it->second;
+            // Using insert_or_assign to achieve "last one wins" and avoid
+            // default construction of Value if key is new, then assignment.
+            // emplace could also work if we handle the return value to update if key exists.
+            // insert_or_assign is cleaner here for "last wins".
+            temp_map.insert_or_assign(it->first, it->second);
         }
 
         // Reserve space in data_ and copy from the ordered temp_map.

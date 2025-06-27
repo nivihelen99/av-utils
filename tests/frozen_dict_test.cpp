@@ -53,7 +53,8 @@ struct hash<TestValue> {
 // Define types for easier use in tests
 using FD_StringInt = cpp_collections::FrozenDict<std::string, int>;
 using FD_IntString = cpp_collections::FrozenDict<int, std::string>;
-using FD_TestKeyTestValue = cpp_collections::FrozenDict<TestKey, TestValue>;
+// Explicitly define TestKey related FrozenDict with necessary functors
+using FD_TestKeyTestValue = cpp_collections::FrozenDict<TestKey, TestValue, std::hash<TestKey>, std::equal_to<TestKey>, std::less<TestKey>>;
 
 
 TEST(FrozenDictTest, DefaultConstructor) {
@@ -235,10 +236,14 @@ TEST(FrozenDictTest, StdHashAndUnorderedMap) {
 }
 
 TEST(FrozenDictTest, CustomTypes) {
-    FD_TestKeyTestValue fd = {
-        {TestKey(1, "one"), TestValue(1.1, "val_one")},
-        {TestKey(2, "two"), TestValue(2.2, "val_two")}
-    };
+    FD_TestKeyTestValue fd(
+        {
+            {TestKey(1, "one"), TestValue(1.1, "val_one")},
+            {TestKey(2, "two"), TestValue(2.2, "val_two")}
+        },
+        std::less<TestKey>(),      // Explicitly pass comparator instance
+        std::hash<TestKey>()       // Explicitly pass hasher instance
+    );
 
     EXPECT_EQ(fd.size(), 2);
     EXPECT_TRUE(fd.contains(TestKey(1, "one")));

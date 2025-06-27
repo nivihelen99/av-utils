@@ -14,6 +14,11 @@ struct MyKey {
     bool operator==(const MyKey& other) const {
         return id == other.id && name == other.name;
     }
+    // Less-than for sorting (e.g., if used in std::map or FrozenDict's internal sort)
+    bool operator<(const MyKey& other) const {
+        if (id != other.id) return id < other.id;
+        return name < other.name;
+    }
 };
 
 struct MyValue {
@@ -132,15 +137,25 @@ void frozendict_as_map_key() {
 
 
     // Example with custom key and value types for FrozenDict
-    using FD_MyKeyMyValue = cpp_collections::FrozenDict<MyKey, MyValue>;
+    // Explicitly provide std::less<MyKey> as the CompareFunc type
+    // and std::hash<MyKey> as HashFunc, std::equal_to<MyKey> as KeyEqualFunc
+    using FD_MyKeyMyValue = cpp_collections::FrozenDict<MyKey, MyValue, std::hash<MyKey>, std::equal_to<MyKey>, std::less<MyKey>>;
 
-    FD_MyKeyMyValue fd_custom_key1 = {
-        {MyKey(1, "keyA"), MyValue(1.1, "valA")},
-        {MyKey(2, "keyB"), MyValue(2.2, "valB")}
-    };
-    FD_MyKeyMyValue fd_custom_key2 = {
-        {MyKey(3, "keyC"), MyValue(3.3, "valC")}
-    };
+    FD_MyKeyMyValue fd_custom_key1(
+        {
+            {MyKey(1, "keyA"), MyValue(1.1, "valA")},
+            {MyKey(2, "keyB"), MyValue(2.2, "valB")}
+        },
+        std::less<MyKey>(), // Pass comparator instance
+        std::hash<MyKey>()  // Pass hasher instance
+    );
+    FD_MyKeyMyValue fd_custom_key2(
+        {
+            {MyKey(3, "keyC"), MyValue(3.3, "valC")}
+        },
+        std::less<MyKey>(),
+        std::hash<MyKey>()
+    );
 
     std::unordered_map<FD_MyKeyMyValue, std::string> custom_outer_map;
     custom_outer_map[fd_custom_key1] = "Custom FD Key 1";
