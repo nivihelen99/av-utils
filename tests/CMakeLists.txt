@@ -68,6 +68,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         RedBlackTreeLib      # Added for red_black_tree_test
         DictWrapperLib       # Added for dict_wrapper_test
         PriorityQueueMapLib  # Added for priority_queue_map_test
+        ScapegoatTreeLib     # Added for scapegoat_tree_test
     )
 
     # Specific configurations for certain tests
