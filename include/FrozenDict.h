@@ -7,6 +7,7 @@
 #include <functional>   // For std::hash, std::equal_to, std::less
 #include <memory>       // For std::allocator, std::allocator_traits
 #include <initializer_list> // For std::initializer_list
+#include <map>          // For std::map used in build_from_range
 
 namespace cpp_collections {
 
