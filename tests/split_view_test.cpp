@@ -153,27 +153,6 @@ TEST(SplitViewTest, StringDelimiterSameAsInput) {
     compare_tokens(tokens, {"", ""});
 }
 
-TEST(SplitViewTest, StringDelimiterPartOfLargerNonMatch) {
-    std::string_view sv = "axbya";
-    SplitView view(sv, "xy");
-    std::vector<std::string_view> tokens = collect_tokens(view);
-    compare_tokens(tokens, {"a", "bya"}); // Should be "a", "bya" - correction: "axbya", find "xy" at pos 1. token = "a", next_pos = 1 + 2 = 3. next token "bya"
-                                        // No, this is wrong. "axbya" split by "xy" -> "a", "bya"
-                                        // Let's trace:
-                                        // input="axbya", delim="xy"
-                                        // begin(): current_pos=0. find("xy",0) -> pos 1. current_token_ = input_.substr(0, 1-0) = "a". current_pos_ = 1 + 2 = 3.
-                                        // ++: current_pos=3. find("xy",3) -> npos. current_token_ = input_.substr(3) = "bya". current_pos_ = 5+1=6. is_end_ = true.
-                                        // ++: is_end_ is true. returns.
-                                        // Tokens: {"a", "bya"} - This seems correct.
-}
-// Test to verify the manual trace above.
-TEST(SplitViewTest, StringDelimiterComplexCase) {
-    std::string_view sv = "axbya";
-    SplitView view(sv, "xy");
-    std::vector<std::string_view> tokens = collect_tokens(view);
-    compare_tokens(tokens, {"a", "bya"});
-}
-
 
 TEST(SplitViewTest, SplitByWhitespaceString) {
     std::string_view sv = "hello world  test";
@@ -264,12 +243,6 @@ TEST(SplitViewTest, StringDelimiterOverlappingPotential) {
     compare_tokens(tokens, {"", "ba"});
 }
 
-TEST(SplitViewTest, StringDelimiterExactMatchSeries) {
-    std::string_view sv = "ababab"; // "aba" then "aba"
-    SplitView view(sv, "aba");
-    std::vector<std::string_view> tokens = collect_tokens(view);
-    compare_tokens(tokens, {"", "", ""}); // First "aba" -> "" before it. Second "aba" -> "" between them. "" after last one.
-}
 
 
 TEST(SplitViewTest, DelimiterAtVeryBeginningAndEndString) {
@@ -434,6 +407,66 @@ TEST(SplitViewTest, MultipleIteratorsIndependent) {
     compare_tokens(path1, {"1", "2", "3"});
     compare_tokens(path2, {"1", "2", "3"});
     compare_tokens(path3, {"1", "2", "3"});
+}
+
+
+// CORRECTED TEST CASES
+// The original test cases had errors. Here are the corrected versions:
+
+// Original failing test - CORRECTED:
+TEST(SplitViewTest, StringDelimiterComplexCase) {
+    // FIXED: Changed "axbya" to "axybya" to actually contain the "xy" delimiter
+    std::string_view sv = "axybya";  // Was "axbya" - this actually contains "xy"
+    SplitView view(sv, "xy");
+    std::vector<std::string_view> tokens = collect_tokens(view);
+    compare_tokens(tokens, {"a", "bya"});
+}
+
+// Alternative fix using single character delimiter:
+TEST(SplitViewTest, StringDelimiterComplexCaseAlt) {
+    // Or use single character delimiter which would work with original string
+    std::string_view sv = "axbya";
+    SplitView view(sv, 'x');  // Single char delimiter
+    std::vector<std::string_view> tokens = collect_tokens(view);
+    compare_tokens(tokens, {"a", "bya"});
+}
+
+// Original failing test - CORRECTED:
+TEST(SplitViewTest, StringDelimiterExactMatchSeries) {
+    // FIXED: Changed to "abaaba" to get the expected result {"", "", ""}
+    std::string_view sv = "abaaba";  // Was "ababab" 
+    SplitView view(sv, "aba");
+    std::vector<std::string_view> tokens = collect_tokens(view);
+    compare_tokens(tokens, {"", "", ""});
+}
+
+// If you want to keep the original "ababab" string, the expected result should be:
+TEST(SplitViewTest, StringDelimiterExactMatchSeriesOriginal) {
+    std::string_view sv = "ababab";
+    SplitView view(sv, "aba");
+    std::vector<std::string_view> tokens = collect_tokens(view);
+    compare_tokens(tokens, {"", "bab"});  // Correct expectation for "ababab" split by "aba"
+}
+
+// Additional test cases to verify the implementation:
+TEST(SplitViewTest, StringDelimiterVerification) {
+    // Verify the "axbya" case works with correct delimiter
+    std::string_view sv1 = "axbya";
+    SplitView view1(sv1, "x");
+    std::vector<std::string_view> tokens1 = collect_tokens(view1);
+    compare_tokens(tokens1, {"a", "bya"});
+    
+    // Verify the "axybya" case works with "xy" delimiter  
+    std::string_view sv2 = "axybya";
+    SplitView view2(sv2, "xy");
+    std::vector<std::string_view> tokens2 = collect_tokens(view2);
+    compare_tokens(tokens2, {"a", "bya"});
+    
+    // Verify standard splitting behavior
+    std::string_view sv3 = "a,b,c";
+    SplitView view3(sv3, ",");
+    std::vector<std::string_view> tokens3 = collect_tokens(view3);
+    compare_tokens(tokens3, {"a", "b", "c"});
 }
 
 int main(int argc, char **argv) {
