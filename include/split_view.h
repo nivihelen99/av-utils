@@ -22,7 +22,6 @@ public:
         // Constructor for end()
         explicit Iterator(std::string_view input, bool is_end_marker);
 
-
         reference operator*() const;
         pointer operator->() const;
         Iterator& operator++();
@@ -84,7 +83,6 @@ SplitView::Iterator::Iterator(std::string_view input, bool is_end_marker)
     current_token_ = std::string_view();
 }
 
-
 const std::string_view& SplitView::Iterator::operator*() const {
     // TODO: Add assertion !is_end_ if desired, for safety
     return current_token_;
@@ -136,7 +134,6 @@ bool SplitView::Iterator::operator!=(const Iterator& other) const {
 // Renamed from find_next_token and logic significantly revised
 void SplitView::Iterator::advance_to_next_token() {
     // If current_pos_ has moved past the input string length, this iterator becomes an end iterator.
-    // Note: current_pos_ can be == input_.length() when an empty token at the end of the string is valid.
     if (current_pos_ > input_.length()) {
         is_end_ = true;
         current_token_ = std::string_view();
@@ -145,10 +142,6 @@ void SplitView::Iterator::advance_to_next_token() {
 
     // Handle empty delimiter: As per Requirement.md, yields the whole string as one token,
     // or one empty token if input is empty.
-    // This should only happen for the *first* token if the delimiter is empty.
-    // After that, it should become an end iterator.
-    // Let's assume the SplitView constructor could validate/handle empty delimiter,
-    // or we handle it here by ensuring it only runs once for an empty delimiter.
     size_t delimiter_len = use_single_char_delimiter_ ? 1 : delimiter_.length();
 
     if (delimiter_len == 0) {
@@ -168,20 +161,15 @@ void SplitView::Iterator::advance_to_next_token() {
     // Regular delimiter search
     size_t next_delimiter_pos;
     if (use_single_char_delimiter_) {
-        next_delimiter_pos = this->input_.find(this->single_char_delimiter_, this->current_pos_);
+        next_delimiter_pos = input_.find(single_char_delimiter_, current_pos_);
     } else {
-        next_delimiter_pos = this->input_.find(this->delimiter_, this->current_pos_);
+        next_delimiter_pos = input_.find(delimiter_, current_pos_);
     }
 
     if (next_delimiter_pos == std::string_view::npos) {
         // No more delimiters found.
         // The token is from current_pos_ to the end of the input string.
-        // This covers:
-        // 1. "abc" -> "abc"
-        // 2. "a,b" (after 'a,' current_pos_ is at 'b') -> "b"
-        // 3. "a," (after 'a,' current_pos_ is at end) -> ""
-        // 4. "" (input is empty, current_pos_ is 0) -> ""
-        if (current_pos_ <= input_.length()) { // Check if there's anything to extract, or an empty token at the end
+        if (current_pos_ <= input_.length()) {
             current_token_ = input_.substr(current_pos_);
             current_pos_ = input_.length() + 1; // Advance past the end for the next ++ call
             is_end_ = false; // We found a token (it might be empty).
@@ -198,22 +186,14 @@ void SplitView::Iterator::advance_to_next_token() {
     }
 }
 
-
 // Implementation of SplitView methods
 
 SplitView::SplitView(std::string_view input, char delimiter)
     : input_(input), single_char_delimiter_(delimiter), use_single_char_delimiter_(true) {
-    // Store char delimiter as string_view for unified end() iterator construction if needed,
-    // but not strictly necessary if end() iterator has a specialized constructor.
-    // For now, delimiter_ (string_view member) remains empty for char delimiter case.
 }
 
 SplitView::SplitView(std::string_view input, std::string_view delimiter)
     : input_(input), delimiter_(delimiter), use_single_char_delimiter_(false) {
-    if (delimiter.empty()) {
-        // As per Requirement.md: "If delimiter_ is empty, current behavior: yields the rest of the string as one token."
-        // The Iterator's advance_to_next_token handles this.
-    }
 }
 
 SplitView::Iterator SplitView::begin() const {
@@ -225,10 +205,7 @@ SplitView::Iterator SplitView::begin() const {
 }
 
 SplitView::Iterator SplitView::end() const {
-    // End iterator is marked by is_end_ = true and current_pos_ usually at input.length()
-    // The specific delimiter doesn't matter for the end iterator's identity, only input_ and is_end_ flag.
     return Iterator(input_, true /* is_end_marker */);
 }
-
 
 #endif // SPLIT_VIEW_H
