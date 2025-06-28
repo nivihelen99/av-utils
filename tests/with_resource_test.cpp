@@ -59,7 +59,7 @@ TEST(WithResourceTest, CustomCleanup) {
     struct CustomCleanable {
         bool* raii_flag;
         CustomCleanable(bool* flag) : raii_flag(flag) { *raii_flag = false; }
-        ~CustomCleanable() { *raii_flag = true; } // RAII destructor
+        ~CustomCleanable() { if (raii_flag) *raii_flag = true; } // RAII destructor
         void process() {}
 
         // Movable
@@ -170,7 +170,7 @@ TEST(WithResourceTest, ExceptionInMainFuncWithCustomCleanup) {
     struct CleanableOnException {
         bool* flag_raii;
         CleanableOnException(bool* fr) : flag_raii(fr) { *flag_raii = false; }
-        ~CleanableOnException() { *flag_raii = true; }
+        ~CleanableOnException() { if (flag_raii) *flag_raii = true; }
         void action() {}
 
         CleanableOnException(CleanableOnException&& other) noexcept : flag_raii(other.flag_raii) {
