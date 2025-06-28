@@ -140,8 +140,8 @@ TEST(SliceViewTest, StringSlicing) {
     auto s3 = slice(str, -6);    // "World!"
     EXPECT_SLICE_EQ<char>(s3, {'W', 'o', 'r', 'l', 'd', '!'});
 
-    auto s4 = slice(str, -1, -14, -1); // "!dlroW ,olleH"
-    EXPECT_SLICE_EQ<char>(s4, {'!', 'd', 'l', 'r', 'o', 'W', ' ', ',', ' ', 'o', 'l', 'l', 'e', 'H'});
+    auto s4 = slice(str, -1, -14, -1); // "!dlroW ,olleH" - Original string "Hello, World!" is 13 chars. Reversed is also 13.
+    EXPECT_SLICE_EQ<char>(s4, {'!', 'd', 'l', 'r', 'o', 'W', ' ', ',', 'o', 'l', 'l', 'e', 'H'}); // Corrected to 13 chars. Removed extra space.
 
     auto s5 = slice(str, 0, str.size(), 2); // "Hlo ol!"
     EXPECT_SLICE_EQ<char>(s5, {'H', 'l', 'o', ' ', 'o', 'l', '!'});

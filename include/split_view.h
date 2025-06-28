@@ -168,9 +168,9 @@ void SplitView::Iterator::advance_to_next_token() {
     // Regular delimiter search
     size_t next_delimiter_pos;
     if (use_single_char_delimiter_) {
-        next_delimiter_pos = input_.find(single_char_delimiter_, current_pos_);
+        next_delimiter_pos = this->input_.find(this->single_char_delimiter_, this->current_pos_);
     } else {
-        next_delimiter_pos = input_.find(delimiter_, current_pos_);
+        next_delimiter_pos = this->input_.find(this->delimiter_, this->current_pos_);
     }
 
     if (next_delimiter_pos == std::string_view::npos) {
