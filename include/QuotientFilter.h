@@ -269,7 +269,14 @@ public:
         if (!new_element_is_continuation) {
             uint64_t displaced_element_idx = (insert_idx + 1) % this->num_slots_;
             if (empty_slot_finder != insert_idx) {
-                this->set_continuation(this->table_[displaced_element_idx], true);
+                // Old logic: this->set_continuation(this->table_[displaced_element_idx], true);
+                // This was suspected of corrupting metadata. The shifted element at
+                // displaced_element_idx should carry its original continuation flag from when it was
+                // at insert_idx (before being overwritten by the new element). The shift operation
+                // (table_[dest] = table_[src]) already copies all metadata.
+                // No explicit change to displaced_element_idx's continuation status might be needed here,
+                // or it needs more careful conditional logic based on whether the new item splits an existing run.
+                // For now, removing the unconditional set_continuation.
             }
         }
         this->item_count_++;

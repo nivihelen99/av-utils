@@ -72,6 +72,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ScapegoatTreeLib     # Added for scapegoat_tree_test
         SuffixArrayLib       # Added for suffix_array_test
         CachedPropertyLib    # Added for cached_property_test
+        QuotientFilterLib    # Added for test_quotient_filter
     )
 
     # Specific configurations for certain tests

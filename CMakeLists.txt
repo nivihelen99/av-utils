@@ -162,6 +162,10 @@ target_include_directories(RedBlackTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(CachedPropertyLib INTERFACE)
 target_include_directories(CachedPropertyLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define QuotientFilterLib as an interface library (header-only)
+add_library(QuotientFilterLib INTERFACE)
+target_include_directories(QuotientFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -226,6 +230,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ScapegoatTreeLib     # Added for scapegoat_tree_example
         SuffixArrayLib       # Added for suffix_array_example
         CachedPropertyLib    # Added for cached_property_example
+        QuotientFilterLib    # Added for quotient_filter_example (and potentially others)
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
