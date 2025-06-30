@@ -27,3 +27,8 @@ target_link_libraries(multiset_counter_test PRIVATE GTest::gtest GTest::gtest_ma
 # target_link_libraries(multiset_counter_test PRIVATE MultisetCounterLib GTest::gtest GTest::gtest_main)
 # But since it's header-only and included via include_directories, direct GTest linking is primary.
 gtest_discover_tests(multiset_counter_test)
+
+# Add the test executable for interning_pool
+add_executable(interning_pool_test test_interning_pool.cpp)
+target_link_libraries(interning_pool_test PRIVATE GTest::gtest GTest::gtest_main)
+gtest_discover_tests(interning_pool_test)
