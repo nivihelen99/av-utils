@@ -199,18 +199,17 @@ public:
      * all multisets are returned, sorted by count (most common first).
      * Ties in counts are broken by the natural sort order of the canonical multiset representation.
      * @param n The number of most common multisets to return.
-     * @return A vector of std::pair<key_type, mapped_type>.
+     * @return A vector of `std::pair<key_type, mapped_type>`, where `key_type` is `std::vector<T>`.
      */
-    std::vector<value_type> most_common(size_type n = 0) const {
-        std::vector<value_type> sorted_items;
+    std::vector<std::pair<key_type, mapped_type>> most_common(size_type n = 0) const {
+        std::vector<std::pair<key_type, mapped_type>> sorted_items;
         sorted_items.reserve(counts_.size());
         for (const auto& pair : counts_) {
-            // Constructing value_type explicitly for clarity, though pair could be pushed directly
-            sorted_items.push_back(value_type(pair.first, pair.second));
+            sorted_items.push_back({pair.first, pair.second}); // Copy construct key and value
         }
 
         std::sort(sorted_items.begin(), sorted_items.end(),
-                  [](const value_type& a, const value_type& b) {
+                  [](const std::pair<key_type, mapped_type>& a, const std::pair<key_type, mapped_type>& b) {
                       if (a.second != b.second) {
                           return a.second > b.second; // Sort by count descending
                       }
