@@ -73,6 +73,16 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SuffixArrayLib       # Added for suffix_array_test
         CachedPropertyLib    # Added for cached_property_test
         QuotientFilterLib    # Added for test_quotient_filter
+
+        # Newly added libraries based on existing test files
+        BloomFilterLib       # Added for bloom_filter_test
+        CordLib              # Added for cord_test
+        DynamicBitsetLib     # Added for dynamic_bitset_test
+        RibbonFilterLib      # Added for ribbon_filter_test
+        SegmentTreeLib       # Added for segment_tree_test
+        ThreadSafeCacheLib   # Added for thread_safe_cache_test
+        ThreadSafeCounterLib # Added for thread_safe_counter_test
+        WeightedRandomListLib # Added for weighted_random_list_test
     )
 
     # Specific configurations for certain tests
