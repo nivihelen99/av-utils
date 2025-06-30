@@ -39,3 +39,10 @@ target_link_libraries(weighted_random_list_test PRIVATE GTest::gtest GTest::gtes
 # No need to link WeightedRandomListLib explicitly due to include_directories(${CMAKE_SOURCE_DIR}/include)
 # and it being header-only. GTest linkage is sufficient.
 gtest_discover_tests(weighted_random_list_test)
+
+# Add the test executable for ThreadSafeCounter
+add_executable(thread_safe_counter_test test_thread_safe_counter.cpp)
+target_link_libraries(thread_safe_counter_test PRIVATE GTest::gtest GTest::gtest_main)
+# No need to link ThreadSafeCounterLib explicitly due to include_directories(${CMAKE_SOURCE_DIR}/include)
+# and it being header-only. GTest linkage is sufficient.
+gtest_discover_tests(thread_safe_counter_test)

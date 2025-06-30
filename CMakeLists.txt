@@ -190,6 +190,10 @@ target_include_directories(MultisetCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE_D
 add_library(WeightedRandomListLib INTERFACE)
 target_include_directories(WeightedRandomListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define ThreadSafeCounterLib as an interface library (header-only)
+add_library(ThreadSafeCounterLib INTERFACE)
+target_include_directories(ThreadSafeCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -261,6 +265,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         DynamicBitsetLib     # Added for dynamic_bitset_example
         MultisetCounterLib   # Added for multiset_counter_example
         WeightedRandomListLib # Added for weighted_random_list_example
+        ThreadSafeCounterLib # Added for thread_safe_counter_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
