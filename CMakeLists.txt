@@ -194,6 +194,10 @@ target_include_directories(WeightedRandomListLib INTERFACE ${CMAKE_CURRENT_SOURC
 add_library(ThreadSafeCounterLib INTERFACE)
 target_include_directories(ThreadSafeCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define ThreadSafeCacheLib as an interface library (header-only)
+add_library(ThreadSafeCacheLib INTERFACE)
+target_include_directories(ThreadSafeCacheLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -266,6 +270,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         MultisetCounterLib   # Added for multiset_counter_example
         WeightedRandomListLib # Added for weighted_random_list_example
         ThreadSafeCounterLib # Added for thread_safe_counter_example
+        ThreadSafeCacheLib   # Added for thread_safe_cache_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
