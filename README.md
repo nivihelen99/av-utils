@@ -56,7 +56,7 @@ Key components:
 ### Language/Utility Extensions
 These components extend C++ with useful general-purpose utilities and language-like features.
 This includes:
-*   **Containers with Special Properties:** `default_dict.h` (default values for missing keys), `counter.h` (frequency counting).
+*   **Containers with Special Properties:** `default_dict.h` (default values for missing keys), `counter.h` (frequency counting), `multiset_counter.hpp` (counts occurrences of multisets/bags of items).
 *   **Value/Error Handling:** `expected.h` (Rust-like Result type), `value_or_error.h` (similar to expected, for simpler cases).
 *   **Metaprogramming and Reflection:** `named_struct.h`, `named_tuple.h`, `enum_reflect.h` (compile-time enum reflection), `type_name.h` (get string representation of a type).
 *   **Concurrency, Timing, and Asynchronous Operations:**
