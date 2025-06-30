@@ -174,6 +174,10 @@ target_include_directories(BTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 add_library(CordLib INTERFACE)
 target_include_directories(CordLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define RibbonFilterLib as an interface library (header-only)
+add_library(RibbonFilterLib INTERFACE)
+target_include_directories(RibbonFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -241,6 +245,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         QuotientFilterLib    # Added for quotient_filter_example (and potentially others)
         BTreeLib             # Added for btree_example
         CordLib              # Added for cord_example
+        RibbonFilterLib      # Added for ribbon_filter_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
