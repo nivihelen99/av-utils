@@ -170,6 +170,10 @@ target_include_directories(QuotientFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DI
 add_library(BTreeLib INTERFACE)
 target_include_directories(BTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define CordLib as an interface library (header-only)
+add_library(CordLib INTERFACE)
+target_include_directories(CordLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -236,6 +240,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         CachedPropertyLib    # Added for cached_property_example
         QuotientFilterLib    # Added for quotient_filter_example (and potentially others)
         BTreeLib             # Added for btree_example
+        CordLib              # Added for cord_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
