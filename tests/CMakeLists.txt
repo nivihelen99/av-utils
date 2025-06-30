@@ -73,6 +73,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SuffixArrayLib       # Added for suffix_array_test
         CachedPropertyLib    # Added for cached_property_test
         QuotientFilterLib    # Added for test_quotient_filter
+        CordLib              # Added for cord_test
     )
 
     # Specific configurations for certain tests
