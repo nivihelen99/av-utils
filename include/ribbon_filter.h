@@ -14,9 +14,10 @@
 #include <cstring>   // For std::strlen (for const char* hasher)
 
 
-// Forward declaration
-template <typename T, typename FingerprintType = uint16_t, size_t K = 3, typename Hasher = std::hash<T>>
-class RibbonFilter;
+// Forward declaration (minimal, if needed at all before full definition)
+// template <typename T, typename FP, size_t KI, typename H> class RibbonFilter;
+// For a self-contained header, often the main class template definition is sufficient without a preceding forward declaration.
+// Let's remove the detailed forward declaration that caused the issue.
 
 namespace detail {
 
