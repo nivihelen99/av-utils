@@ -46,3 +46,9 @@ target_link_libraries(thread_safe_counter_test PRIVATE GTest::gtest GTest::gtest
 # No need to link ThreadSafeCounterLib explicitly due to include_directories(${CMAKE_SOURCE_DIR}/include)
 # and it being header-only. GTest linkage is sufficient.
 gtest_discover_tests(thread_safe_counter_test)
+
+# Add the test executable for ThreadSafeCache
+add_executable(test_thread_safe_cache test_thread_safe_cache.cpp)
+target_link_libraries(test_thread_safe_cache PRIVATE GTest::gtest GTest::gtest_main)
+# ThreadSafeCacheLib is header-only, include_directories is sufficient.
+gtest_discover_tests(test_thread_safe_cache)
