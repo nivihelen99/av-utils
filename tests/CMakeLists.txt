@@ -32,3 +32,10 @@ gtest_discover_tests(multiset_counter_test)
 add_executable(interning_pool_test test_interning_pool.cpp)
 target_link_libraries(interning_pool_test PRIVATE GTest::gtest GTest::gtest_main)
 gtest_discover_tests(interning_pool_test)
+
+# Add the test executable for WeightedRandomList
+add_executable(weighted_random_list_test test_weighted_random_list.cpp)
+target_link_libraries(weighted_random_list_test PRIVATE GTest::gtest GTest::gtest_main)
+# No need to link WeightedRandomListLib explicitly due to include_directories(${CMAKE_SOURCE_DIR}/include)
+# and it being header-only. GTest linkage is sufficient.
+gtest_discover_tests(weighted_random_list_test)
