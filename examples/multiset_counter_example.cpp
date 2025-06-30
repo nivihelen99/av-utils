@@ -17,7 +17,7 @@ void print_multiset(const std::vector<T>& ms) {
 
 // Helper function to print most_common results
 template <typename T>
-void print_most_common(const std::vector<std::pair<const std::vector<T>, int>>& common_items) {
+void print_most_common(const std::vector<std::pair<std::vector<T>, int>>& common_items) {
     for (const auto& pair : common_items) {
         print_multiset(pair.first);
         std::cout << ": " << pair.second << std::endl;
