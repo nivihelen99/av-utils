@@ -221,9 +221,9 @@ public:
             return;
         }
 
-        double target_load_factor_for_sizing = 0.81;
+        double target_load_factor_for_sizing = 0.78; // Adjusted from 0.81 for more robust building
         if (K_Indices == 4) {
-            target_load_factor_for_sizing = 0.95;
+            target_load_factor_for_sizing = 0.92; // Adjusted from 0.95 for K=4
         }
 
         size_t total_slots = static_cast<size_t>(std::ceil(static_cast<double>(expected_items) / target_load_factor_for_sizing));
