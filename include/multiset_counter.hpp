@@ -178,6 +178,15 @@ public:
         counts_.clear();
     }
 
+    /**
+     * @brief Checks if the counter contains a specific multiset.
+     * @param items The multiset of items to check for.
+     * @return True if the multiset has a count greater than 0, false otherwise.
+     */
+    bool contains(const multiset_type& items) const {
+        return count(items) > 0;
+    }
+
     // Additional utility methods
 
     /**

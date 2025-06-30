@@ -104,7 +104,7 @@ TEST_F(MultisetCounterTest, OperatorBracketConst) {
     mc_str.add(ms_fruits1);
     EXPECT_EQ(mc_str[ms_fruits1], 1);
     EXPECT_EQ(mc_str[ms_fruits1_ordered], 1);
-    EXPECT_EQ(mc_str[{"non", "existent"}], 0);
+    EXPECT_EQ(mc_str[(std::vector<std::string>{"non", "existent"})], 0);
 }
 
 // Test Size, Empty, Total
