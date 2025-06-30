@@ -178,6 +178,10 @@ target_include_directories(CordLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include
 add_library(RibbonFilterLib INTERFACE)
 target_include_directories(RibbonFilterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define DynamicBitsetLib as an interface library (header-only)
+add_library(DynamicBitsetLib INTERFACE)
+target_include_directories(DynamicBitsetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -246,6 +250,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         BTreeLib             # Added for btree_example
         CordLib              # Added for cord_example
         RibbonFilterLib      # Added for ribbon_filter_example
+        DynamicBitsetLib     # Added for dynamic_bitset_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
