@@ -331,9 +331,15 @@ private:
     friend struct cord_detail::InternalNode; // Allow InternalNode to access Cord's private members
     friend class CordTest_Concatenation_Test;
     friend class CordTest_SubstrBasic_Test;
+    friend struct cord_detail::InternalNode; // Allow InternalNode to access Cord's private members
+    friend class CordTest_Concatenation_Test;
+    friend class CordTest_SubstrBasic_Test;
     friend class CordTest_SubstrEdgeCases_Test;
     friend class CordTest_AtOperator_Test;
 
+    // Data members
+    std::shared_ptr<cord_detail::NodeVariant> node_;
+    size_t total_length_;
 
     // Internal constructor for creating a Cord from a single leaf node string
     explicit Cord(cord_detail::LeafNode leaf)
