@@ -124,10 +124,15 @@ public:
     /**
      * @brief Move constructor.
      * Transfers ownership of the underlying data from `other` to this Cord.
-     * `other` is left in a valid but unspecified (typically empty) state.
+     * `other` is left in a valid empty state.
      * Time complexity: O(1).
      */
-    Cord(Cord&& other) noexcept = default;
+    Cord(Cord&& other) noexcept
+        : node_(std::move(other.node_)), total_length_(other.total_length_) {
+        // Leave other in a valid empty state
+        other.node_ = std::make_shared<cord_detail::NodeVariant>(cord_detail::LeafNode(""));
+        other.total_length_ = 0;
+    }
 
     // --- Assignment Operators ---
 
@@ -140,10 +145,19 @@ public:
 
     /**
      * @brief Move assignment operator.
-     * Transfers ownership from `other`. `other` is left in a valid but unspecified state.
+     * Transfers ownership from `other`. `other` is left in a valid empty state.
      * Time complexity: O(1).
      */
-    Cord& operator=(Cord&& other) noexcept = default;
+    Cord& operator=(Cord&& other) noexcept {
+        if (this != &other) {
+            node_ = std::move(other.node_);
+            total_length_ = other.total_length_;
+            // Leave other in a valid empty state
+            other.node_ = std::make_shared<cord_detail::NodeVariant>(cord_detail::LeafNode(""));
+            other.total_length_ = 0;
+        }
+        return *this;
+    }
 
     /**
      * @brief Assigns from an std::string (by copying).
