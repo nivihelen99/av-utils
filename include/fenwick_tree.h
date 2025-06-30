@@ -16,7 +16,7 @@ private:
     int n;
     
     // Get the least significant bit
-    int lsb(int x) {
+    int lsb(int x) const {
         return x & (-x);
     }
     
@@ -76,7 +76,7 @@ public:
      * @return The sum of elements from index 0 to i. Returns 0 if i is -1.
      * @complexity O(log n).
      */
-    long long prefixSum(int i) {
+    long long prefixSum(int i) const {
         assert(i >= -1 && i < n && "Index out of bounds in prefixSum");
         if (i < 0) return 0;
         i++; // Convert to 1-indexed
@@ -95,7 +95,7 @@ public:
      * @return The sum of elements in the range [l, r].
      * @complexity O(log n) due to two calls to prefixSum.
      */
-    long long query(int l, int r) {
+    long long query(int l, int r) const {
         assert(l <= r && "Left index cannot be greater than right index in query");
         assert(l >= 0 && r < n && "Indices out of bounds in query");
         return prefixSum(r) - prefixSum(l - 1);
@@ -107,7 +107,7 @@ public:
      * @return The value of the element at index i.
      * @complexity O(log n) as it calls query(i, i).
      */
-    long long get(int i) {
+    long long get(int i) const {
         assert(i >= 0 && i < n && "Index out of bounds in get");
         return query(i, i);
     }
@@ -125,7 +125,7 @@ public:
      * @brief (Debug) Prints the internal tree structure.
      * Useful for debugging purposes.
      */
-    void printTree() {
+    void printTree() const {
         std::cout << "Tree array: ";
         for (int i = 1; i <= n; i++) {
             std::cout << tree[i] << " ";
@@ -138,7 +138,7 @@ public:
      * Useful for debugging purposes. It reconstructs values by calling get().
      * @complexity O(n log n) due to calling get() for each element.
      */
-    void printArray() {
+    void printArray() const {
         std::cout << "Array values: ";
         for (int i = 0; i < n; i++) {
             std::cout << get(i) << " ";

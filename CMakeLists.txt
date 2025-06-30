@@ -186,6 +186,10 @@ target_include_directories(DynamicBitsetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 add_library(MultisetCounterLib INTERFACE)
 target_include_directories(MultisetCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define WeightedRandomListLib as an interface library (header-only)
+add_library(WeightedRandomListLib INTERFACE)
+target_include_directories(WeightedRandomListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -256,6 +260,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         RibbonFilterLib      # Added for ribbon_filter_example
         DynamicBitsetLib     # Added for dynamic_bitset_example
         MultisetCounterLib   # Added for multiset_counter_example
+        WeightedRandomListLib # Added for weighted_random_list_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
