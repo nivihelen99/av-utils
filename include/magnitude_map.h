@@ -137,19 +137,63 @@ public:
         auto it_high = data_.upper_bound(map_search_upper_key);
 
         for (auto it = it_low; it != it_high; ++it) {
-            const KeyType& current_key = it->first;
-            KeyType diff;
+            const KeyType& k = it->first;
+            bool in_range = false;
 
-            // Calculate absolute difference: std::abs can be problematic with unsigned underflow
-            // if current_key < query_key and KeyType is unsigned.
-            if (current_key >= query_key) {
-                diff = current_key - query_key;
-            } else {
-                diff = query_key - current_key;
+            // actual_magnitude is already guaranteed to be >= 0.
+
+            if (k >= query_key) { // True difference is k - query_key (non-negative)
+                // We need to check k - query_key <= actual_magnitude.
+                // This is equivalent to k <= query_key + actual_magnitude.
+
+                bool sum_would_overflow = false;
+                if constexpr (std::is_signed_v<KeyType> && !std::is_floating_point_v<KeyType>) {
+                    if (actual_magnitude > KeyType{0} && query_key > std::numeric_limits<KeyType>::max() - actual_magnitude) {
+                        sum_would_overflow = true;
+                    }
+                } else if constexpr (std::is_unsigned_v<KeyType> && !std::is_floating_point_v<KeyType>) {
+                    if (query_key > std::numeric_limits<KeyType>::max() - actual_magnitude) { // actual_magnitude is KeyType, so it's >=0. If actual_magnitude is 0, this is query_key > MAX, false.
+                        sum_would_overflow = true;
+                    }
+                }
+
+                if (sum_would_overflow) {
+                    // query_key + actual_magnitude (mathematically) > MAX_KEYTYPE.
+                    // Since k is KeyType, k <= MAX_KEYTYPE.
+                    // So, k <= (mathematical query_key + actual_magnitude) is always true.
+                    in_range = true;
+                } else {
+                    // Sum does not overflow, or it's floating point.
+                    in_range = (k <= (query_key + actual_magnitude));
+                }
+            } else { // k < query_key. True difference is query_key - k (non-negative).
+                // We need to check query_key - k <= actual_magnitude.
+                // This is equivalent to query_key <= k + actual_magnitude.
+
+                bool sum_would_overflow = false;
+                if constexpr (std::is_signed_v<KeyType> && !std::is_floating_point_v<KeyType>) {
+                    if (actual_magnitude > KeyType{0} && k > std::numeric_limits<KeyType>::max() - actual_magnitude) {
+                        sum_would_overflow = true;
+                    }
+                } else if constexpr (std::is_unsigned_v<KeyType> && !std::is_floating_point_v<KeyType>) {
+                    if (k > std::numeric_limits<KeyType>::max() - actual_magnitude) {
+                        sum_would_overflow = true;
+                    }
+                }
+
+                if (sum_would_overflow) {
+                    // k + actual_magnitude (mathematically) > MAX_KEYTYPE.
+                    // Since query_key is KeyType, query_key <= MAX_KEYTYPE.
+                    // So, query_key <= (mathematical k + actual_magnitude) is always true.
+                    in_range = true;
+                } else {
+                    // Sum does not overflow, or it's floating point.
+                    in_range = (query_key <= (k + actual_magnitude));
+                }
             }
 
-            if (diff <= actual_magnitude) {
-                 result.push_back(*it);
+            if (in_range) {
+                result.push_back(*it);
             }
         }
         return result;
