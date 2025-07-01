@@ -83,6 +83,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ThreadSafeCacheLib   # Added for thread_safe_cache_test
         ThreadSafeCounterLib # Added for thread_safe_counter_test
         WeightedRandomListLib # Added for weighted_random_list_test
+        SmallVectorLib       # Added for test_small_vector
     )
 
     # Specific configurations for certain tests
