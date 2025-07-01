@@ -198,6 +198,10 @@ target_include_directories(ThreadSafeCounterLib INTERFACE ${CMAKE_CURRENT_SOURCE
 add_library(ThreadSafeCacheLib INTERFACE)
 target_include_directories(ThreadSafeCacheLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define SmallVectorLib as an interface library (header-only)
+add_library(SmallVectorLib INTERFACE)
+target_include_directories(SmallVectorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -271,6 +275,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         WeightedRandomListLib # Added for weighted_random_list_example
         ThreadSafeCounterLib # Added for thread_safe_counter_example
         ThreadSafeCacheLib   # Added for thread_safe_cache_example
+        SmallVectorLib       # Added for small_vector_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
