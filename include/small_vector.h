@@ -507,7 +507,12 @@ public:
 
         bool pocs = AllocTraits::propagate_on_container_swap::value;
         if (pocs || alloc_ == other.alloc_) {
-            if (is_inline_runtime() && other.is_inline_runtime()) {
+            bool this_was_inline = this->is_inline_runtime();
+            bool other_was_inline = other.is_inline_runtime();
+
+            if (this_was_inline && other_was_inline) {
+                // Both inline: element-wise swap/move
+                // This part of the logic remains the same as it was deemed plausible
                 size_type min_s = std::min(size_, other.size_);
                 for (size_type i = 0; i < min_s; ++i) {
                     std::swap(current_data()[i], other.current_data()[i]);
@@ -519,39 +524,56 @@ public:
                     std::uninitialized_move_n(other.current_data() + min_s, other.size_ - min_s, current_data() + min_s);
                     destroy_elements_in_buffer(other.current_data() + min_s, other.size_ - min_s);
                 }
-            } else if (!is_inline_runtime() && !other.is_inline_runtime()) {
+            } else if (!this_was_inline && !other_was_inline) {
+                // Both heap: swap heap pointers
                 std::swap(storage_.heap_ptr, other.storage_.heap_ptr);
+                // capacity_ will be swapped later by the conditional global swap
             } else {
-                small_vector* p_inline = is_inline_runtime() ? this : &other;
-                small_vector* p_heap = is_inline_runtime() ? &other : this;
+                // Mixed case: one inline, one heap
+                small_vector* p_inline = this_was_inline ? this : &other;
+                small_vector* p_heap = this_was_inline ? &other : this;
 
-                pointer heap_buf_content = p_heap->current_data(); // Use current_data()
-                size_type heap_buf_capacity = p_heap->capacity_;
+                pointer heap_buffer_ptr = p_heap->current_data(); // Get heap data
+                size_type heap_buffer_capacity = p_heap->capacity_;
 
+                // Temp storage for inline contents
                 std::aligned_storage_t<sizeof(T) * N_this, alignof(T)> temp_inline_storage_bytes;
                 pointer temp_inline_elements = std::launder(reinterpret_cast<pointer>(&temp_inline_storage_bytes));
 
-                if (p_inline->size_ > 0) {
+                if (p_inline->size_ > 0) { // Move from p_inline's inline buf to temp
                    std::uninitialized_move_n(p_inline->current_data(), p_inline->size_, temp_inline_elements);
                 }
                 size_type inline_content_size = p_inline->size_;
+                // p_inline's inline elements are now moved-from.
 
-                p_inline->set_heap_data(heap_buf_content, heap_buf_capacity);
+                // p_inline (was inline) becomes heap, takes p_heap's buffer
+                p_inline->set_heap_data(heap_buffer_ptr, heap_buffer_capacity);
 
+                // p_heap (was heap) becomes inline, takes p_inline's original content from temp
                 p_heap->set_inline_active();
                 if (inline_content_size > 0) {
                     std::uninitialized_move_n(temp_inline_elements, inline_content_size, p_heap->current_data());
                 }
+
+                // Destroy moved-from elements in temp buffer (using p_inline's allocator at time of move)
                 if (!std::is_trivially_destructible_v<T> && inline_content_size > 0) {
                      detail::destroy_range_helper(temp_inline_elements, temp_inline_elements + inline_content_size, p_inline->alloc_);
                 }
+                // After this block, p_inline has p_heap's old capacity, and p_heap has N_this capacity.
+                // These should NOT be swapped by the global capacity swap.
             }
+
+            // Common state swaps
             std::swap(size_, other.size_);
-            std::swap(capacity_, other.capacity_);
+            if (this_was_inline == other_was_inline) { // Only swap capacity if states were originally the same
+                 std::swap(capacity_, other.capacity_);
+            }
+            // For mixed case, capacities were set by set_heap_data/set_inline_active and must not be swapped again.
+
             if (pocs) {
                 std::swap(alloc_, other.alloc_);
             }
-        } else {
+        } else { // Fallback for incompatible allocators where POCZS is false
             small_vector temp = std::move(*this);
             *this = std::move(other);
             other = std::move(temp);
