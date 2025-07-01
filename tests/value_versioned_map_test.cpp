@@ -2,6 +2,7 @@
 #include "value_versioned_map.h"
 #include <string>
 #include <iostream> // For debugging, if needed
+#include <algorithm> // Required for std::find
 
 // Define a simple struct for testing custom version types
 struct SemanticVersion {

@@ -246,8 +246,8 @@ public:
     }
 
     // Observers
-    hasher hash_function() const { return data_.hash_function(); }
-    key_equal key_eq() const { return data_.key_eq(); }
+    Hash hash_function() const { return data_.hash_function(); }
+    KeyEqual key_eq() const { return data_.key_eq(); }
     CompareVersions version_comp() const { return version_comparator_; }
     allocator_type get_allocator() const { return data_.get_allocator(); }
 

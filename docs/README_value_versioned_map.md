@@ -149,6 +149,52 @@ for (const auto& key_data_pair : myMap) {
 #include <iostream>
 #include <string>
 
+// Define SemanticVersion struct and its operator<< at global scope
+struct SemanticVersion {
+    int major;
+    int minor;
+    int patch;
+
+    // Constructor for easy initialization e.g. {1,0,0}
+    SemanticVersion(int maj, int min, int p) : major(maj), minor(min), patch(p) {}
+
+
+    bool operator<(const SemanticVersion& other) const {
+        if (major != other.major) return major < other.major;
+        if (minor != other.minor) return minor < other.minor;
+        return patch < other.patch;
+    }
+    bool operator==(const SemanticVersion& other) const {
+        return major == other.major && minor == other.minor && patch == other.patch;
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const SemanticVersion& sv) {
+    os << sv.major << "." << sv.minor << "." << sv.patch;
+    return os;
+}
+
+void custom_version_example() {
+    std::cout << "\n--- Example with Custom Version Type (SemanticVersion) ---" << std::endl;
+    cpp_collections::ValueVersionedMap<std::string, std::string, SemanticVersion> app_settings;
+
+    app_settings.put("feature_flag_x", "enabled", {1, 0, 0});
+    app_settings.put("feature_flag_x", "disabled_buggy", {1, 1, 0});
+    app_settings.put("feature_flag_x", "enabled_fixed", {1, 1, 5});
+    app_settings.put("api_endpoint", "/v1/api", {1, 0, 0});
+    app_settings.put("api_endpoint", "/v2/api", {2, 0, 0});
+
+    std::cout << "Latest 'feature_flag_x': " << app_settings.get_latest("feature_flag_x") << std::endl;
+    std::cout << "'feature_flag_x' at version {1,0,5}: " << app_settings.get("feature_flag_x", {1,0,5}) << std::endl;
+    std::cout << "'feature_flag_x' at version {1,1,2} (should be 'disabled_buggy' from 1.1.0): "
+              << app_settings.get("feature_flag_x", {1,1,2}) << std::endl;
+    std::cout << "'api_endpoint' at version {1,5,0} (should be '/v1/api' from 1.0.0): "
+              << app_settings.get("api_endpoint", {1,5,0}) << std::endl;
+    std::cout << "'api_endpoint' at version {0,9,0} (should be not found): "
+              << app_settings.get("api_endpoint", {0,9,0}) << std::endl;
+}
+
+
 int main() {
     cpp_collections::ValueVersionedMap<std::string, std::string> config;
 
@@ -191,6 +237,9 @@ int main() {
     if (!config.get_latest("timeout").has_value()) {
         std::cout << "Timeout key not found." << std::endl;
     }
+
+    // Run the custom version example
+    custom_version_example();
 
     return 0;
 }

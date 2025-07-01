@@ -25,6 +25,53 @@ std::ostream& operator<<(std::ostream& os, const std::optional<std::reference_wr
     return os;
 }
 
+// Define SemanticVersion struct and its operator<< at global scope
+struct SemanticVersion {
+    int major;
+    int minor;
+    int patch;
+
+    // Constructor for easy initialization e.g. {1,0,0}
+    SemanticVersion(int maj, int min, int p) : major(maj), minor(min), patch(p) {}
+
+
+    bool operator<(const SemanticVersion& other) const {
+        if (major != other.major) return major < other.major;
+        if (minor != other.minor) return minor < other.minor;
+        return patch < other.patch;
+    }
+    bool operator==(const SemanticVersion& other) const {
+        return major == other.major && minor == other.minor && patch == other.patch;
+    }
+};
+
+std::ostream& operator<<(std::ostream& os, const SemanticVersion& sv) {
+    os << sv.major << "." << sv.minor << "." << sv.patch;
+    return os;
+}
+
+void custom_version_example() {
+    std::cout << "\n--- Example with Custom Version Type (SemanticVersion) ---" << std::endl;
+    cpp_collections::ValueVersionedMap<std::string, std::string, SemanticVersion> app_settings;
+
+    app_settings.put("feature_flag_x", "enabled", {1, 0, 0});
+    app_settings.put("feature_flag_x", "disabled_buggy", {1, 1, 0});
+    app_settings.put("feature_flag_x", "enabled_fixed", {1, 1, 5});
+    app_settings.put("api_endpoint", "/v1/api", {1, 0, 0});
+    app_settings.put("api_endpoint", "/v2/api", {2, 0, 0});
+
+    std::cout << "Latest 'feature_flag_x': " << app_settings.get_latest("feature_flag_x") << std::endl;
+    std::cout << "'feature_flag_x' at version {1,0,5}: " << app_settings.get("feature_flag_x", {1,0,5}) << std::endl;
+    std::cout << "'feature_flag_x' at version {1,1,2} (should be 'disabled_buggy' from 1.1.0): "
+              << app_settings.get("feature_flag_x", {1,1,2}) << std::endl;
+    std::cout << "'api_endpoint' at version {1,5,0} (should be '/v1/api' from 1.0.0): "
+              << app_settings.get("api_endpoint", {1,5,0}) << std::endl;
+    std::cout << "'api_endpoint' at version {0,9,0} (should be not found): "
+              << app_settings.get("api_endpoint", {0,9,0}) << std::endl;
+
+    // No return 0 here, it's a void function
+}
+
 
 int main() {
     // Create a ValueVersionedMap
@@ -120,11 +167,7 @@ int main() {
     config_map.remove_version("database_url", 100);
     std::cout << "'database_url' at version 100 after removal: " << config_map.get_exact("database_url", 100) << std::endl;
     std::cout << "'database_url' at version 150 after removal (should pick up next available or none): "
-              << config_map.get("database_url", 150) << std::endl; // Should be nullopt as 100 was base
-                                                                  // Oh, wait, if 200 exists, it should pick that up if 150 < 200.
-                                                                  // The logic is correct: get(key, version) finds version <= requested.
-                                                                  // If 100 is removed, upper_bound(150) might be 200. prev(200) is what?
-                                                                  // If only {200:"v2", 220:"v3"} left. get("db", 150) -> upper_bound(150) is it_200. prev(it_200) is not valid. -> nullopt. Correct.
+              << config_map.get("database_url", 150) << std::endl;
 
     std::cout << "Removing key 'max_connections'..." << std::endl;
     config_map.remove_key("max_connections");
@@ -137,51 +180,7 @@ int main() {
     std::cout << "Map empty after clear? " << (config_map.empty() ? "Yes" : "No") << std::endl;
     std::cout << "Size after clear: " << config_map.size() << std::endl;
 
-
-    // Example with custom version type (e.g. struct)
-    struct SemanticVersion {
-        int major;
-        int minor;
-        int patch;
-
-        bool operator<(const SemanticVersion& other) const {
-            if (major != other.major) return major < other.major;
-            if (minor != other.minor) return minor < other.minor;
-            return patch < other.patch;
-        }
-        // Required for std::map if used as key without custom comparator,
-        // and for std::hash if used in unordered_map key.
-        // Not strictly needed for ValueVersionedMap's VersionT if CompareVersions is provided and works.
-        bool operator==(const SemanticVersion& other) const {
-            return major == other.major && minor == other.minor && patch == other.patch;
-        }
-    };
-    // Need a hash for SemanticVersion if it were a Key in unordered_map
-    // For VersionT, only CompareVersions is strictly needed by ValueVersionedMap's internal std::map
-    // Let's make it printable for the example
-    std::ostream& operator<<(std::ostream& os, const SemanticVersion& sv) {
-        os << sv.major << "." << sv.minor << "." << sv.patch;
-        return os;
-    }
-
-    std::cout << "\n--- Example with Custom Version Type (SemanticVersion) ---" << std::endl;
-    cpp_collections::ValueVersionedMap<std::string, std::string, SemanticVersion> app_settings;
-
-    app_settings.put("feature_flag_x", "enabled", {1, 0, 0});
-    app_settings.put("feature_flag_x", "disabled_buggy", {1, 1, 0});
-    app_settings.put("feature_flag_x", "enabled_fixed", {1, 1, 5});
-    app_settings.put("api_endpoint", "/v1/api", {1, 0, 0});
-    app_settings.put("api_endpoint", "/v2/api", {2, 0, 0});
-
-    std::cout << "Latest 'feature_flag_x': " << app_settings.get_latest("feature_flag_x") << std::endl;
-    std::cout << "'feature_flag_x' at version {1,0,5}: " << app_settings.get("feature_flag_x", {1,0,5}) << std::endl;
-    std::cout << "'feature_flag_x' at version {1,1,2} (should be 'disabled_buggy' from 1.1.0): "
-              << app_settings.get("feature_flag_x", {1,1,2}) << std::endl;
-    std::cout << "'api_endpoint' at version {1,5,0} (should be '/v1/api' from 1.0.0): "
-              << app_settings.get("api_endpoint", {1,5,0}) << std::endl;
-    std::cout << "'api_endpoint' at version {0,9,0} (should be not found): "
-              << app_settings.get("api_endpoint", {0,9,0}) << std::endl;
-
+    custom_version_example(); // Call the function that uses SemanticVersion
 
     return 0;
 }
