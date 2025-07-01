@@ -84,6 +84,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ThreadSafeCounterLib # Added for thread_safe_counter_test
         WeightedRandomListLib # Added for weighted_random_list_test
         SmallVectorLib       # Added for test_small_vector
+        MagnitudeMapLib      # Added for magnitude_map_test
     )
 
     # Specific configurations for certain tests
