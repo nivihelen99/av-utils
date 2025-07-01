@@ -185,25 +185,28 @@ void test_find_within_magnitude_int_keys() {
     map_limits.insert(std::numeric_limits<int>::max() - 10, 4);
     map_limits.insert(std::numeric_limits<int>::max(), 5);
 
-    result = map_limits.find_within_magnitude(std::numeric_limits<int>::min() + 5, 6);
+    std::vector<std::pair<int, int>> result_int_val;
+    std::vector<std::pair<int, int>> expected_int_val;
+
+    result_int_val = map_limits.find_within_magnitude(std::numeric_limits<int>::min() + 5, 6);
     // Range: [min, min+11] -> expecting {min,1}, {min+10,2}
-    expected = {{std::numeric_limits<int>::min(), 1}, {std::numeric_limits<int>::min() + 10, 2}};
-    assert(compare_pair_vectors(result, expected));
+    expected_int_val = {{std::numeric_limits<int>::min(), 1}, {std::numeric_limits<int>::min() + 10, 2}};
+    assert(compare_pair_vectors(result_int_val, expected_int_val));
 
-    result = map_limits.find_within_magnitude(std::numeric_limits<int>::max() - 5, 6);
+    result_int_val = map_limits.find_within_magnitude(std::numeric_limits<int>::max() - 5, 6);
     // Range: [max-11, max] -> expecting {max-10,4}, {max,5}
-    expected = {{std::numeric_limits<int>::max() - 10, 4}, {std::numeric_limits<int>::max(), 5}};
-    assert(compare_pair_vectors(result, expected));
+    expected_int_val = {{std::numeric_limits<int>::max() - 10, 4}, {std::numeric_limits<int>::max(), 5}};
+    assert(compare_pair_vectors(result_int_val, expected_int_val));
 
-    result = map_limits.find_within_magnitude(0, std::numeric_limits<int>::max()); // Huge magnitude
-    expected = {
+    result_int_val = map_limits.find_within_magnitude(0, std::numeric_limits<int>::max()); // Huge magnitude
+    expected_int_val = {
         {std::numeric_limits<int>::min(), 1},
         {std::numeric_limits<int>::min() + 10, 2},
         {0, 3},
         {std::numeric_limits<int>::max() - 10, 4},
         {std::numeric_limits<int>::max(), 5}
     };
-    assert(compare_pair_vectors(result, expected));
+    assert(compare_pair_vectors(result_int_val, expected_int_val));
 
 
     std::cout << "Find Within Magnitude (Int Keys) Test Passed!" << std::endl;
