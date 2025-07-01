@@ -202,6 +202,10 @@ target_include_directories(ThreadSafeCacheLib INTERFACE ${CMAKE_CURRENT_SOURCE_D
 add_library(SmallVectorLib INTERFACE)
 target_include_directories(SmallVectorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define MagnitudeMapLib as an interface library (header-only)
+add_library(MagnitudeMapLib INTERFACE)
+target_include_directories(MagnitudeMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -276,6 +280,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ThreadSafeCounterLib # Added for thread_safe_counter_example
         ThreadSafeCacheLib   # Added for thread_safe_cache_example
         SmallVectorLib       # Added for small_vector_example
+        MagnitudeMapLib      # Added for magnitude_map_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
