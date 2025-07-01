@@ -48,13 +48,15 @@ int main() {
     };
     cpp_collections::FrozenCounter<char> fc2(char_counts_vec.begin(), char_counts_vec.end());
     print_frozen_counter(fc2, "fc2 (from vector)");
-    // Expected: a: 4, c: 4. b ignored.
-    // Total unique: 2, Sum of counts: 8
+    // Input: {'a', 1}, {'b', 2}, {'a', 3}, {'c', 4}, {'b', -1}
+    // Logic: only positive counts are added. {'b', -1} is ignored.
+    // Expected: a: (1+3)=4, b: 2, c: 4.
+    // Total unique: 3, Sum of counts: 4+2+4 = 10
     assert(fc2.count('a') == 4);
-    assert(fc2.count('b') == 0);
+    assert(fc2.count('b') == 2); // Corrected assertion
     assert(fc2.count('c') == 4);
-    assert(fc2.size() == 2);
-    assert(fc2.total() == 8);
+    assert(fc2.size() == 3);     // Corrected assertion
+    assert(fc2.total() == 10);    // Corrected assertion
 
     // 3. Construction from an existing Counter (global namespace)
     ::Counter<int> mutable_counter; // Use global Counter
