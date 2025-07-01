@@ -199,14 +199,19 @@ void test_find_within_magnitude_int_keys() {
     assert(compare_pair_vectors(result_int_val, expected_int_val));
 
     result_int_val = map_limits.find_within_magnitude(0, std::numeric_limits<int>::max()); // Huge magnitude
+    // For query_key = 0, magnitude = MAX_INT:
+    // abs(MIN_INT - 0) = abs(MIN_INT). If MIN_INT = -MAX_INT-1, then abs(MIN_INT) = MAX_INT+1.
+    // MAX_INT+1 > MAX_INT, so MIN_INT should be excluded.
+    // abs(MIN_INT+10 - 0) = abs(MIN_INT+10). If MIN_INT = -MAX_INT-1, this is MAX_INT+1-10 = MAX_INT-9.
+    // MAX_INT-9 <= MAX_INT. So MIN_INT+10 is included.
     expected_int_val = {
-        {std::numeric_limits<int>::min(), 1},
+        // {std::numeric_limits<int>::min(), 1}, // This should be excluded
         {std::numeric_limits<int>::min() + 10, 2},
         {0, 3},
         {std::numeric_limits<int>::max() - 10, 4},
         {std::numeric_limits<int>::max(), 5}
     };
-    assert(compare_pair_vectors(result_int_val, expected_int_val));
+    assert(compare_pair_vectors(result_int_val, expected_int_val)); // This was around line 209
 
 
     std::cout << "Find Within Magnitude (Int Keys) Test Passed!" << std::endl;
