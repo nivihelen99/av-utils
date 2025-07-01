@@ -671,36 +671,49 @@ private:
     }
 
     template<typename Iter>
-    void assign_common(Iter first, Iter last, size_type count, bool pocca_alloc_changed) {
-        if (count > capacity_) {
-            if (!pocca_alloc_changed && !is_inline_runtime()) {
-                 AllocTraits::deallocate(alloc_, current_data(), capacity_);
+    void assign_common(Iter first, Iter last, size_type count, bool pocca_alloc_changed_in_caller) {
+        if (count > capacity_) { // Path 1: Reallocation needed
+            // 1. Destroy existing elements IN THE CURRENT BUFFER.
+            //    This must happen before the buffer is potentially deallocated or repurposed.
+            //    size_ still holds the old size here.
+            destroy_elements_in_buffer(current_data(), size_);
+
+            // 2. Deallocate old buffer if it was heap and its deallocation wasn't handled by the caller (e.g. via POCCA)
+            if (!is_inline_runtime() && !pocca_alloc_changed_in_caller) {
+                AllocTraits::deallocate(alloc_, current_data(), capacity_);
+                // After this, capacity_ is conceptually N_this, or rather, the state is "no heap buffer".
+            }
+            // Note: if pocca_alloc_changed_in_caller was true, clear_and_deallocate_all() was called by operator=,
+            // which already destroyed elements and deallocated heap. So, the above is effectively skipped or harmless.
+            // In all cases, *this is now considered to have no valid elements or specific heap buffer from before.
+
+            // 3. Allocate new storage based on 'count'
+            if (count > N_this) {
+                allocate_and_set_heap(count); // Allocates and sets storage_.heap_ptr, capacity_
+            } else {
+                set_inline_active(); // Uses inline buffer, sets capacity_ = N_this
             }
 
-            if (count > N_this) allocate_and_set_heap(count);
-            else set_inline_active();
-            // size_ is 0 here after potential deallocation and before construction
-            size_ = 0; // Ensure size is 0 before constructing new range
+            // 4. Construct new elements. size_ should be 0 before this.
+            size_ = 0; // Set size to 0 before construction
             construct_range(current_data(), first, last);
-            size_ = count;
-        } else {
-            // Optimized assign: reuse existing elements if possible, then destroy/construct tail.
-            // Simplified version: clear and reconstruct
-            size_type old_size = size_;
+            size_ = count; // Set new size
+
+        } else { // Path 2: Enough capacity, no reallocation.
+            // Strategy: Destroy ALL old elements currently in the vector, then construct ALL new ones.
+            // This matches std::vector::assign behavior and the test's expectation.
             pointer d = current_data();
-            if (count < old_size) { // Shrinking
-                destroy_elements_in_buffer(d + count, old_size - count);
-            }
-            // Copy/move assign common part
-            size_type common_len = std::min(count, old_size);
-            Iter current_it = first;
-            for(size_type i = 0; i < common_len; ++i, ++current_it) {
-                d[i] = *current_it; // Requires T to be assignable
-            }
-            if (count > old_size) { // Growing
-                construct_range(d + old_size, current_it, last);
-            }
-            size_ = count;
+            size_type old_size = size_;
+
+            destroy_elements_in_buffer(d, old_size); // Destroy all 'old_size' elements in place
+
+            // The memory itself (pointed to by d) is still valid and has enough capacity.
+            // Construct the new 'count' elements into the start of the buffer.
+            // construct_range needs size to be conceptually 0 for its internal logic if it relies on it,
+            // but it just writes to `dest`. So, direct construction is fine.
+            // Size is effectively 0 after destruction for the purpose of new construction.
+            construct_range(d, first, last);
+            size_ = count; // Update size to the new count
         }
     }
 
