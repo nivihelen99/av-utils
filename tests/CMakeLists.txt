@@ -85,6 +85,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         WeightedRandomListLib # Added for weighted_random_list_test
         SmallVectorLib       # Added for test_small_vector
         MagnitudeMapLib      # Added for magnitude_map_test
+        TopNByRatioSelectorLib
     )
 
     # Specific configurations for certain tests
