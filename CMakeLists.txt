@@ -214,6 +214,10 @@ target_include_directories(TopNByRatioSelectorLib INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(IdPoolLib INTERFACE)
 target_include_directories(IdPoolLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define FlatMapLib as an interface library (header-only)
+add_library(FlatMapLib INTERFACE)
+target_include_directories(FlatMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -291,6 +295,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         MagnitudeMapLib      # Added for magnitude_map_example
         TopNByRatioSelectorLib
         IdPoolLib            # Added for id_pool_example
+        FlatMapLib           # Added for flat_map_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

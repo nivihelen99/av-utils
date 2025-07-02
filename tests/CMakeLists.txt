@@ -87,6 +87,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         MagnitudeMapLib      # Added for magnitude_map_test
         TopNByRatioSelectorLib
         IdPoolLib            # Added for id_pool_test
+        FlatMapLib           # Added for flat_map_test
     )
 
     # Specific configurations for certain tests
