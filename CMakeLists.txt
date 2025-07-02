@@ -210,6 +210,10 @@ target_include_directories(MagnitudeMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(TopNByRatioSelectorLib INTERFACE)
 target_include_directories(TopNByRatioSelectorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define IdPoolLib as an interface library (header-only)
+add_library(IdPoolLib INTERFACE)
+target_include_directories(IdPoolLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -286,6 +290,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         SmallVectorLib       # Added for small_vector_example
         MagnitudeMapLib      # Added for magnitude_map_example
         TopNByRatioSelectorLib
+        IdPoolLib            # Added for id_pool_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

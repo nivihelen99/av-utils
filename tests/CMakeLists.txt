@@ -86,6 +86,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SmallVectorLib       # Added for test_small_vector
         MagnitudeMapLib      # Added for magnitude_map_test
         TopNByRatioSelectorLib
+        IdPoolLib            # Added for id_pool_test
     )
 
     # Specific configurations for certain tests
