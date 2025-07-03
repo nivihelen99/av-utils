@@ -86,8 +86,7 @@ void test_set_and_get_string() {
     assert(std::string(*tu.get_if<const char*>()) == "literal");
     assert(tu.get_if<std::string>() == nullptr);
 }
-// Specialization for const char*
-template<> struct type_name_trait<const char*> { static constexpr std::string_view tag = "const char*"; };
+// Specialization for const char* is now in tagged_union.h
 
 
 void test_set_and_get_custom_struct() {

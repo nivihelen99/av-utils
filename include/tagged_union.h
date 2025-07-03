@@ -173,16 +173,39 @@ public:
 // Default type_name_trait (can be specialized by users)
 template<typename T>
 struct type_name_trait {
-    static constexpr std::string_view get_name() {
+    // get_name() cannot be fully constexpr if it uses typeid::name()
+    static std::string_view get_name_impl() {
         if constexpr (std::is_same_v<T, int>) return "int";
         else if constexpr (std::is_same_v<T, double>) return "double";
         else if constexpr (std::is_same_v<T, float>) return "float";
         else if constexpr (std::is_same_v<T, bool>) return "bool";
         else if constexpr (std::is_same_v<T, char>) return "char";
         else if constexpr (std::is_same_v<T, std::string>) return "std::string";
-        else return typeid(T).name(); // Fallback to mangled name
+        // typeid(T).name() is not constexpr
+        // For a truly constexpr fallback, one might need a library for demangling
+        // or accept mangled names when no specialization is provided.
+        // For now, if used in a constexpr context, this branch must not be taken.
+        // However, 'tag' itself is now not constexpr to allow typeid().name().
+        return typeid(T).name();
     }
-    static constexpr std::string_view tag = get_name();
+    // tag is no longer constexpr to allow typeid().name() in get_name_impl()
+    static const std::string_view tag = get_name_impl();
 };
+
+// Example specializations for common types
+template<>
+struct type_name_trait<const char*> {
+    static const std::string_view tag;
+};
+// Define the static member out-of-line or make it inline C++17
+inline const std::string_view type_name_trait<const char*>::tag = "const char*";
+
+// It's often simpler to just provide the value directly in the specialization
+// if it's a known literal and avoid get_name_impl for specializations.
+template<>
+struct type_name_trait<std::nullptr_t> { // Example for another type
+    static constexpr std::string_view tag = "nullptr_t";
+};
+
 
 #endif // TAGGED_UNION_H
