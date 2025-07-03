@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(HeapQueueProject CXX)
 
-# Set C++ standard to 17 for TaggedUnion compatibility
-set(CMAKE_CXX_STANDARD 17)
+# Set C++ standard to 20 for the project
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF) # Generally good practice
 
@@ -61,7 +61,6 @@ target_include_directories(UniqueQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 
 add_library(JsonFieldMask INTERFACE)
 target_include_directories(JsonFieldMask INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-# Assuming nlohmann_json::nlohmann_json is made available later via FetchContent as in original
 target_link_libraries(JsonFieldMask INTERFACE nlohmann_json::nlohmann_json)
 
 add_library(DeltaMapLib INTERFACE)
@@ -181,6 +180,10 @@ target_include_directories(FlatMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 # --- TaggedUnion BEGIN ---
 add_library(TaggedUnionLib INTERFACE)
 target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+# For an INTERFACE library, CXX_STANDARD is typically set as a usage requirement
+# for its consumers, rather than a direct property of the INTERFACE library itself.
+# However, to ensure TaggedUnion's own header is C++17 compliant and to guide consumers:
+target_compile_features(TaggedUnionLib INTERFACE cxx_std_17)
 # --- TaggedUnion END ---
 
 
@@ -251,7 +254,15 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         TaggedUnionLib # Added TaggedUnionLib here
     )
 
-    if(EXECUTABLE_NAME STREQUAL "partial_example")
+    # Set C++17 for tagged_union_example specifically
+    if(EXECUTABLE_NAME STREQUAL "tagged_union_example")
+        set_target_properties(${EXECUTABLE_NAME} PROPERTIES
+            CXX_STANDARD 17
+            CXX_STANDARD_REQUIRED YES
+            CXX_EXTENSIONS NO)
+    endif()
+
+    if(EXECUTABLE_NAME STREQUAL "partial_example") # Keep existing logic for other examples
         target_compile_definitions(${EXECUTABLE_NAME} PRIVATE FUNCTOOLS_PARTIAL_EXAMPLES)
     endif()
 endforeach()
@@ -287,19 +298,19 @@ message(STATUS "googletest FetchContent complete.")
 enable_testing()
 
 # --- TaggedUnion Test BEGIN ---
-# Assuming tests/tagged_union_test.cpp exists
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/tagged_union_test.cpp")
     add_executable(tagged_union_tests tests/tagged_union_test.cpp)
-    target_link_libraries(tagged_union_tests PRIVATE TaggedUnionLib gtest_main) # Link with gtest
+    set_target_properties(tagged_union_tests PROPERTIES
+        CXX_STANDARD 17
+        CXX_STANDARD_REQUIRED YES
+        CXX_EXTENSIONS NO)
+    target_link_libraries(tagged_union_tests PRIVATE TaggedUnionLib gtest_main)
     add_test(NAME TaggedUnionCoreTests COMMAND tagged_union_tests)
 else()
     message(WARNING "TaggedUnion test file not found: ${CMAKE_CURRENT_SOURCE_DIR}/tests/tagged_union_test.cpp")
 endif()
 # --- TaggedUnion Test END ---
 
-add_subdirectory(tests) # This likely contains other tests for av-utils
+add_subdirectory(tests)
 
 message(STATUS "Google Test and nlohmann/json setup complete. Tests will be added next.")
-# Note: The message "Tests will be added next" might be slightly confusing now,
-# as TaggedUnion's test is added before add_subdirectory(tests),
-# but other tests are added within that subdirectory.
