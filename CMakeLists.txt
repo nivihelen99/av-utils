@@ -242,6 +242,10 @@ target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 add_library(ChronoRingLib INTERFACE)
 target_include_directories(ChronoRingLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define TaggedPtrLib as an interface library (header-only)
+add_library(TaggedPtrLib INTERFACE)
+target_include_directories(TaggedPtrLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -325,6 +329,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         OneOfLib             # Added for one_of_example
         ChronoRingLib        # Added for chrono_ring_example
         AsyncValueLib
+        TaggedPtrLib         # Added for tagged_ptr_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
