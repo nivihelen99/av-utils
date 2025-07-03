@@ -70,22 +70,22 @@ void test_push_and_overwrite() {
     assert(ring.size() == 3);
 
     // Get all entries to check order (should be oldest to newest)
-    auto entries1 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries1 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries1, {10, 20, 30}));
 
     ring.push(40); // Overwrites 10 -> {20, 30, 40}
     assert(ring.size() == 3);
-    auto entries2 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries2 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries2, {20, 30, 40}));
 
     ring.push(50); // Overwrites 20 -> {30, 40, 50}
     assert(ring.size() == 3);
-    auto entries3 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries3 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries3, {30, 40, 50}));
 
     ring.push(60); // Overwrites 30 -> {40, 50, 60}
     assert(ring.size() == 3);
-    auto entries4 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries4 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries4, {40, 50, 60}));
 
     std::cout << "  Passed." << std::endl;
@@ -108,7 +108,7 @@ void test_timestamps() {
     auto specific_time = TestRingInt::Clock::now() + 1h; // A distinct future time
     ring.push_at(3, specific_time);
 
-    auto entries = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(entries.size() == 3);
 
     // Check timestamps are roughly correct and ordered for first two
@@ -138,7 +138,7 @@ void test_clear() {
     assert(ring.size() == 0);
     assert(ring.empty());
 
-    auto entries = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(entries.empty());
 
     ring.push(3); // Should work after clear
@@ -157,16 +157,16 @@ void test_recent_queries() {
     auto time_0 = TestRingInt::Clock::now();
     ring.push_at(10, time_0); // 10 @ t=0ms
     std::this_thread::sleep_for(10ms);
-    auto time_10 = std::chrono::steady_clock::now();
+    auto time_10 = TestRingInt::Clock::now();
     ring.push_at(20, time_10); // 20 @ t=10ms
     std::this_thread::sleep_for(10ms);
-    auto time_20 = std::chrono::steady_clock::now();
+    auto time_20 = TestRingInt::Clock::now();
     ring.push_at(30, time_20); // 30 @ t=20ms
     std::this_thread::sleep_for(10ms);
-    auto time_30 = std::chrono::steady_clock::now();
+    auto time_30 = TestRingInt::Clock::now();
     ring.push_at(40, time_30); // 40 @ t=30ms
     std::this_thread::sleep_for(10ms);
-    auto time_40 = std::chrono::steady_clock::now();
+    auto time_40 = TestRingInt::Clock::now();
     ring.push_at(50, time_40); // 50 @ t=40ms (ring full)
 
     // At this point, "now" is roughly time_40 + a bit (let's say t=40ms for simplicity of reasoning about duration)
@@ -219,7 +219,7 @@ void test_expire_older_than() {
     // Expire items older than t2 (exclusive t2, so 1 and 2 should go)
     ring.expire_older_than(t2);
     assert(ring.size() == 3); // Should keep 3,4,5
-    auto entries1 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries1 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries1, {3,4,5}));
     assert(entries1[0].timestamp == t2);
     assert(entries1[1].timestamp == t3);
@@ -228,7 +228,7 @@ void test_expire_older_than() {
     // Expire items older than t4 (3 and 4 should go)
     ring.expire_older_than(t4);
     assert(ring.size() == 1); // Should keep 5
-    auto entries2 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries2 = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries2, {5}));
     assert(entries2[0].timestamp == t4);
 
@@ -243,7 +243,7 @@ void test_expire_older_than() {
     ring2.push_at(20, t1); // {10,20}
     ring2.expire_older_than(t1); // Expire 10
     assert(ring2.size() == 1);
-    auto entries3 = ring2.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries3 = ring2.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries3, {20}));
     assert(entries3[0].timestamp == t1);
 
@@ -253,7 +253,7 @@ void test_expire_older_than() {
     ring3.push_at(200,t1);
     ring3.expire_older_than(t0); // Should not expire 100 as cutoff is exclusive for <
     assert(ring3.size() == 2);
-    auto entries4 = ring3.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
+    auto entries4 = ring3.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
     assert(compare_entry_values<int>(entries4, {100,200}));
 
 
