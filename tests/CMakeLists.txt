@@ -94,6 +94,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ChronoRingLib        # Added for chrono_ring_test
         TaggedPtrLib         # Added for tagged_ptr_test
         PredicateCacheLib    # Added for predicate_cache_test
+        ShadowCopyLib        # Added for shadow_copy_test
     )
 
     # Specific configurations for certain tests
