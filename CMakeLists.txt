@@ -231,6 +231,10 @@ target_include_directories(OneOfLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 add_library(TaggedUnionLib INTERFACE)
 target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define ChronoRingLib as an interface library (header-only)
+add_library(ChronoRingLib INTERFACE)
+target_include_directories(ChronoRingLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -311,6 +315,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         FlatMapLib           # Added for flat_map_example
         ValueIndexMapLib     # Added for value_index_map_example
         OneOfLib             # Added for one_of_example
+        ChronoRingLib        # Added for chrono_ring_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

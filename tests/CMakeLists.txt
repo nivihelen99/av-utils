@@ -90,6 +90,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         FlatMapLib           # Added for flat_map_test
         ValueIndexMapLib     # Added for value_index_map_test
         OneOfLib             # Added for one_of_test
+        ChronoRingLib        # Added for chrono_ring_test
     )
 
     # Specific configurations for certain tests
