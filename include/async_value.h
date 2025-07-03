@@ -103,10 +103,12 @@ public:
         std::unique_lock<std::mutex> lock(m_mutex);
         if (m_ready.load(std::memory_order_acquire)) {
             // Value is already set, invoke callback immediately
-            // Unlock before calling to prevent potential deadlocks if callback tries to access AsyncValue
-            T value_copy = m_value.value(); // Copy value to avoid issues if 'this' is destroyed during callback
+            // Unlock before calling to prevent potential deadlocks if callback tries to access AsyncValue.
+            // We pass m_value.value() directly, which is const T&.
+            // The callback expects const T&, so no copy is needed, and this works for move-only types.
+            const T& value_ref = m_value.value();
             lock.unlock();
-            callback(value_copy);
+            callback(value_ref);
         } else {
             // Value not set yet, store callback
             m_callbacks.push_back(std::move(callback));
