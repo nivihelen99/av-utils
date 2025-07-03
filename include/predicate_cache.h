@@ -54,7 +54,6 @@ public:
         }
     }
 
-private:
     // Returns the cached result for the given object and predicate ID if it exists.
     // Otherwise, returns std::nullopt.
     // Throws std::out_of_range if the predicate ID is invalid.
@@ -94,39 +93,20 @@ private:
         auto it = cache_.find(obj);
         if (it != cache_.end()) {
             // Clear all std::optional<bool> values for this object
-            // One way is to fill with std::nullopt
-            // Or, more simply, assign a new empty (or correctly sized nullopt) vector
-            // For simplicity and to keep capacity if desired:
             for(auto& cached_val : it->second) {
                 cached_val.reset();
             }
-            // Alternative: it->second.assign(it->second.size(), std::nullopt);
-            // Alternative: it->second.clear(); // This would require evaluate to resize again
         }
     }
 
     // Clears all cached results for all objects and all predicates.
     // Registered predicates remain.
     void invalidate_all() {
-        // For each object in the cache
         for (auto& pair : cache_) {
-            // For each cached predicate result for that object
             for (auto& cached_val : pair.second) {
                 cached_val.reset(); // Set to std::nullopt
             }
         }
-        // A more aggressive approach would be cache_.clear(), but then evaluate
-        // would always reconstruct the inner vectors. The current approach
-        // keeps the inner vector structures if they exist.
-        // If the goal is to also release memory from empty inner vectors,
-        // cache_.clear() would be better. Given the requirements, just invalidating
-        // the *results* seems to be the primary goal.
-        // Let's go with cache_.clear() as it's simpler and likely expected.
-        // cache_.clear(); // This was considered.
-        // The current loop solution is more aligned with "clears all cached predicate results"
-        // rather than "removes all objects from cache tracking".
-        // If an object is then evaluated, its vector<optional<bool>> will be there.
-        // Let's stick to the requirement of invalidating results.
     }
 
     // Removes an object and all its cached results entirely from the cache.
