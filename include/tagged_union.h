@@ -32,7 +32,7 @@ private:
         const std::type_info& type() const noexcept override { return typeid(T_val); }
 
         std::string_view tag() const noexcept override {
-            return type_name_trait<T_val>::tag;
+            return type_name_trait<T_val>::tag(); // Call tag() as a method
         }
 
         void internal_accept_visitor_thunked(void* visitor_obj_ptr, void* thunk_func_ptr, bool is_const_context) override {
@@ -188,23 +188,19 @@ struct type_name_trait {
         // However, 'tag' itself is now not constexpr to allow typeid().name().
         return typeid(T).name();
     }
-    // tag is no longer constexpr to allow typeid().name() in get_name_impl()
-    static const std::string_view tag = get_name_impl();
+    // tag is now a static method to avoid in-class static const non-integral initialization issues
+    static std::string_view tag() { return get_name_impl(); }
 };
 
-// Example specializations for common types
+// Specializations for common types, tag is now a static method.
 template<>
 struct type_name_trait<const char*> {
-    static const std::string_view tag;
+    static constexpr std::string_view tag() { return "const char*"; }
 };
-// Define the static member out-of-line or make it inline C++17
-inline const std::string_view type_name_trait<const char*>::tag = "const char*";
 
-// It's often simpler to just provide the value directly in the specialization
-// if it's a known literal and avoid get_name_impl for specializations.
 template<>
-struct type_name_trait<std::nullptr_t> { // Example for another type
-    static constexpr std::string_view tag = "nullptr_t";
+struct type_name_trait<std::nullptr_t> {
+    static constexpr std::string_view tag() { return "nullptr_t"; }
 };
 
 
