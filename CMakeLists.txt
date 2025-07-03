@@ -222,8 +222,15 @@ target_include_directories(FlatMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 add_library(ValueIndexMapLib INTERFACE)
 target_include_directories(ValueIndexMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+
+# Define OneOfLib as an interface library (header-only)
+add_library(OneOfLib INTERFACE)
+target_include_directories(OneOfLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+
 add_library(TaggedUnionLib INTERFACE)
 target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -303,6 +310,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         IdPoolLib            # Added for id_pool_example
         FlatMapLib           # Added for flat_map_example
         ValueIndexMapLib     # Added for value_index_map_example
+        OneOfLib             # Added for one_of_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
