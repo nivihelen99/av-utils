@@ -9,6 +9,7 @@
 #include <stdexcept> // For get() if not ready
 #include <atomic>   // For ready flag
 #include <utility>  // For std::move
+#include <cassert>  // For assert()
 
 template<typename T>
 class AsyncValue {
