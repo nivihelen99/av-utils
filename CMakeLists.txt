@@ -231,6 +231,9 @@ target_include_directories(InvertedIndexLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 add_library(OneOfLib INTERFACE)
 target_include_directories(OneOfLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+add_library(AsyncValueLib INTERFACE)
+target_include_directories(AsyncValueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 add_library(TaggedUnionLib INTERFACE)
 target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -321,6 +324,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         InvertedIndexLib     # Added for inverted_index_example
         OneOfLib             # Added for one_of_example
         ChronoRingLib        # Added for chrono_ring_example
+        AsyncValueLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
