@@ -11,7 +11,7 @@ struct Point {
 // Provide a type name for Point
 template<>
 struct type_name_trait<Point> {
-    static constexpr std::string_view tag = "Point";
+    static constexpr std::string_view tag() { return "Point"; }
 };
 
 // Example event types
@@ -19,19 +19,19 @@ struct MouseClickEvent {
     int x, y;
     int button;
 };
-template<> struct type_name_trait<MouseClickEvent> { static constexpr std::string_view tag = "MouseClickEvent"; };
+template<> struct type_name_trait<MouseClickEvent> { static constexpr std::string_view tag() { return "MouseClickEvent"; } };
 
 struct KeyPressEvent {
     int key_code;
     char character;
 };
-template<> struct type_name_trait<KeyPressEvent> { static constexpr std::string_view tag = "KeyPressEvent"; };
+template<> struct type_name_trait<KeyPressEvent> { static constexpr std::string_view tag() { return "KeyPressEvent"; } };
 
 struct SystemMessageEvent {
     std::string message;
     int priority;
 };
-template<> struct type_name_trait<SystemMessageEvent> { static constexpr std::string_view tag = "SystemMessageEvent"; };
+template<> struct type_name_trait<SystemMessageEvent> { static constexpr std::string_view tag() { return "SystemMessageEvent"; } };
 
 
 // Function to process a generic event stored in TaggedUnion

@@ -23,13 +23,13 @@ struct MyStruct {
 // Specialization of type_name_trait for MyStruct for better tag name
 template<>
 struct type_name_trait<MyStruct> {
-    static constexpr std::string_view tag = "MyStruct";
+    static constexpr std::string_view tag() { return "MyStruct"; }
 };
 
 // Specialization for unique_ptr<int> for testing
 template<>
 struct type_name_trait<std::unique_ptr<int>> {
-    static constexpr std::string_view tag = "std::unique_ptr<int>";
+    static constexpr std::string_view tag() { return "std::unique_ptr<int>"; }
 };
 
 // Helper to print test names
@@ -50,14 +50,14 @@ void test_set_and_get_primitive() {
 
     tu.set(10);
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<int>::tag);
+    assert(tu.type_tag() == type_name_trait<int>::tag());
     assert(tu.get_if<int>() != nullptr);
     assert(*tu.get_if<int>() == 10);
     assert(tu.get_if<double>() == nullptr);
 
     tu.set(20.5);
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<double>::tag);
+    assert(tu.type_tag() == type_name_trait<double>::tag());
     assert(tu.get_if<double>() != nullptr);
     assert(*tu.get_if<double>() == 20.5);
     assert(tu.get_if<int>() == nullptr);
@@ -68,7 +68,7 @@ void test_set_and_get_string() {
     std::string s = "hello";
     tu.set(s); // lvalue
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<std::string>::tag);
+    assert(tu.type_tag() == type_name_trait<std::string>::tag());
     assert(tu.get_if<std::string>() != nullptr);
     assert(*tu.get_if<std::string>() == "hello");
 
@@ -81,7 +81,7 @@ void test_set_and_get_string() {
     // The tag will be for 'const char*' not 'std::string'
     // Add specialization for const char* if a specific name is desired.
     // For now, it will use typeid name.
-    assert(tu.type_tag() == type_name_trait<const char*>::tag);
+    assert(tu.type_tag() == type_name_trait<const char*>::tag());
     assert(tu.get_if<const char*>() != nullptr);
     assert(std::string(*tu.get_if<const char*>()) == "literal");
     assert(tu.get_if<std::string>() == nullptr);
@@ -95,7 +95,7 @@ void test_set_and_get_custom_struct() {
     tu.set(s); // lvalue copy
 
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<MyStruct>::tag);
+    assert(tu.type_tag() == type_name_trait<MyStruct>::tag());
     const MyStruct* retrieved_s = tu.get_if<MyStruct>();
     assert(retrieved_s != nullptr);
     assert(retrieved_s->id == 1);
@@ -106,7 +106,7 @@ void test_set_and_get_custom_struct() {
     // Test setting with rvalue custom struct
     tu.set(MyStruct{2, "rvalue_struct"});
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<MyStruct>::tag);
+    assert(tu.type_tag() == type_name_trait<MyStruct>::tag());
     const MyStruct* retrieved_s_rval = tu.get_if<MyStruct>();
     assert(retrieved_s_rval != nullptr);
     assert(retrieved_s_rval->id == 2);
@@ -129,13 +129,13 @@ void test_replacement() {
     TaggedUnion tu;
     tu.set(50);
     assert(*tu.get_if<int>() == 50);
-    assert(tu.type_tag() == type_name_trait<int>::tag);
+    assert(tu.type_tag() == type_name_trait<int>::tag());
 
     tu.set(std::string("replaced"));
     assert(tu.get_if<int>() == nullptr);
     assert(tu.get_if<std::string>() != nullptr);
     assert(*tu.get_if<std::string>() == "replaced");
-    assert(tu.type_tag() == type_name_trait<std::string>::tag);
+    assert(tu.type_tag() == type_name_trait<std::string>::tag());
 }
 
 void test_get_if_const() {
@@ -144,7 +144,7 @@ void test_get_if_const() {
 
     const TaggedUnion& ctu = tu;
     assert(ctu.has_value());
-    assert(ctu.type_tag() == type_name_trait<int>::tag);
+    assert(ctu.type_tag() == type_name_trait<int>::tag());
     const int* val = ctu.get_if<int>();
     assert(val != nullptr);
     assert(*val == 123);
@@ -170,7 +170,7 @@ void test_move_constructor() {
 
     // tu2 should have the data
     assert(tu2.has_value());
-    assert(tu2.type_tag() == type_name_trait<MyStruct>::tag);
+    assert(tu2.type_tag() == type_name_trait<MyStruct>::tag());
     assert(tu2.get_if<MyStruct>() != nullptr);
     assert(tu2.get_if<MyStruct>()->id == 10);
     assert(tu2.get_if<MyStruct>()->name == "move_test");
@@ -197,7 +197,7 @@ void test_move_assignment() {
 
     // tu2 should have tu1's original data
     assert(tu2.has_value());
-    assert(tu2.type_tag() == type_name_trait<MyStruct>::tag);
+    assert(tu2.type_tag() == type_name_trait<MyStruct>::tag());
     assert(tu2.get_if<MyStruct>() != nullptr);
     assert(tu2.get_if<MyStruct>()->id == 20);
     assert(tu2.get_if<MyStruct>()->name == "move_assign_test");
@@ -252,7 +252,7 @@ void test_self_move_assignment() {
     #endif
 
     assert(tu.has_value()); // Should still have value
-    assert(tu.type_tag() == type_name_trait<MyStruct>::tag);
+    assert(tu.type_tag() == type_name_trait<MyStruct>::tag());
     assert(tu.get_if<MyStruct>() != nullptr);
     // The address of the contained object might change or might not,
     // but its content should be the same.
