@@ -98,14 +98,14 @@ void test_timestamps() {
     using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
     TestRingInt ring(3);
 
-    auto t_start = TestRingInt::Clock::now();
+    auto t_start = std::chrono::steady_clock::now();
     ring.push(1);
     std::this_thread::sleep_for(5ms);
     ring.push(2);
-    auto t_end_push = TestRingInt::Clock::now();
+    auto t_end_push = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(5ms);
 
-    auto specific_time = TestRingInt::Clock::now() + 1h; // A distinct future time
+    auto specific_time = std::chrono::steady_clock::now() + 1h; // A distinct future time
     ring.push_at(3, specific_time);
 
     auto entries = ring.entries_between(TestRingInt::TimePoint::min(), TestRingInt::TimePoint::max());
@@ -154,19 +154,19 @@ void test_recent_queries() {
     using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
     TestRingInt ring(5);
 
-    auto time_0 = TestRingInt::Clock::now();
+    auto time_0 = std::chrono::steady_clock::now();
     ring.push_at(10, time_0); // 10 @ t=0ms
     std::this_thread::sleep_for(10ms);
-    auto time_10 = TestRingInt::Clock::now();
+    auto time_10 = std::chrono::steady_clock::now();
     ring.push_at(20, time_10); // 20 @ t=10ms
     std::this_thread::sleep_for(10ms);
-    auto time_20 = TestRingInt::Clock::now();
+    auto time_20 = std::chrono::steady_clock::now();
     ring.push_at(30, time_20); // 30 @ t=20ms
     std::this_thread::sleep_for(10ms);
-    auto time_30 = TestRingInt::Clock::now();
+    auto time_30 = std::chrono::steady_clock::now();
     ring.push_at(40, time_30); // 40 @ t=30ms
     std::this_thread::sleep_for(10ms);
-    auto time_40 = TestRingInt::Clock::now();
+    auto time_40 = std::chrono::steady_clock::now();
     ring.push_at(50, time_40); // 50 @ t=40ms (ring full)
 
     // At this point, "now" is roughly time_40 + a bit (let's say t=40ms for simplicity of reasoning about duration)
@@ -205,7 +205,7 @@ void test_expire_older_than() {
     using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
     TestRingInt ring(5);
 
-    auto t0 = TestRingInt::Clock::now();
+    auto t0 = std::chrono::steady_clock::now();
     ring.push_at(1, t0);
     auto t1 = t0 + std::chrono::milliseconds(10);
     ring.push_at(2, t1);
@@ -267,7 +267,7 @@ void test_time_window_queries_with_wrap() {
     TestRingInt ring(3); // Capacity 3
 
     // Timestamps for precise control
-    auto base_time = TestRingInt::Clock::now();
+    auto base_time = std::chrono::steady_clock::now();
     auto t0 = base_time;
     auto t1 = base_time + std::chrono::milliseconds(10);
     auto t2 = base_time + std::chrono::milliseconds(20);
