@@ -28,49 +28,49 @@ This section provides an overview of some of the key categories and components a
 ### Core Data Structures
 This category includes fundamental and advanced data structures for efficient data storage and retrieval.
 It features:
-*   **Tree and List Structures:** `skiplist.h`, `trie.h`, `fenwick_tree.h`, `interval_tree.h` (maps intervals to values), `treap.h` (randomized binary search tree), `segment_tree.h` ([Segment Tree](docs/README_SegmentTree.md) - for range queries and point updates).
-*   **Associative Containers:** `bimap.h` (bi-directional map), `dict.h` (Python-style dictionary), `const_dict.h` (compile-time constant dictionary), `flatMap.h` (sorted vector-based map), `chain_map.h` (view over multiple maps), `delta_map.h` (tracks changes to a map).
-*   **Set-like Structures:** `ordered_set.h` (preserves insertion order), `bounded_set.h` (fixed-capacity with FIFO eviction), `disjoint_set_union.h` (DSU, for tracking disjoint sets).
-*   **Specialized Arrays and Storage:** `persist_array.h` (memory-mapped array), `SlotMap.h` (stable keyed storage with O(1) operations).
-*   **Queues:** `heap_queue.h` (priority queue), `PriorityQueueMap.h` ([PriorityQueueMap / Indexed Priority Queue](docs/README_PriorityQueueMap.md) - priority queue with key-based updates and removals), `round_robin_queue.h`, `unique_queue.h` (elements are unique), `spsc.h` (single-producer, single-consumer), `deque.h` ([Deque](docs/README_Deque.md) - double-ended queue).
-*   **Specialized Maps:** `interval_map.h` (maps values to intervals, distinct from `interval_tree.h`), `enum_map.h` (map keyed by enum values).
-*   **Sorted Lists:** `sorted_list.h` (elements kept sorted).
-*   **Probabilistic Data Structures:** `bloom_filter.h` (space-efficient probabilistic set membership).
+*   **Tree and List Structures:** [BTree](docs/README_btree.md), `fenwick_tree.h` ([FenwickTree](docs/README_fenwick_tree.md)), [Graph](docs/README_Graph.md), `interval_tree.h`, `radix_tree.h`, [RedBlackTree](docs/README_RedBlackTree.md), [ScapegoatTree](docs/README_ScapegoatTree.md), `segment_tree.h` ([SegmentTree](docs/README_SegmentTree.md)), `SkipList.h` ([SkipList](docs/README_SkipList.md)), `treap.h`, `trie.h`.
+*   **Associative Containers:** `bimap.h` ([Bimap](docs/README_bimap.md)), `chain_map.h` ([ChainMap](docs/README_chain_map.md)), `const_dict.h` ([ConstDict](docs/README_const_dict.md)), `delta_map.h` ([DeltaMap](docs/README_delta_map.md)), `dict.h` ([Dict](docs/README_dict.md)), `flat_map.h` ([FlatMap](docs/README_flat_map.md)), `flatMap.h` ([FlatMap (alt)](docs/README_flatMap.md)), [FrozenCounter](docs/README_FrozenCounter.md), [FrozenDict](docs/README_FrozenDict.md), [OrderedDict](docs/README_OrderedDict.md), `sharded_map.h`.
+*   **Set-like Structures:** `bounded_set.h` ([BoundedSet](docs/README_bounded_set.md)), `disjoint_set_union.h` ([DisjointSetUnion](docs/README_disjoint_set_union.md)), [FrozenSet](docs/README_FrozenSet.md), `ordered_set.h`, [UnorderedMultiset](docs/README_UnorderedMultiset.md).
+*   **Specialized Arrays and Storage:** `chrono_ring.h` ([ChronoRing](docs/README_chrono_ring.md)), [DynamicBitset](docs/README_DynamicBitset.md), `instrumented_ring_buffer.h`, `persist_array.h`, `ring_buffer.h`, `SlotMap.h` ([SlotMap](docs/README_SlotMap.md)), `small_vector.h`, [SuffixArray](docs/README_SuffixArray.md).
+*   **Queues:** `deque.h` ([Deque](docs/README_Deque.md)), `heap_queue.h`, `mpsc_queue.h`, `PriorityQueueMap.h` ([PriorityQueueMap](docs/README_PriorityQueueMap.md)), `round_robin_queue.h`, `spsc_queue.h`, `unique_queue.h`.
+*   **Specialized Maps:** `enum_map.h` ([EnumMap](docs/README_enum_map.md)), `interval_map.h`, `inverted_index.h`.
+*   **Sorted Lists:** `sorted_list.h`.
+*   **Probabilistic Data Structures:** `bloom_filter.h` ([BloomFilter](docs/README_bloom_filter.md)), `count_min_sketch.h` ([CountMinSketch](docs/README_count_min_sketch.md)), `counting_bloom_filter.h` ([CountingBloomFilter](docs/README_CountingBloomFilter.md)), [HyperLogLog](docs/README_HyperLogLog.md), `QuotientFilter.h`.
 
 ### Caching Libraries
 These components offer various caching mechanisms to improve performance by storing frequently accessed data.
 Examples include:
-*   `lru_cache.h`: Implements a Least Recently Used (LRU) cache.
-*   `expiring_containers.h`: Provides `TimeStampedQueue` and `ExpiringDict` where entries auto-expire based on TTL.
-*   `retain_latest.h`: Cache that retains the latest N items.
+*   [CachedProperty](docs/README_CachedProperty.md), `expiring_containers.h` ([ExpiringContainers](docs/README_expiring_containers.md)), `lru_cache.h`, `retain_latest.h`.
 
 ### Networking Utilities
 This category includes utilities specifically designed for networking applications.
 Key components:
-*   MAC address manipulation (`MacAddress.h`, `mac_parse.h`).
-*   ARP and ND cache implementations (`arp_cache.h`, `nd_cache.h`).
+*   MAC address manipulation (`MacAddress.h` ([MacAddress](docs/README_MacAddress.md)), `mac_parse.h`).
+*   ARP and ND cache implementations (`arp_cache.h` ([ArpCache](docs/README_arp_cache.md)), `nd_cache.h`).
+*   Distributed ID allocation (`IDAllocator.h` ([IDAllocator](docs/README_IDAllocator.md)), `redis_id_allocator.h`).
+*   `prometheus_client.h`.
+*   Policy-based routing and TCAM (`policy_radix.h`, `tcam.h`).
 *   Topic-based filtering (`topic_filter.h`).
-*   Policy-based routing and TCAM (`policy_radix.h` - radix tree for routing policies, `tcam.h` - Ternary Content-Addressable Memory).
-*   Distributed ID allocation (`redis_id_allocator.h` - uses Redis backend, `IDAllocator.h` - general unique ID allocation).
+
 
 ### Language/Utility Extensions
 These components extend C++ with useful general-purpose utilities and language-like features.
 This includes:
-*   **Containers with Special Properties:** `default_dict.h` (default values for missing keys), `counter.h` (frequency counting), `multiset_counter.hpp` (counts occurrences of multisets/bags of items).
-*   **Value/Error Handling:** `expected.h` (Rust-like Result type), `value_or_error.h` (similar to expected, for simpler cases).
-*   **Metaprogramming and Reflection:** `named_struct.h`, `named_tuple.h`, `enum_reflect.h` (compile-time enum reflection), `type_name.h` (get string representation of a type).
+*   **Containers with Special Properties:** `counter.h` ([Counter](docs/README_counter.md)), `default_dict.h` ([DefaultDict](docs/README_default_dict.md)), `dict_wrapper.h` ([DictWrapper](docs/README_dict_wrapper.md)), `multiset_counter.hpp`.
+*   **Value/Error Handling:** `expected.h` ([Expected](docs/README_expected.md)), `tagged_variant.h`, `value_or_error.h`.
+*   **Metaprogramming and Reflection:** `enum_reflect.h` ([EnumReflect](docs/README_enum_reflect.md)), `named_struct.h`, `named_tuple.h`, `type_name.h`.
 *   **Concurrency, Timing, and Asynchronous Operations:**
-    *   Queues: `AsyncEventQueue.h` (thread-safe event queue), `call_queue.h` (queue for function calls).
-    *   Execution Control: `delayed_call.h` (deferred execution), `retry.h` (retry logic for operations), `run_once.h` (ensure a function runs only once), `rate_limiter.h` (token bucket rate limiting).
-    *   Timing: `timer_wheel.h` (efficient timer management), `timer_queue.h`, `scoped_timer.h` (measure execution time).
-    *   Synchronization: `named_lock.h` (named global locks).
+    *   Queues: `AsyncEventQueue.h` ([AsyncEventQueue](docs/README_AsyncEventQueue.md)), `call_queue.h` ([CallQueue](docs/README_callq.md)).
+    *   Execution Control: `delayed_call.h` ([DelayedCall](docs/README_delayed_call.md)), `rate_limiter.h`, `retry.h`, `run_once.h`, `token_bucket.h`.
+    *   Timing: `scoped_timer.h`, `stopwatch.h`, `timer_queue.h`, `timer_wheel.h`.
+    *   Synchronization: `named_lock.h`, `semaphore.h`.
     *   Threading: `thread_pool.h`, `worker_pool.h`.
-*   **Resource Management:** `context_mgr.h` (RAII context managers, scope guards), `scoped_flag.h` (RAII boolean flag setter), `delayed_init.h` (delay object initialization).
-*   **Functional Programming & Pipelines:** `partial.h` (function argument binding), `function_pipeline.h`, `optional_pipeline.h` (chain operations on optionals).
-*   **Iterator and Algorithm Utilities:** `any_all.h` (truth testing for containers), `group_by_consecutive.h` (groups consecutive items), `lazy_sorted_merger.h` (merges sorted sequences lazily), `zip_view.h` (Python-like `zip` and `enumerate`), `peekable.h` (iterator with `peek()` capability), `split_view.h` (view over a string split by a delimiter).
-*   **JSON Utilities:** `json_fieldmask.h` (apply field masks to JSON), `jsonpatch.h` (apply JSON patches).
-*   **String Utilities:** `string_utils.h` (various string manipulation helpers), `duration_parser.h` (parse string to duration).
-*   **Miscellaneous Utilities:** `undo.h` (undo/redo functionality), `sliding_window.h` (generic sliding window), `sliding_window_minmax.h` (tracks min/max in a sliding window), `simple_moving_average.h`, `optional_utilities.h` (helpers for `std::optional`), `weighted_round_robin.h` (weighted round-robin selection).
+*   **Resource Management:** `context_mgr.h` ([ContextMgr](docs/README_context_mgr.md)), `delayed_init.h` ([DelayedInit](docs/README_delayed_init.md)), `memory_mapped_file.h`, `object_pool.h`, `observer_ptr.h`, `scoped_flag.h`, `weak_ref.h`.
+*   **Functional Programming & Pipelines:** `function_pipeline.h`, `optional_pipeline.h`, `partial.h`, `unique_function.h`.
+*   **Iterator and Algorithm Utilities:** `any_all.h` ([AnyAll](docs/README_any_all.md)), `group_by_consecutive.h`, `lazy_sorted_merger.h`, `peekable.h`, `split_view.h`, `zip_view.h`.
+*   **JSON Utilities:** `json_fieldmask.h`, `jsonpatch.h`.
+*   **String Utilities:** `cord.h` ([Cord](docs/README_Cord.md)), `duration_parser.h`, `interning_pool.h`, `parse_utils.h`, `random_string.h`, `string_interner.h`, `string_utils.h`.
+*   **Miscellaneous Utilities:** `batcher.h` ([Batcher](docs/README_batcher.md)), `id_pool.h`, `interval_counter.h`, `optional_utilities.h`, `pretty_print.h`, `safe_numerics.h`, `signal_handler.h`, `simple_moving_average.h`, `singleton.h`, `sliding_window_minmax.h`, `sliding_window.h`, `type_safe_id.h`, `undo.h`, `varint.h`, `version.h`, `WeightedRandomList.h`, `weighted_round_robin.h`.
 
 ## Documentation
 
