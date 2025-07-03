@@ -213,7 +213,7 @@ void test_set_move_only_type() {
 
     assert(u_ptr == nullptr); // Original unique_ptr should be nulled out after move
     assert(tu.has_value());
-    assert(tu.type_tag() == type_name_trait<std::unique_ptr<int>>::tag);
+    assert(tu.type_tag() == type_name_trait<std::unique_ptr<int>>::tag()); // This was the line I missed. Correcting it.
 
     std::unique_ptr<int>* retrieved_ptr_ptr = tu.get_if<std::unique_ptr<int>>();
     assert(retrieved_ptr_ptr != nullptr);
