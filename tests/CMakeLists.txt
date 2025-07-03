@@ -95,6 +95,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         TaggedPtrLib         # Added for tagged_ptr_test
         PredicateCacheLib    # Added for predicate_cache_test
         ShadowCopyLib        # Added for shadow_copy_test
+        StatBufferLib        # Added for stat_buffer_test
     )
 
     # Specific configurations for certain tests

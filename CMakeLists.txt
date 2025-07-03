@@ -253,6 +253,10 @@ target_include_directories(TaggedPtrLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/in
 add_library(ShadowCopyLib INTERFACE)
 target_include_directories(ShadowCopyLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define StatBufferLib as an interface library (header-only)
+add_library(StatBufferLib INTERFACE)
+target_include_directories(StatBufferLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -339,6 +343,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         TaggedPtrLib         # Added for tagged_ptr_example
         PredicateCacheLib    # Added for predicate_cache_example
         ShadowCopyLib        # Added for shadow_copy_example
+        StatBufferLib        # Added for stat_buffer_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
