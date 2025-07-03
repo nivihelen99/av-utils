@@ -222,6 +222,9 @@ target_include_directories(FlatMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 add_library(ValueIndexMapLib INTERFACE)
 target_include_directories(ValueIndexMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define InvertedIndexLib as an interface library (header-only)
+add_library(InvertedIndexLib INTERFACE)
+target_include_directories(InvertedIndexLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Define OneOfLib as an interface library (header-only)
 add_library(OneOfLib INTERFACE)
@@ -314,6 +317,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         IdPoolLib            # Added for id_pool_example
         FlatMapLib           # Added for flat_map_example
         ValueIndexMapLib     # Added for value_index_map_example
+        InvertedIndexLib     # Added for inverted_index_example
         OneOfLib             # Added for one_of_example
         ChronoRingLib        # Added for chrono_ring_example
     )

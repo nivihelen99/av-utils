@@ -89,6 +89,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         IdPoolLib            # Added for id_pool_test
         FlatMapLib           # Added for flat_map_test
         ValueIndexMapLib     # Added for value_index_map_test
+        InvertedIndexLib     # Added for inverted_index_test
         OneOfLib             # Added for one_of_test
         ChronoRingLib        # Added for chrono_ring_test
     )
