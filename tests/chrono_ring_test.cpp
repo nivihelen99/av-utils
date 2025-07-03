@@ -59,7 +59,8 @@ void test_construction_and_basic_properties() {
 void test_push_and_overwrite() {
     std::cout << "Test: Push and Overwrite" << std::endl;
     using namespace anomeda;
-    ChronoRing<int> ring(3);
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>; // Alias for clarity
+    TestRingInt ring(3);
 
     ring.push(10); // {10}
     assert(ring.size() == 1);
@@ -69,22 +70,22 @@ void test_push_and_overwrite() {
     assert(ring.size() == 3);
 
     // Get all entries to check order (should be oldest to newest)
-    auto entries1 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries1 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries1, {10, 20, 30}));
 
     ring.push(40); // Overwrites 10 -> {20, 30, 40}
     assert(ring.size() == 3);
-    auto entries2 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries2 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries2, {20, 30, 40}));
 
     ring.push(50); // Overwrites 20 -> {30, 40, 50}
     assert(ring.size() == 3);
-    auto entries3 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries3 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries3, {30, 40, 50}));
 
     ring.push(60); // Overwrites 30 -> {40, 50, 60}
     assert(ring.size() == 3);
-    auto entries4 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries4 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries4, {40, 50, 60}));
 
     std::cout << "  Passed." << std::endl;
@@ -94,19 +95,20 @@ void test_timestamps() {
     std::cout << "Test: Timestamps" << std::endl;
     using namespace anomeda;
     using namespace std::chrono_literals;
-    ChronoRing<int> ring(3);
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
+    TestRingInt ring(3);
 
-    auto t_start = ChronoRing<int>::Clock::now();
+    auto t_start = TestRingInt::Clock::now();
     ring.push(1);
     std::this_thread::sleep_for(5ms);
     ring.push(2);
-    auto t_end_push = ChronoRing<int>::Clock::now();
+    auto t_end_push = TestRingInt::Clock::now();
     std::this_thread::sleep_for(5ms);
 
-    auto specific_time = ChronoRing<int>::Clock::now() + 1h; // A distinct future time
+    auto specific_time = TestRingInt::Clock::now() + 1h; // A distinct future time
     ring.push_at(3, specific_time);
 
-    auto entries = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(entries.size() == 3);
 
     // Check timestamps are roughly correct and ordered for first two
@@ -125,7 +127,8 @@ void test_timestamps() {
 void test_clear() {
     std::cout << "Test: Clear" << std::endl;
     using namespace anomeda;
-    ChronoRing<int> ring(3);
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
+    TestRingInt ring(3);
     ring.push(1);
     ring.push(2);
     assert(ring.size() == 2);
@@ -135,7 +138,7 @@ void test_clear() {
     assert(ring.size() == 0);
     assert(ring.empty());
 
-    auto entries = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(entries.empty());
 
     ring.push(3); // Should work after clear
@@ -148,9 +151,10 @@ void test_recent_queries() {
     std::cout << "Test: Recent Queries" << std::endl;
     using namespace anomeda;
     using namespace std::chrono_literals;
-    ChronoRing<int, std::chrono::steady_clock> ring(5);
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
+    TestRingInt ring(5);
 
-    auto time_0 = std::chrono::steady_clock::now();
+    auto time_0 = TestRingInt::Clock::now();
     ring.push_at(10, time_0); // 10 @ t=0ms
     std::this_thread::sleep_for(10ms);
     auto time_10 = std::chrono::steady_clock::now();
@@ -188,7 +192,7 @@ void test_recent_queries() {
     assert(compare_values<int>(recent_items3, {10, 20, 30, 40, 50}));
 
     // Check with an empty ring
-    ChronoRing<int> empty_ring(3);
+    TestRingInt empty_ring(3);
     auto recent_empty = empty_ring.recent(100ms);
     assert(recent_empty.empty());
 
@@ -198,9 +202,10 @@ void test_recent_queries() {
 void test_expire_older_than() {
     std::cout << "Test: Expire Older Than" << std::endl;
     using namespace anomeda;
-    ChronoRing<int, std::chrono::steady_clock> ring(5);
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
+    TestRingInt ring(5);
 
-    auto t0 = std::chrono::steady_clock::now();
+    auto t0 = TestRingInt::Clock::now();
     ring.push_at(1, t0);
     auto t1 = t0 + std::chrono::milliseconds(10);
     ring.push_at(2, t1);
@@ -214,7 +219,7 @@ void test_expire_older_than() {
     // Expire items older than t2 (exclusive t2, so 1 and 2 should go)
     ring.expire_older_than(t2);
     assert(ring.size() == 3); // Should keep 3,4,5
-    auto entries1 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries1 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries1, {3,4,5}));
     assert(entries1[0].timestamp == t2);
     assert(entries1[1].timestamp == t3);
@@ -223,7 +228,7 @@ void test_expire_older_than() {
     // Expire items older than t4 (3 and 4 should go)
     ring.expire_older_than(t4);
     assert(ring.size() == 1); // Should keep 5
-    auto entries2 = ring.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries2 = ring.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries2, {5}));
     assert(entries2[0].timestamp == t4);
 
@@ -233,22 +238,22 @@ void test_expire_older_than() {
     assert(ring.empty());
 
     // Test on non-full buffer
-    ChronoRing<int, std::chrono::steady_clock> ring2(5);
+    TestRingInt ring2(5);
     ring2.push_at(10, t0);
     ring2.push_at(20, t1); // {10,20}
     ring2.expire_older_than(t1); // Expire 10
     assert(ring2.size() == 1);
-    auto entries3 = ring2.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries3 = ring2.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries3, {20}));
     assert(entries3[0].timestamp == t1);
 
     // Expire nothing
-    ChronoRing<int, std::chrono::steady_clock> ring3(3);
+    TestRingInt ring3(3);
     ring3.push_at(100,t0);
     ring3.push_at(200,t1);
     ring3.expire_older_than(t0); // Should not expire 100 as cutoff is exclusive for <
     assert(ring3.size() == 2);
-    auto entries4 = ring3.entries_between(ChronoRing<int>::Clock::time_point::min(), ChronoRing<int>::Clock::time_point::max());
+    auto entries4 = ring3.entries_between(TestRingInt::Clock::time_point::min(), TestRingInt::Clock::time_point::max());
     assert(compare_entry_values<int>(entries4, {100,200}));
 
 
@@ -258,10 +263,11 @@ void test_expire_older_than() {
 void test_time_window_queries_with_wrap() {
     std::cout << "Test: Time Window Queries with Wrap" << std::endl;
     using namespace anomeda;
-    ChronoRing<int, std::chrono::steady_clock> ring(3); // Capacity 3
+    using TestRingInt = ChronoRing<int, std::chrono::steady_clock>;
+    TestRingInt ring(3); // Capacity 3
 
     // Timestamps for precise control
-    auto base_time = std::chrono::steady_clock::now();
+    auto base_time = TestRingInt::Clock::now();
     auto t0 = base_time;
     auto t1 = base_time + std::chrono::milliseconds(10);
     auto t2 = base_time + std::chrono::milliseconds(20);
