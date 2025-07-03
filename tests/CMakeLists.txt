@@ -93,6 +93,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         OneOfLib             # Added for one_of_test
         ChronoRingLib        # Added for chrono_ring_test
         TaggedPtrLib         # Added for tagged_ptr_test
+        PredicateCacheLib    # Added for predicate_cache_test
     )
 
     # Specific configurations for certain tests

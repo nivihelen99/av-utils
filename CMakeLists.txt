@@ -234,6 +234,9 @@ target_include_directories(OneOfLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 add_library(AsyncValueLib INTERFACE)
 target_include_directories(AsyncValueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define PredicateCacheLib as an interface library (header-only)
+add_library(PredicateCacheLib INTERFACE)
+target_include_directories(PredicateCacheLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_library(TaggedUnionLib INTERFACE)
 target_include_directories(TaggedUnionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -330,6 +333,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ChronoRingLib        # Added for chrono_ring_example
         AsyncValueLib
         TaggedPtrLib         # Added for tagged_ptr_example
+        PredicateCacheLib    # Added for predicate_cache_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
