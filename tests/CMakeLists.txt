@@ -91,6 +91,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ValueIndexMapLib     # Added for value_index_map_test
         InvertedIndexLib     # Added for inverted_index_test
         OneOfLib             # Added for one_of_test
+        PackedSlotMapLib     # Added for packed_slot_map_test
         ChronoRingLib        # Added for chrono_ring_test
         TaggedPtrLib         # Added for tagged_ptr_test
         PredicateCacheLib    # Added for predicate_cache_test

@@ -231,6 +231,10 @@ target_include_directories(InvertedIndexLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 add_library(OneOfLib INTERFACE)
 target_include_directories(OneOfLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define PackedSlotMapLib as an interface library (header-only)
+add_library(PackedSlotMapLib INTERFACE)
+target_include_directories(PackedSlotMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_library(AsyncValueLib INTERFACE)
 target_include_directories(AsyncValueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
@@ -346,6 +350,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ValueIndexMapLib     # Added for value_index_map_example
         InvertedIndexLib     # Added for inverted_index_example
         OneOfLib             # Added for one_of_example
+        PackedSlotMapLib     # Added for packed_slot_map_example
         ChronoRingLib        # Added for chrono_ring_example
         AsyncValueLib
         TaggedPtrLib         # Added for tagged_ptr_example
