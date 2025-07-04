@@ -261,6 +261,10 @@ target_include_directories(StatBufferLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/i
 add_library(DequeMapLib INTERFACE)
 target_include_directories(DequeMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define WeightedSetLib as an interface library (header-only)
+add_library(WeightedSetLib INTERFACE)
+target_include_directories(WeightedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -349,6 +353,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         ShadowCopyLib        # Added for shadow_copy_example
         StatBufferLib        # Added for stat_buffer_example
         DequeMapLib          # Added for deque_map_example
+        WeightedSetLib       # Added for weighted_set_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

@@ -97,6 +97,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         ShadowCopyLib        # Added for shadow_copy_test
         StatBufferLib        # Added for stat_buffer_test
         DequeMapLib          # Added for deque_map_test
+        WeightedSetLib       # Added for weighted_set_test
     )
 
     # Specific configurations for certain tests
