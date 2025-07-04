@@ -275,8 +275,8 @@ public:
     bool operator>=(const PackedSlotMapIterator& other) const { return ptr_ >= other.ptr_; }
 
     // Expose ptr_ for conversion from non-const to const iterator
-    template <bool OtherIsConst>
-    friend class PackedSlotMapIterator;
+    // template <bool OtherIsConst> // This friend declaration was incorrect here.
+    // friend class PackedSlotMapIterator; // An iterator class does not friend itself.
 };
 
 
