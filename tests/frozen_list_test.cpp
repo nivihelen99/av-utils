@@ -526,17 +526,18 @@ TEST_F(FrozenListTest, DeductionGuides) {
     require_list_equals_vector(fl_from_fill, v_string);
 
     // With explicit allocator
-    std::allocator<long> myAlloc;
-    cpp_collections::FrozenList fl_from_iter_alloc(v_int.begin(), v_int.end(), myAlloc);
-    EXPECT_TRUE((std::is_same_v<decltype(fl_from_iter_alloc), cpp_collections::FrozenList<int, std::allocator<long>>>));
+    std::allocator<int> myAllocInt;
+    cpp_collections::FrozenList fl_from_iter_alloc(v_int.begin(), v_int.end(), myAllocInt);
+    EXPECT_TRUE((std::is_same_v<decltype(fl_from_iter_alloc), cpp_collections::FrozenList<int, std::allocator<int>>>));
     require_list_equals_vector(fl_from_iter_alloc, v_int);
-    EXPECT_EQ(fl_from_iter_alloc.get_allocator(), myAlloc);
+    EXPECT_EQ(fl_from_iter_alloc.get_allocator(), myAllocInt);
 
-    cpp_collections::FrozenList fl_from_init_alloc({1L, 2L, 3L}, myAlloc); // Deduce FrozenList<long, std::allocator<long>>
+    std::allocator<long> myAllocLong;
+    cpp_collections::FrozenList fl_from_init_alloc({1L, 2L, 3L}, myAllocLong); // Deduce FrozenList<long, std::allocator<long>>
     EXPECT_TRUE((std::is_same_v<decltype(fl_from_init_alloc), cpp_collections::FrozenList<long, std::allocator<long>>>));
     std::vector<long> v_long = {1L, 2L, 3L};
     require_list_equals_vector(fl_from_init_alloc, v_long);
-    EXPECT_EQ(fl_from_init_alloc.get_allocator(), myAlloc);
+    EXPECT_EQ(fl_from_init_alloc.get_allocator(), myAllocLong);
 }
 #endif
 
