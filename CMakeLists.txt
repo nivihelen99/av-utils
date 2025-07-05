@@ -46,6 +46,10 @@ target_include_directories(RetryUtil INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/inclu
 add_library(ScopedFlagLib INTERFACE)
 target_include_directories(ScopedFlagLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define SparseSetLib as an interface library (header-only)
+add_library(SparseSetLib INTERFACE)
+target_include_directories(SparseSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define SplitView as an interface library (header-only)
 add_library(SplitView INTERFACE)
 target_include_directories(SplitView INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -371,7 +375,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         GenerationalArenaLib # Added for generational_arena_example
 
         FrozenListLib        # Added for frozen_list_example
-
+        SparseSetLib         # Added for sparse_set_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

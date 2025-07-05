@@ -103,7 +103,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         GenerationalArenaLib # Added for generational_arena_test
 
         FrozenListLib        # Added for frozen_list_test
-
+        SparseSetLib         # Added for sparse_set_test
     )
 
     # Specific configurations for certain tests
