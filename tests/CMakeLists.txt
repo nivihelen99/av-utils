@@ -99,7 +99,11 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         StatBufferLib        # Added for stat_buffer_test
         DequeMapLib          # Added for deque_map_test
         WeightedSetLib       # Added for weighted_set_test
+
+        GenerationalArenaLib # Added for generational_arena_test
+
         FrozenListLib        # Added for frozen_list_test
+
     )
 
     # Specific configurations for certain tests
