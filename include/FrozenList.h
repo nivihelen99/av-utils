@@ -266,9 +266,12 @@ FrozenList(std::initializer_list<T>, Alloc = Alloc())
     -> FrozenList<T, Alloc>;
 
 // Deduction guide for (size_type, const T&, Allocator)
-template<typename T, typename Alloc = std::allocator<T>>
-FrozenList(typename FrozenList<T, Alloc>::size_type, const T&, Alloc = Alloc())
-    -> FrozenList<T, Alloc>;
+// Changed to be more explicit about the first argument's type to avoid ambiguity with iterator constructor.
+template<typename T_elem, typename Alloc = std::allocator<T_elem>>
+FrozenList(std::size_t /*count*/,
+           const T_elem& /*value*/,
+           Alloc /*alloc*/ = Alloc())
+    -> FrozenList<T_elem, Alloc>;
 
 } // namespace cpp_collections
 
