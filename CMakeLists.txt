@@ -131,6 +131,10 @@ target_include_directories(OrderedMultisetLib INTERFACE ${CMAKE_CURRENT_SOURCE_D
 add_library(FrozenDictLib INTERFACE)
 target_include_directories(FrozenDictLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define FrozenListLib as an interface library (header-only)
+add_library(FrozenListLib INTERFACE)
+target_include_directories(FrozenListLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define ScapegoatTreeLib as an interface library (header-only)
 add_library(ScapegoatTreeLib INTERFACE)
 target_include_directories(ScapegoatTreeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -359,6 +363,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         StatBufferLib        # Added for stat_buffer_example
         DequeMapLib          # Added for deque_map_example
         WeightedSetLib       # Added for weighted_set_example
+        FrozenListLib        # Added for frozen_list_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
