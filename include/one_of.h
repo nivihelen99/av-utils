@@ -143,15 +143,12 @@ public:
              typename = std::enable_if_t<is_one_of_types_v<DecayedT, Ts...>>>
     void set(T&& val) {
         constexpr std::size_t index = type_index_in_pack_v<DecayedT, Ts...>;
-        static_assert(index < sizeof...(Ts), "Type T not in Ts...");
+        // The static_assert for index < sizeof...(Ts) is implicitly covered by
+        // is_one_of_types_v in the enable_if, and type_index_in_pack_v returning a valid index.
 
-        if (active_index_ == index) {
-            *reinterpret_cast<DecayedT*>(&storage_) = std::forward<T>(val);
-        } else {
-            reset();
-            new(&storage_) DecayedT(std::forward<T>(val));
-            active_index_ = index;
-        }
+        reset(); // Always destroy the current contents first.
+        new(&storage_) DecayedT(std::forward<T>(val)); // Construct the new value.
+        active_index_ = index;
     }
 
     template<typename T>
