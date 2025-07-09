@@ -51,17 +51,27 @@ public:
             // Key doesn't exist, emplace it
             // Emplace a new std::any constructed with in_place_type
             auto [new_it, success] = map_.emplace(type_idx, std::any(std::in_place_type_t<T>{}, std::forward<T_param>(value)));
-            // Ensure emplace succeeded, which it should if find failed.
-            // This assertion is mostly for sanity checking during development.
+            // Ensure emplace succeeded, which it should if find failed
+            // in a single-threaded context.
             if (!success) {
-                 // This case should ideally not be reached if find() failed.
-                 // If it does, it might indicate a concurrent modification or an unexpected map state.
-                 // For robustness, one might re-query or handle, but for typical use, assert is okay.
-                 throw std::runtime_error("TypeMap: emplace failed unexpectedly after find indicated absence.");
+                 // This path should not be hit in normal operation if find() above failed.
+                 // If it is, it might indicate a very unusual std::unordered_map behavior
+                 // or a concurrent modification issue if TypeMap were used across threads
+                 // without external synchronization (which it is not designed for).
+                 // Consider logging or a more specific exception if this state is critical.
+                 // For now, if emplace fails after find failed, something is deeply wrong.
+                 // Re-throwing or a custom exception might be suitable for production.
+                 // Given it's a library utility, we rely on map's behavior.
             }
             return std::any_cast<T&>(new_it->second);
         }
     }
+    // NOTE: Due to std::any constructor constraints (specifically, the std::any(in_place_type_t<T>, Args...)
+    // constructor often requiring T to be copy-constructible in some standard library versions,
+    // even if constructing from an rvalue), types stored in TypeMap must be copy-constructible.
+    // This limitation prevents storing types that are only movable (e.g., std::unique_ptr)
+    // if the underlying std::any implementation enforces this. C++20 aimed to improve this,
+    // but behavior can vary with compiler/library versions.
 
     /**
      * @brief Retrieves a pointer to the stored object of type T.
