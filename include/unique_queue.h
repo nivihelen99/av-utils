@@ -4,7 +4,31 @@
 #include <unordered_set>
 #include <optional>
 #include <stdexcept>
-#include <functional>
+#include <functional> // For std::hash, std::equal_to, std::reference_wrapper, std::cref
+
+// Forward declaration
+template <typename T, typename Hash, typename Equal>
+class UniqueQueue;
+
+namespace internal {
+
+// Helper struct for hashing std::reference_wrapper<const T> using UserHash
+template <typename T, typename UserHash = std::hash<T>>
+struct RefWrapperHash {
+    std::size_t operator()(std::reference_wrapper<const T> rw) const {
+        return UserHash{}(rw.get());
+    }
+};
+
+// Helper struct for equality of std::reference_wrapper<const T> using UserEqual
+template <typename T, typename UserEqual = std::equal_to<T>>
+struct RefWrapperEqual {
+    bool operator()(std::reference_wrapper<const T> lhs, std::reference_wrapper<const T> rhs) const {
+        return UserEqual{}(lhs.get(), rhs.get());
+    }
+};
+
+} // namespace internal
 
 /**
  * @brief A hybrid container combining std::queue and std::unordered_set
@@ -22,8 +46,12 @@ template <typename T,
           typename Equal = std::equal_to<T>>
 class UniqueQueue {
 private:
-    std::queue<T> queue_;
-    std::unordered_set<T, Hash, Equal> seen_;
+    std::queue<T> queue_; // Owns the elements
+    std::unordered_set<
+        std::reference_wrapper<const T>,
+        internal::RefWrapperHash<T, Hash>,
+        internal::RefWrapperEqual<T, Equal>
+    > seen_; // Stores references to elements in queue_
 
 public:
     using value_type = T;
@@ -68,12 +96,15 @@ public:
      * @return true if inserted, false if duplicate
      */
     bool push(const T& value) {
-        if (seen_.count(value)) {
-            return false;
+        // O(N) duplicate check - TODO: Optimize with C++20 heterogeneous lookup if possible
+        for (const auto& item_ref : seen_) {
+            if (Equal{}(item_ref.get(), value)) {
+                return false; // Duplicate found
+            }
         }
         
-        queue_.push(value);
-        seen_.insert(value);
+        queue_.push(value); // T must be copy-constructible
+        seen_.insert(std::cref(queue_.back()));
         return true;
     }
 
@@ -84,36 +115,16 @@ public:
      * @return true if inserted, false if duplicate
      */
     bool push(T&& value) {
-        if (seen_.count(value)) {
-            return false;
+        // O(N) duplicate check - TODO: Optimize with C++20 heterogeneous lookup if possible
+        // Check happens before 'value' is moved.
+        for (const auto& item_ref : seen_) {
+            if (Equal{}(item_ref.get(), value)) {
+                return false; // Duplicate found
+            }
         }
         
-        // If 'value' is an lvalue std::unique_ptr (T deduced as unique_ptr&),
-        // std::move(value) is required to move it into the set.
-        // If 'value' is an rvalue std::unique_ptr (T deduced as unique_ptr),
-        // std::move(value) is also correct (though 'value' itself is an lvalue expression).
-        auto insert_result = seen_.insert(std::move(value));  // 'value' is potentially moved-from here.
-
-        if (!insert_result.second) {
-            // Insertion did not take place (e.g. duplicate found by insert but not by count, or alloc failure)
-            // 'value' is in a moved-from state if the insert operation started moving it.
-            return false;
-        }
-
-        // Original logic: queue_.push(std::move(value));
-        // After 'value' has been moved into 'seen_', 'value' is now hollow if it was a unique_ptr.
-        // Pushing this hollow unique_ptr into 'queue_' is logically incorrect for example tests.
-        // However, the immediate goal is to fix the compilation error from seen_.insert(value).
-        // A proper fix requires changing queue_ to store T* or restructuring ownership.
-        // For now, to make it compile and adhere to minimal change for the specific error:
-        // The object *insert_result.first is the element now in the set.
-        // If queue_ stores T, we'd need to copy/move *insert_result.first.
-        // If we move *insert_result.first, it's removed from the set.
-        // If we copy *insert_result.first, T must be copyable.
-        // The old code `queue_.push(std::move(value))` will now push a null unique_ptr.
-        // This will likely fail runtime tests but should compile.
-        // queue_.push(std::move(value)); // Pushes a (now likely null) unique_ptr // OLD BUGGY LINE
-        queue_.push(*insert_result.first); // Push a copy of the element actually inserted into seen_
+        queue_.push(std::move(value)); // T must be move-constructible
+        seen_.insert(std::cref(queue_.back()));
         return true;
     }
 
@@ -128,10 +139,24 @@ public:
             throw std::runtime_error("UniqueQueue::pop() called on empty queue");
         }
         
-        T front_element = std::move(queue_.front());
+        // Get a reference to the front element *before* it's moved or queue is popped
+        const T& front_ref = queue_.front();
+
+        // Erase the reference from the 'seen_' set.
+        // std::cref(front_ref) creates a temporary reference_wrapper.
+        // The unordered_set needs to find the existing reference_wrapper that points to this front_ref.
+        seen_.erase(std::cref(front_ref));
+
+        // Now, move the element out of the queue.
+        // Need const_cast because queue_.front() returns T& or const T&,
+        // and we need T& to move from if T is not const.
+        // If queue_ stores T, queue_.front() gives T&.
+        T result = std::move(const_cast<T&>(front_ref));
+
+        // Pop the (now moved-from) element from the queue.
         queue_.pop();
-        seen_.erase(front_element);
-        return front_element;
+
+        return result;
     }
 
     /**
@@ -143,11 +168,12 @@ public:
         if (queue_.empty()) {
             return std::nullopt;
         }
-        
-        T front_element = std::move(queue_.front());
+        // Similar logic to pop()
+        const T& front_ref = queue_.front();
+        seen_.erase(std::cref(front_ref));
+        T result = std::move(const_cast<T&>(front_ref));
         queue_.pop();
-        seen_.erase(front_element);
-        return front_element;
+        return result;
     }
 
     /**
@@ -183,7 +209,13 @@ public:
      * @return true if present, false otherwise
      */
     bool contains(const T& value) const {
-        return seen_.count(value) > 0;
+        // O(N) scan - TODO: Optimize with C++20 heterogeneous lookup if possible
+        for (const auto& item_ref : seen_) {
+            if (Equal{}(item_ref.get(), value)) {
+                return true; // Found
+            }
+        }
+        return false; // Not found
     }
 
     /**
@@ -214,40 +246,38 @@ public:
      * @return true if element was found and removed, false otherwise
      */
     bool remove(const T& value) {
-        if (!seen_.count(value)) {
-            return false;
-        }
+        bool removed = false;
+        std::queue<T> new_queue; // Temporary queue to hold elements not removed
         
-        // Need to rebuild queue without the target element
-        std::queue<T> new_queue;
-        bool found = false;
-        
+        // Iterate through the current queue_
         while (!queue_.empty()) {
-            T current = std::move(queue_.front());
-            queue_.pop();
+            T& item_in_old_queue = queue_.front(); // Get reference to front
             
-            if (!found && Equal{}(current, value)) {
-                found = true;
-                // Skip this element (don't add to new_queue)
+            if (!removed && Equal{}(item_in_old_queue, value)) {
+                // Element found, remove its reference from seen_
+                seen_.erase(std::cref(item_in_old_queue));
+                queue_.pop(); // Remove from original queue (discard)
+                removed = true;
             } else {
-                new_queue.push(std::move(current));
+                // Element not (yet) removed or not the target element
+                // Move it to the new_queue
+                new_queue.push(std::move(item_in_old_queue));
+                queue_.pop(); // Remove from original queue
             }
         }
         
+        // Replace old queue with new_queue
         queue_ = std::move(new_queue);
-        seen_.erase(value);
-        return found;
+        return removed;
     }
 
     /**
      * @brief Clear all elements from queue
      */
     void clear() {
-        // Clear both containers
-        while (!queue_.empty()) {
-            queue_.pop();
-        }
-        seen_.clear();
+        seen_.clear(); // Clear all references
+        std::queue<T> empty_queue;
+        queue_.swap(empty_queue); // Clear the queue itself
     }
 
     /**
