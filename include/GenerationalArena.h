@@ -80,6 +80,56 @@ private:
         bool is_active; // True if this slot currently holds a live object
 
         Slot() : generation(0), is_active(false) {} // Initial generation is 0
+
+        // Delete copy operations
+        Slot(const Slot&) = delete;
+        Slot& operator=(const Slot&) = delete;
+
+        // Move constructor
+        Slot(Slot&& other) noexcept
+            : generation(other.generation), is_active(other.is_active) {
+            if (is_active) { // If other was active (and now this is marked active)
+                new (std::addressof(storage)) T(std::move(*reinterpret_cast<T*>(std::addressof(other.storage))));
+                // Do NOT call destructor on T in other.storage after move.
+                // Mark other as inactive so its ~Slot() doesn't try to destruct the moved-from T.
+                other.is_active = false;
+            }
+        }
+
+        // Move assignment operator
+        Slot& operator=(Slot&& other) noexcept {
+            if (this != &other) {
+                // Destroy current object if active
+                if (is_active) {
+                    if constexpr (!std::is_trivially_destructible_v<T>) {
+                        reinterpret_cast<T*>(std::addressof(storage))->~T();
+                    }
+                    is_active = false; // Explicitly mark inactive before reassignment
+                }
+
+                // Move data from other
+                generation = other.generation;
+                is_active = other.is_active; // is_active of *this* slot is now what other's was
+
+                if (is_active) { // If other was active (and now this is marked active)
+                    new (std::addressof(storage)) T(std::move(*reinterpret_cast<T*>(std::addressof(other.storage))));
+                    // Do NOT call destructor on T in other.storage after move.
+                    // Mark other as inactive so its ~Slot() doesn't try to destruct the moved-from T.
+                    other.is_active = false;
+                }
+            }
+            return *this;
+        }
+
+        // Destructor
+        ~Slot() {
+            if (is_active) {
+                if constexpr (!std::is_trivially_destructible_v<T>) {
+                    reinterpret_cast<T*>(std::addressof(storage))->~T();
+                }
+                // is_active = false; // Not strictly necessary as the Slot object is being destroyed
+            }
+        }
     };
 
     std::vector<Slot> slots_;
@@ -238,7 +288,7 @@ public:
             for (uint32_t i = 0; i < slots_.size(); ++i) {
                 if (slots_[i].is_active) {
                     reinterpret_cast<T*>(&slots_[i].storage)->~T();
-                    // No need to update generation here as slots are cleared.
+                    slots_[i].is_active = false; // Mark as inactive after destruction
                 }
             }
         }
