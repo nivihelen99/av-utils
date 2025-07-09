@@ -186,35 +186,60 @@ TEST_F(ARPCacheTestFixture, FailoverInAgeEntriesAfterMaxProbes) {
     cache_->add_entry(ip1_, mac1_primary_dummy_ );
     cache_->add_backup_mac(ip1_, mac2_);
 
-    cache_->force_set_state_for_test(ip1_, ARPCache::ARPState::INCOMPLETE, std::chrono::steady_clock::now() - probe_interval_ * 10);
+    cache_->force_set_state_for_test(ip1_, ARPCache::ARPState::INCOMPLETE, std::chrono::steady_clock::now() - probe_interval_ * 100); // Ensure large enough gap for first probe
 
     auto current_time = std::chrono::steady_clock::now();
+    // This first call to age_entries will send the 1st probe.
+    // Entry state: INCOMPLETE, probe_count=0, backoff_exponent=0 (from force_set_state_for_test)
+    // After this call: probe_count=1, backoff_exponent=1
     EXPECT_CALL(*cache_, send_arp_request(ip1_))
         .WillOnce(testing::InvokeWithoutArgs([]() {
-            std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (first call)." << '\n';
+            std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (initial probe)." << '\n';
         }));
     cache_->age_entries(current_time);
-    testing::Mock::VerifyAndClearExpectations(&(*cache_)); // Restore this
+    testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
+    // Loop for MAX_PROBES additional probes (probes #2, #3, ..., #(MAX_PROBES+1))
+    // MAX_PROBES is 3. So this loop runs for k=0, 1, 2.
+    // These will be the 2nd, 3rd, and 4th probes overall.
     for (int k = 0; k < ARPCache::MAX_PROBES; ++k) {
-        long long wait_multiplier = (1LL << k);
-        std::chrono::seconds wait_duration = probe_interval_ * wait_multiplier;
+        auto entry_ptr_before_age = cache_->get_cache_for_test().find(ip1_);
+        ASSERT_NE(entry_ptr_before_age, cache_->get_cache_for_test().end());
+        // entry.backoff_exponent is (k+1) at the start of these iterations (1, 2, 3)
+        long long current_backoff_exp_for_wait = entry_ptr_before_age->second.backoff_exponent;
+
+        std::chrono::seconds wait_duration = probe_interval_ * (1LL << current_backoff_exp_for_wait);
         if (wait_duration > max_backoff_) wait_duration = max_backoff_;
 
-        current_time += wait_duration + std::chrono::milliseconds(100);
+        current_time += wait_duration + std::chrono::milliseconds(100); // Advance time for the next probe
+
+        // Inside age_entries:
+        // probe_count becomes k+2
+        // backoff_exponent becomes k+2
         EXPECT_CALL(*cache_, send_arp_request(ip1_))
-            .WillOnce(testing::InvokeWithoutArgs([k]() { // Capture k for unique message
-                std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (loop k=" << k << ")." << '\n';
+            .WillOnce(testing::InvokeWithoutArgs([k, current_backoff_exp_for_wait]() {
+                std::cerr << "GMOCK_ACTION_DEBUG: send_arp_request(ip1_) mock action executed (loop k=" << k
+                          << ", current_backoff_exp_for_wait=" << current_backoff_exp_for_wait << ")." << '\n';
             }));
         cache_->age_entries(current_time);
         testing::Mock::VerifyAndClearExpectations(&(*cache_));
     }
+    // After this loop, (MAX_PROBES + 1) probes have been sent.
+    // probe_count is MAX_PROBES + 1. (e.g., 4 if MAX_PROBES=3)
+    // backoff_exponent is MAX_PROBES + 1. (e.g., 4 if MAX_PROBES=3)
 
-    long long final_wait_multiplier = (1LL << ARPCache::MAX_PROBES);
-    std::chrono::seconds final_wait_duration = probe_interval_ * final_wait_multiplier;
+    // Final time advancement. This age_entries call should trigger failover.
+    auto entry_ptr_final_check = cache_->get_cache_for_test().find(ip1_);
+    ASSERT_NE(entry_ptr_final_check, cache_->get_cache_for_test().end());
+    long long final_backoff_exp_for_wait = entry_ptr_final_check->second.backoff_exponent; // Should be MAX_PROBES + 1
+
+    std::chrono::seconds final_wait_duration = probe_interval_ * (1LL << final_backoff_exp_for_wait);
     if (final_wait_duration > max_backoff_) final_wait_duration = max_backoff_;
     current_time += final_wait_duration + std::chrono::milliseconds(100);
 
+    // Inside this age_entries call:
+    // probe_count becomes MAX_PROBES + 2.
+    // Condition (probe_count > MAX_PROBES) is true. Failover occurs. No ARP request sent.
     EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(0);
     cache_->age_entries(current_time);
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
@@ -688,52 +713,57 @@ TEST_F(ARPCacheTestFixture, ExponentialBackoff_MaxIntervalCap) {
     ASSERT_EQ(entry_ptr->second.backoff_exponent, 0);
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
-    // Simulate probe failures until backoff_exponent would cause interval > max_backoff_
-    // exponent 0: interval 1s (1 * 2^0)
-    // exponent 1: interval 2s (1 * 2^1)
-    // exponent 2: interval 4s (1 * 2^2) -> this will hit max_backoff_
-    // exponent 3: interval 8s (1 * 2^3) -> should be capped to 4s
-    // exponent 4: interval 16s (1 * 2^4) -> should be capped to 4s
+    // Initial STALE->PROBE transition sends 1st probe.
+    // Entry state after this: PROBE, pc=0, be=0, timestamp=current_time.
+    // (pc and be are 0 because they are reset on STALE->PROBE transition, probe is sent, then PROBE logic not re-entered yet to increment them)
+    ASSERT_EQ(entry_ptr->second.probe_count, 0); // Probe count is reset by STALE->PROBE
+    testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
-    // After first probe (exponent becomes 1)
-    current_time += probe_interval_ * (1 << 0); // Advance by 1 second
+    // --- Probe #2 (1st probe sent by PROBE state's own logic) ---
+    // Time advance for be=0 (wait = 1s * 2^0 = 1s)
+    current_time += probe_interval_ * (1LL << 0) + std::chrono::milliseconds(100);
     EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-    cache_->age_entries(current_time + std::chrono::milliseconds(100));
+    cache_->age_entries(current_time);
     entry_ptr = cache_->get_cache_for_test().find(ip1_);
+    // Inside age_entries: be=0 used for wait. pc becomes 1. be becomes 1.
     ASSERT_EQ(entry_ptr->second.backoff_exponent, 1);
+    ASSERT_EQ(entry_ptr->second.probe_count, 1);
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
-    // After second probe (exponent becomes 2)
-    current_time += probe_interval_ * (1 << 1); // Advance by 2 seconds
+    // --- Probe #3 (2nd probe by PROBE state's own logic) ---
+    // Time advance for be=1 (wait = 1s * 2^1 = 2s)
+    current_time += probe_interval_ * (1LL << 1) + std::chrono::milliseconds(100);
     EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-    cache_->age_entries(current_time + std::chrono::milliseconds(100));
+    cache_->age_entries(current_time);
     entry_ptr = cache_->get_cache_for_test().find(ip1_);
+    // Inside age_entries: be=1 used for wait. pc becomes 2. be becomes 2.
     ASSERT_EQ(entry_ptr->second.backoff_exponent, 2);
+    ASSERT_EQ(entry_ptr->second.probe_count, 2);
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
-    // After third probe (exponent becomes 3). Interval should be 4s (capped)
-    current_time += probe_interval_ * (1 << 2); // Advance by 4 seconds (2^2)
+    // --- Probe #4 (3rd probe by PROBE state's own logic, pc will be MAX_PROBES) ---
+    // Time advance for be=2 (wait = 1s * 2^2 = 4s). This equals max_backoff_ (4s). Interval is effectively capped.
+    current_time += probe_interval_ * (1LL << 2) + std::chrono::milliseconds(100);
     EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-    cache_->age_entries(current_time + std::chrono::milliseconds(100));
+    cache_->age_entries(current_time);
     entry_ptr = cache_->get_cache_for_test().find(ip1_);
-    ASSERT_EQ(entry_ptr->second.backoff_exponent, 3);
+    // Inside age_entries: be=2 used for wait. pc becomes 3. be becomes 3.
+    ASSERT_EQ(entry_ptr->second.backoff_exponent, 3); // BE increments.
+    ASSERT_EQ(entry_ptr->second.probe_count, 3);     // pc is now MAX_PROBES (3).
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
 
-    // After fourth probe (exponent becomes 4). Interval should still be capped at 4s (max_backoff_)
-    // The current time is exactly when the next probe is due if capped.
-    current_time += max_backoff_; // Advance by max_backoff_ (4 seconds)
-    EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-    cache_->age_entries(current_time + std::chrono::milliseconds(100));
+    // --- Next attempt: This should transition to FAILED ---
+    // Time advance for be=3 (wait = 1s * 2^3 = 8s, but capped to max_backoff_ = 4s).
+    current_time += max_backoff_ + std::chrono::milliseconds(100); // Advance by the capped interval.
+    // Inside age_entries: be=3 used for wait (capped at 4s).
+    // pc becomes 4. Condition pc (4) > MAX_PROBES (3) is true.
+    // No probe sent. Entry transitions to FAILED.
+    EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(0);
+    cache_->age_entries(current_time);
     entry_ptr = cache_->get_cache_for_test().find(ip1_);
-    ASSERT_EQ(entry_ptr->second.backoff_exponent, 4);
-    testing::Mock::VerifyAndClearExpectations(&(*cache_));
-
-    // Fifth probe, still capped
-    current_time += max_backoff_; // Advance by max_backoff_ (4 seconds)
-    EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-    cache_->age_entries(current_time + std::chrono::milliseconds(100));
-    entry_ptr = cache_->get_cache_for_test().find(ip1_);
-    ASSERT_EQ(entry_ptr->second.backoff_exponent, 5); // Exponent keeps increasing
+    ASSERT_EQ(entry_ptr->second.state, ARPCache::ARPState::FAILED);
+    ASSERT_EQ(entry_ptr->second.backoff_exponent, 0); // Reset upon FAILED
+    ASSERT_EQ(entry_ptr->second.probe_count, 0);    // Reset upon FAILED
     testing::Mock::VerifyAndClearExpectations(&(*cache_));
 }
 
@@ -829,27 +859,29 @@ TEST_F(ARPCacheTestFixture, FailedState_TransitionOnProbeFailure) {
         }
         current_time += time_to_advance + std::chrono::milliseconds(100); // Ensure time has passed enough
 
-        if (entry_ptr->second.state != ARPCache::ARPState::FAILED) {
-             // If it's the very first iteration, lookup already sent a request.
-             // For INCOMPLETE, age_entries sends request if time matches.
-             // For PROBE, age_entries sends request if time matches.
-            if (i > 0 || entry_ptr->second.state == ARPCache::ARPState::PROBE) { // After first auto-probe from lookup
-                 EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-            } else if (entry_ptr->second.state == ARPCache::ARPState::INCOMPLETE && i == 0) {
-                // For the first call to age_entries on an INCOMPLETE entry from lookup.
-                // The initial lookup already sent a request.
-                // The first age_entries call will check if probe_interval has passed.
-                // If so, it sends a request and increments probe_count.
-                EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-            }
+        // The loop runs for i = 0, 1, ..., MAX_PROBES.
+        // `lookup()` sent the 1st probe.
+        // `age_entries` in iteration i=0 sends 2nd probe. (entry.probe_count becomes 1)
+        // `age_entries` in iteration i=1 sends 3rd probe. (entry.probe_count becomes 2)
+        // `age_entries` in iteration i=MAX_PROBES-1 sends (MAX_PROBES+1)th probe. (entry.probe_count becomes MAX_PROBES)
+        // `age_entries` in iteration i=MAX_PROBES does NOT send probe. (entry.probe_count becomes MAX_PROBES+1, then FAILED)
+        if (i < ARPCache::MAX_PROBES) {
+            EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
+        } else { // i == MAX_PROBES, this iteration transitions to FAILED
+            EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(0);
         }
 
         cache_->age_entries(current_time);
         testing::Mock::VerifyAndClearExpectations(&(*cache_));
+
+        // Update entry_ptr for the next iteration's state check or final assertion
+        entry_ptr = cache_->get_cache_for_test().find(ip1_);
+        // Entry should still exist even if FAILED, until purged by lifetime.
+        ASSERT_NE(entry_ptr, cache_->get_cache_for_test().end());
     }
 
-    entry_ptr = cache_->get_cache_for_test().find(ip1_);
-    ASSERT_NE(entry_ptr, cache_->get_cache_for_test().end());
+    // After the loop (i went up to MAX_PROBES), entry_ptr points to the latest state.
+    // The last iteration (i=MAX_PROBES) should have made it FAILED.
     ASSERT_EQ(entry_ptr->second.state, ARPCache::ARPState::FAILED);
     ASSERT_EQ(entry_ptr->second.probe_count, 0); // Should be reset
     ASSERT_EQ(entry_ptr->second.backoff_exponent, 0); // Should be reset
@@ -1009,39 +1041,40 @@ TEST_F(ARPCacheTestFixture, BackgroundRefresh_ToFailedIfNoReply) { // Renamed to
             break; // Already failed, no more probes or time advancement needed
         }
 
-        // Calculate expected interval for the *next* probe
-        std::chrono::seconds time_to_advance = probe_interval_;
-        // backoff_exponent in the entry is the one that *will be used* for the current probe if due.
-        // If probe_count is 0, it's the first probe in this state, use base interval.
-        // If probe_count > 0, backoff_exponent would have been incremented from the *previous* probe.
-        int exponent_for_current_wait = entry_ptr->second.backoff_exponent;
-        time_to_advance = probe_interval_ * (1LL << exponent_for_current_wait);
+        // Calculate expected interval for the *next* probe based on current backoff_exponent.
+        // entry.probe_count is the count *before* this age_entries call processes it.
+        // entry.backoff_exponent is also from *before* this call.
+        int current_exponent_for_wait_calc = entry_ptr->second.backoff_exponent;
+        std::chrono::seconds time_to_advance = probe_interval_ * (1LL << current_exponent_for_wait_calc);
 
         if (time_to_advance > max_backoff_) {
             time_to_advance = max_backoff_;
         }
-
         current_time += time_to_advance;
 
-        // Expect send_arp_request if the entry is still in PROBE and probe_count <= MAX_PROBES
-        // The actual send happens in age_entries. The probe_count is incremented in age_entries *before* checking MAX_PROBES.
+        // A probe is sent if state is PROBE and entry.probe_count (before increment) < MAX_PROBES.
+        // After increment, probe_count will be entry.probe_count + 1.
+        // The condition for sending probe in age_entries is effectively: (entry.probe_count + 1) <= MAX_PROBES.
+        // Or, entry.probe_count (before increment) <= MAX_PROBES - 1.
         if (entry_ptr->second.state == ARPCache::ARPState::PROBE && entry_ptr->second.probe_count < ARPCache::MAX_PROBES) {
-             EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
-        } else if (entry_ptr->second.state == ARPCache::ARPState::PROBE && entry_ptr->second.probe_count == ARPCache::MAX_PROBES) {
-            // This is the call that will make probe_count > MAX_PROBES and transition to FAILED
-            // For this specific probe send, it might or might not happen depending on exact sequence.
-            // To be safe, allow it to be called or not.
-            // More accurately, the send_arp_request for the (MAX_PROBES+1)th effective probe happens, then it's marked FAILED.
-             EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
+            EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(1);
+        } else {
+            // This covers cases where entry.probe_count == MAX_PROBES (will transition to FAILED),
+            // or if state is already FAILED.
+            EXPECT_CALL(*cache_, send_arp_request(ip1_)).Times(0);
         }
-
 
         cache_->age_entries(current_time + std::chrono::milliseconds(100)); // Ensure enough time passed
         testing::Mock::VerifyAndClearExpectations(&(*cache_));
+
+        // Update entry_ptr for the next iteration's state check
+        entry_ptr = cache_->get_cache_for_test().find(ip1_);
+        ASSERT_NE(entry_ptr, cache_->get_cache_for_test().end()); // Should still exist
     }
 
-    entry_ptr = cache_->get_cache_for_test().find(ip1_);
-    ASSERT_NE(entry_ptr, cache_->get_cache_for_test().end());
+    // After the loop, entry_ptr points to the latest state.
+    // The loop runs for i = 0 to MAX_PROBES.
+    // The iteration i = MAX_PROBES should have transitioned it to FAILED.
     ASSERT_EQ(entry_ptr->second.state, ARPCache::ARPState::FAILED);
     ASSERT_EQ(entry_ptr->second.probe_count, 0); // Reset upon entering FAILED
     ASSERT_EQ(entry_ptr->second.backoff_exponent, 0); // Reset upon entering FAILED
