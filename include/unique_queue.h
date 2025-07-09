@@ -112,7 +112,8 @@ public:
         // If we copy *insert_result.first, T must be copyable.
         // The old code `queue_.push(std::move(value))` will now push a null unique_ptr.
         // This will likely fail runtime tests but should compile.
-        queue_.push(std::move(value)); // Pushes a (now likely null) unique_ptr
+        // queue_.push(std::move(value)); // Pushes a (now likely null) unique_ptr // OLD BUGGY LINE
+        queue_.push(*insert_result.first); // Push a copy of the element actually inserted into seen_
         return true;
     }
 
