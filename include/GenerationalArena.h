@@ -274,7 +274,7 @@ public:
     }
 
     size_t capacity() const noexcept {
-        return slots_.size(); // Total number of slots (active or free)
+        return slots_.capacity(); // Should reflect reserved capacity
     }
 
     void reserve(size_t new_capacity) {
