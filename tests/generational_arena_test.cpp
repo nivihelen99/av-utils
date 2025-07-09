@@ -27,6 +27,23 @@ struct TestObject {
         return *this;
     }
 
+    // Move constructor
+    TestObject(TestObject&& other) noexcept
+        : id(other.id), data(std::move(other.data)) {
+        // DO NOT increment constructor_calls for a move
+        other.id = 0; // Mark other as moved-from (optional, good practice)
+    }
+
+    // Move assignment operator
+    TestObject& operator=(TestObject&& other) noexcept {
+        if (this != &other) {
+            id = other.id;
+            data = std::move(other.data);
+            // DO NOT increment constructor_calls for a move assignment
+            other.id = 0; // Mark other as moved-from (optional, good practice)
+        }
+        return *this;
+    }
 
     ~TestObject() {
         destructor_calls++;
