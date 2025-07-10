@@ -107,6 +107,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         SparseSetLib         # Added for sparse_set_test
         VectorBiMapLib       # Added for test_vector_bimap
         WeightedReservoirSamplerLib # Added for test_weighted_reservoir_sampler
+        VectorWrapperLib     # Added for vector_wrapper_test
     )
 
     # Specific configurations for certain tests
