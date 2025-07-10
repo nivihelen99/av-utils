@@ -289,6 +289,10 @@ target_include_directories(GroupedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/i
 add_library(VectorBiMapLib INTERFACE)
 target_include_directories(VectorBiMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define WeightedReservoirSamplerLib as an interface library (header-only)
+add_library(WeightedReservoirSamplerLib INTERFACE)
+target_include_directories(WeightedReservoirSamplerLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -386,6 +390,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         FrozenListLib        # Added for frozen_list_example
         SparseSetLib         # Added for sparse_set_example
         VectorBiMapLib       # Added for vector_bimap_example
+        WeightedReservoirSamplerLib # Added for weighted_reservoir_sampler_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

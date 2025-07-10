@@ -106,6 +106,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         FrozenListLib        # Added for frozen_list_test
         SparseSetLib         # Added for sparse_set_test
         VectorBiMapLib       # Added for test_vector_bimap
+        WeightedReservoirSamplerLib # Added for test_weighted_reservoir_sampler
     )
 
     # Specific configurations for certain tests
