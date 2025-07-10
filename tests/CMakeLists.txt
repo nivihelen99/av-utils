@@ -101,6 +101,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         WeightedSetLib       # Added for weighted_set_test
 
         GenerationalArenaLib # Added for generational_arena_test
+        GroupedSetLib        # Added for test_GroupedSet
 
         FrozenListLib        # Added for frozen_list_test
         SparseSetLib         # Added for sparse_set_test
