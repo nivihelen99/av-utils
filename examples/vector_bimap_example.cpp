@@ -142,9 +142,8 @@ int main() {
     };
     std::cout << "VectorBiMap vm2 created with initializer list (size " << vm2.size() << "):\n";
     std::cout << "Left view (sorted by string key):\n";
-    for(const auto& p : vm2.left()) { // Using hypothetical left() view method style for variety
-                                       // This will require adding left() and right() view methods
-                                       // for now, let's use direct iterators
+    // Corrected to use default range-based for loop, which iterates the left view
+    for(const auto& p : vm2) {
         std::cout << p.first << " => " << p.second << std::endl;
     }
      std::cout << "\nRight view (sorted by int key):\n";
