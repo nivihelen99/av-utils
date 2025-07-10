@@ -4,6 +4,7 @@
 #include <vector>
 #include <cassert>
 #include <algorithm> // For std::is_sorted
+#include <stdexcept> // For std::out_of_range
 
 // Simple test runner state
 int tests_run = 0;
@@ -28,6 +29,7 @@ int tests_failed = 0;
 // Helper to check if left view is sorted
 template<typename L, typename R, typename CL, typename CR>
 bool is_left_view_sorted(const cpp_collections::VectorBiMap<L, R, CL, CR>& vm) {
+    if (vm.left_cbegin() == vm.left_cend()) return true;
     return std::is_sorted(vm.left_cbegin(), vm.left_cend(),
         [&](const typename cpp_collections::VectorBiMap<L, R, CL, CR>::left_value_type& a,
             const typename cpp_collections::VectorBiMap<L, R, CL, CR>::left_value_type& b) {
@@ -38,6 +40,7 @@ bool is_left_view_sorted(const cpp_collections::VectorBiMap<L, R, CL, CR>& vm) {
 // Helper to check if right view is sorted
 template<typename L, typename R, typename CL, typename CR>
 bool is_right_view_sorted(const cpp_collections::VectorBiMap<L, R, CL, CR>& vm) {
+    if (vm.right_cbegin() == vm.right_cend()) return true;
     return std::is_sorted(vm.right_cbegin(), vm.right_cend(),
         [&](const typename cpp_collections::VectorBiMap<L, R, CL, CR>::right_value_type& a,
             const typename cpp_collections::VectorBiMap<L, R, CL, CR>::right_value_type& b) {
@@ -50,6 +53,8 @@ void test_default_constructor_and_empty() {
     cpp_collections::VectorBiMap<int, std::string> vm;
     TEST_ASSERT(vm.empty());
     TEST_ASSERT(vm.size() == 0);
+    TEST_ASSERT(is_left_view_sorted(vm));
+    TEST_ASSERT(is_right_view_sorted(vm));
 }
 
 void test_initializer_list_constructor() {
@@ -99,15 +104,14 @@ void test_insert_basic() {
 
 void test_insert_rvalues() {
     cpp_collections::VectorBiMap<std::string, int> vm;
-    std::string key = "key";
-    int val = 10;
-    // TEST_ASSERT(vm.insert(std::move(key), std::move(val))); // val is int, move has no effect
     TEST_ASSERT(vm.insert(std::string("movable_key"), 20));
     TEST_ASSERT(vm.size() == 1);
     TEST_ASSERT(vm.contains_left("movable_key"));
     TEST_ASSERT(vm.at_left("movable_key") == 20);
     TEST_ASSERT(vm.contains_right(20));
     TEST_ASSERT(vm.at_right(20) == "movable_key");
+    TEST_ASSERT(is_left_view_sorted(vm));
+    TEST_ASSERT(is_right_view_sorted(vm));
 }
 
 
@@ -132,10 +136,13 @@ void test_insert_or_assign() {
     TEST_ASSERT(vm.contains_left(10));
     TEST_ASSERT(!vm.contains_left(1)); // 1 should be gone
     TEST_ASSERT(vm.size() == 2); // 10=>uno, 2=>two
+    TEST_ASSERT(is_left_view_sorted(vm)); // Check sorted after complex insert_or_assign
+    TEST_ASSERT(is_right_view_sorted(vm));
+
 
     // Conflict: assign (L_new, R_new) where L_new exists and R_new exists,
     // but L_new maps to R_old and R_new maps to L_old.
-    // Current: (10, "uno"), (2, "two")
+    // Current: (2, "two"), (10, "uno") -- assuming sorted this way after previous ops
     vm.insert_or_assign(10, "two"); // Should become (10, "two"). Old (2,"two") removed. Old (10,"uno") removed.
     TEST_ASSERT(vm.size() == 1);
     TEST_ASSERT(vm.at_left(10) == "two");
@@ -198,6 +205,9 @@ void test_erase() {
     TEST_ASSERT(vm.contains_right("z"));
     TEST_ASSERT(!vm.erase_left(100)); // Key not found
     TEST_ASSERT(vm.size() == 2);
+    TEST_ASSERT(is_left_view_sorted(vm));
+    TEST_ASSERT(is_right_view_sorted(vm));
+
 
     // Erase_right
     TEST_ASSERT(vm.erase_right("x")); // Erase (1, "x")
@@ -219,6 +229,9 @@ void test_clear_swap() {
     vm1.swap(vm2);
     TEST_ASSERT(vm1.size() == 3 && vm1.contains_left(3));
     TEST_ASSERT(vm2.size() == 2 && vm2.contains_left(1));
+    TEST_ASSERT(is_left_view_sorted(vm1) && is_right_view_sorted(vm1));
+    TEST_ASSERT(is_left_view_sorted(vm2) && is_right_view_sorted(vm2));
+
 
     cpp_collections::swap(vm1, vm2); // Non-member swap
     TEST_ASSERT(vm1.size() == 2 && vm1.contains_left(1));
@@ -248,12 +261,12 @@ void test_iteration_and_sorted_order() {
     TEST_ASSERT(is_left_view_sorted(vm));
 
     // Right view iteration (sorted by string value: apple, banana, date, zebra)
-    std::vector<std::string> right_keys;
+    std::vector<std::string> right_keys_str_val;
     for (auto it = vm.right_cbegin(); it != vm.right_cend(); ++it) {
-        right_keys.push_back(it->first);
+        right_keys_str_val.push_back(it->first);
     }
-    std::vector<std::string> expected_right_keys = {"apple", "banana", "date", "zebra"};
-    TEST_ASSERT(right_keys == expected_right_keys);
+    std::vector<std::string> expected_right_keys_str_val = {"apple", "banana", "date", "zebra"};
+    TEST_ASSERT(right_keys_str_val == expected_right_keys_str_val);
     TEST_ASSERT(is_right_view_sorted(vm));
 }
 
@@ -276,20 +289,23 @@ void test_custom_comparators() {
     vm.insert(20, "medium_len");
 
     // Check left view sorted by ReverseIntLess (30, 20, 10)
-    std::vector<int> left_keys;
-    for (const auto& p : vm.left()) { // Assuming left() returns a range/view for iter
-        left_keys.push_back(p.first);
+    std::vector<int> left_keys_actual;
+    for (const auto& p : vm) { // Default iteration is left view
+        left_keys_actual.push_back(p.first);
     }
     std::vector<int> expected_left = {30, 20, 10};
-    TEST_ASSERT(left_keys == expected_left);
+    TEST_ASSERT(left_keys_actual == expected_left);
+    TEST_ASSERT(is_left_view_sorted(vm));
+
 
     // Check right view sorted by StringLengthLess ("a", "short", "medium_len")
-    std::vector<std::string> right_keys_str;
+    std::vector<std::string> right_keys_str_actual;
      for (auto it = vm.right_cbegin(); it != vm.right_cend(); ++it) {
-        right_keys_str.push_back(it->first);
+        right_keys_str_actual.push_back(it->first);
     }
     std::vector<std::string> expected_right_str = {"a", "short", "medium_len"};
-    TEST_ASSERT(right_keys_str == expected_right_str);
+    TEST_ASSERT(right_keys_str_actual == expected_right_str);
+    TEST_ASSERT(is_right_view_sorted(vm));
 
     TEST_ASSERT(vm.at_left(30) == "a");
     TEST_ASSERT(vm.at_right("short") == 10);
@@ -298,126 +314,22 @@ void test_custom_comparators() {
 
 int main() {
     std::cout << "Starting VectorBiMap tests...\n";
-    print_line();
 
     RUN_TEST(test_default_constructor_and_empty);
-    print_line();
     RUN_TEST(test_initializer_list_constructor);
-    print_line();
     RUN_TEST(test_insert_basic);
-    print_line();
     RUN_TEST(test_insert_rvalues);
-    print_line();
     RUN_TEST(test_insert_or_assign);
-    print_line();
     RUN_TEST(test_find_at_contains);
-    print_line();
     RUN_TEST(test_erase);
-    print_line();
     RUN_TEST(test_clear_swap);
-    print_line();
     RUN_TEST(test_iteration_and_sorted_order);
-    print_line();
     RUN_TEST(test_custom_comparators);
-    print_line();
 
-    std::cout << "All tests finished.\n";
+    std::cout << "\nAll tests finished.\n";
     std::cout << "Tests run: " << tests_run << std::endl;
     std::cout << "Tests failed: " << tests_failed << std::endl;
-    print_line();
+    std::cout << "----------------------------------------\n";
 
     return (tests_failed == 0) ? 0 : 1;
 }
-
-// Helper function for test_custom_comparators, assuming left() returns a range/view
-// This is a placeholder, actual iteration might need direct iterators if left() not implemented
-namespace cpp_collections {
-    template<typename L, typename R, typename CL, typename CR>
-    struct VectorBiMapLeftView { // Dummy struct for the test code to compile
-        const VectorBiMap<L,R,CL,CR>* parent;
-        VectorBiMapLeftView(const VectorBiMap<L,R,CL,CR>* p) : parent(p) {}
-        auto begin() const { return parent->left_cbegin(); }
-        auto end() const { return parent->left_cend(); }
-    };
-    template<typename L, typename R, typename CL, typename CR>
-    auto VectorBiMap<L,R,CL,CR>::left() const -> VectorBiMapLeftView<L,R,CL,CR> {
-        return VectorBiMapLeftView<L,R,CL,CR>(this);
-    }
-} // namespace cpp_collections
-// End of placeholder for test_custom_comparators left() view helper
-// This should be removed once proper view objects or direct iterators are consistently used.
-// For now, the test_custom_comparators will use direct iterators.
-// The example file had vm_custom_comp.left() which does not exist.
-// The test code was adapted to use range-for loop on vm_custom_comp itself for left view.
-// The `left()` method and dummy view struct were added just to make the provided test code compile.
-// Ideally, the test should be written to use `vm_custom_comp.left_cbegin()` etc. or `for(const auto& p : vm_custom_comp)`
-// I'll modify test_custom_comparators to use the direct iterators or range-based for loop.
-
-// Re-modification of test_custom_comparators to avoid the dummy view:
-void test_custom_comparators_revised() {
-    struct ReverseIntLess {
-        bool operator()(int a, int b) const { return a > b; }
-    };
-    struct StringLengthLess {
-        bool operator()(const std::string& a, const std::string& b) const {
-            if (a.length() != b.length()) return a.length() < b.length();
-            return a < b;
-        }
-    };
-
-    cpp_collections::VectorBiMap<int, std::string, ReverseIntLess, StringLengthLess> vm;
-    vm.insert(10, "short");
-    vm.insert(30, "a");
-    vm.insert(20, "medium_len");
-
-    std::vector<int> left_keys_actual;
-    for(const auto& p : vm) { // Default is left view
-        left_keys_actual.push_back(p.first);
-    }
-    std::vector<int> expected_left_keys = {30, 20, 10};
-    TEST_ASSERT(left_keys_actual == expected_left_keys);
-
-    std::vector<std::string> right_keys_actual;
-    for(auto it = vm.right_cbegin(); it != vm.right_cend(); ++it) {
-        right_keys_actual.push_back(it->first);
-    }
-    std::vector<std::string> expected_right_keys = {"a", "short", "medium_len"};
-    TEST_ASSERT(right_keys_actual == expected_right_keys);
-}
-
-// Need to replace the call to test_custom_comparators in main
-// with test_custom_comparators_revised.
-// This change is done textually below.
-// The original main() calls RUN_TEST(test_custom_comparators);
-// It should call RUN_TEST(test_custom_comparators_revised);
-// And remove the dummy view and left() method.
-
-// Final structure of main after correction:
-/*
-int main() {
-    // ... (previous RUN_TEST calls) ...
-    RUN_TEST(test_iteration_and_sorted_order);
-    print_line();
-    RUN_TEST(test_custom_comparators_revised); // Corrected call
-    print_line();
-    // ... (summary print) ...
-}
-*/
-// The dummy view and its associated `left()` method in `cpp_collections` namespace
-// should also be removed from the file.
-// This is done by deleting the block starting with:
-// namespace cpp_collections {
-// and ending with:
-// } // namespace cpp_collections
-// End of placeholder for test_custom_comparators left() view helper
-
-// The above comments describe changes needed. The actual code block below
-// will have these changes applied.
-// The `print_line()` is also not defined in this test file, so it should be removed or defined.
-// For simplicity, I will remove calls to print_line() from the test file.
-// The definition of `print_line()` from the example file is not included here.
-// The `RUN_TEST` macro already prints test names.
-// The `TEST_ASSERT` macro handles failure reporting.
-// The main function will be simplified.Okay, I've generated the content for `tests/test_vector_bimap.cpp`. I had to make some adjustments during generation because my initial thought for `test_custom_comparators` relied on a `left()` view method that wasn't implemented (as I decided direct iterators were simpler for `VectorBiMap`). I've corrected the test to use the default range-based for loop (which uses the left view) and direct right-view iterators.
-
-Here's the code for `tests/test_vector_bimap.cpp`:
