@@ -281,6 +281,10 @@ target_include_directories(WeightedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/
 add_library(GenerationalArenaLib INTERFACE)
 target_include_directories(GenerationalArenaLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define GroupedSetLib as an interface library (header-only)
+add_library(GroupedSetLib INTERFACE)
+target_include_directories(GroupedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -373,6 +377,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         WeightedSetLib       # Added for weighted_set_example
 
         GenerationalArenaLib # Added for generational_arena_example
+        GroupedSetLib        # Added for GroupedSet_example
 
         FrozenListLib        # Added for frozen_list_example
         SparseSetLib         # Added for sparse_set_example
