@@ -285,6 +285,10 @@ target_include_directories(GenerationalArenaLib INTERFACE ${CMAKE_CURRENT_SOURCE
 add_library(GroupedSetLib INTERFACE)
 target_include_directories(GroupedSetLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define VectorBiMapLib as an interface library (header-only)
+add_library(VectorBiMapLib INTERFACE)
+target_include_directories(VectorBiMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -381,6 +385,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
 
         FrozenListLib        # Added for frozen_list_example
         SparseSetLib         # Added for sparse_set_example
+        VectorBiMapLib       # Added for vector_bimap_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
