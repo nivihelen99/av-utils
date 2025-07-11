@@ -143,9 +143,16 @@ private:
     internal_list_iterator_type list_iter_;
     friend LRUDictType;
     friend class LRUDictIterator<LRUDictType, true>;
-    LRUDictIterator(internal_list_iterator_type it) : list_iter_(it) {} // Non-explicit
 public:
+    // Made this constructor explicit as per user feedback to guide std::pair construction
+    explicit LRUDictIterator(internal_list_iterator_type it) : list_iter_(it) {}
+
     LRUDictIterator() = default;
+    LRUDictIterator(const LRUDictIterator& other) = default;
+    LRUDictIterator(LRUDictIterator&& other) noexcept = default;
+    LRUDictIterator& operator=(const LRUDictIterator& other) = default;
+    LRUDictIterator& operator=(LRUDictIterator&& other) noexcept = default;
+
     LRUDictIterator(const LRUDictIterator<LRUDictType, false>& other) requires IsConst
         : list_iter_(other.list_iter_) {}
     reference operator*() const { return *list_iter_; }
@@ -512,4 +519,3 @@ template <typename K, typename V, typename H, typename KE, typename A>
 void swap(LRUDict<K, V, H, KE, A>& lhs, LRUDict<K, V, H, KE, A>& rhs) noexcept { lhs.swap(rhs); }
 
 } // namespace cpp_collections
-// [end of include/LRUDict.h]  <- This was the problematic line, now removed from the actual content below.
