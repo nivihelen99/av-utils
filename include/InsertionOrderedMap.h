@@ -515,9 +515,12 @@ public:
     // Comparison
     bool operator==(const InsertionOrderedMap& other) const {
         if (size() != other.size()) return false;
-        if (map_ != other.map_) return false; // Quick check based on map content (value is iterator, might be tricky)
-                                             // A robust == needs to check order and key-value pairs.
-        return list_ == other.list_; // std::list::operator== checks elements in order.
+        // The primary check for equality in an insertion-ordered map is that
+        // the sequence of elements is identical. std::list::operator== handles this.
+        // Comparing the unordered_maps directly is problematic because their value_type
+        // is an iterator into their respective lists, which will always differ for distinct map objects
+        // even if they represent the same logical sequence of key-value pairs.
+        return list_ == other.list_;
     }
 
     bool operator!=(const InsertionOrderedMap& other) const {
