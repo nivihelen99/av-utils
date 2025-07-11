@@ -305,6 +305,10 @@ target_include_directories(InsertionOrderedMapLib INTERFACE ${CMAKE_CURRENT_SOUR
 add_library(LRUDictLib INTERFACE)
 target_include_directories(LRUDictLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define GroupByConsecutiveLib as an interface library (header-only)
+add_library(GroupByConsecutiveLib INTERFACE)
+target_include_directories(GroupByConsecutiveLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -406,6 +410,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         VectorWrapperLib     # Added for vector_wrapper_example
         InsertionOrderedMapLib # Added for insertion_ordered_map_example
         LRUDictLib           # Added for lru_dict_example
+        GroupByConsecutiveLib # Added for group_by_consecutive_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

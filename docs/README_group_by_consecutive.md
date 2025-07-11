@@ -1,166 +1,193 @@
-# `utils::group_by_consecutive`
+# `group_by_consecutive` Utility (`cpp_collections` namespace)
 
 ## Overview
 
-The `group_by_consecutive.h` header provides a utility function, `utils::group_by_consecutive`, that groups consecutive elements in an input sequence (specified by iterators or a container) based on a key. The key for each element is determined by a user-provided key function.
+The `group_by_consecutive.h` header provides utility functions within the `cpp_collections` namespace to group consecutive elements in a range. This component is inspired by Python's `itertools.groupby` but is designed for C++ iterators and returns fully materialized groups.
 
-This function is similar in concept to Python's `itertools.groupby`, but instead of returning iterators to groups, it collects all grouped items into a `std::vector` of pairs, where each pair consists of the common key and a `std::vector` of the elements belonging to that consecutive group.
+It's important to distinguish this from `std::group_by` (from `<algorithm>`), which requires the input range to be pre-sorted according to the grouping criterion. `cpp_collections::group_by_consecutive` and `cpp_collections::group_by_consecutive_pred` operate on the range as-is, grouping elements that are already consecutive and share a common characteristic.
+
+Two primary function templates are provided:
+1.  `cpp_collections::group_by_consecutive(first, last, getKey)`: Groups elements based on a key returned by a user-provided `getKey` function.
+2.  `cpp_collections::group_by_consecutive_pred(first, last, are_in_same_group)`: Groups elements based on a binary predicate that determines if two adjacent elements belong to the same group.
 
 ## Features
 
--   **Groups Consecutive Elements:** Identifies contiguous blocks of elements that share the same key.
--   **Custom Key Function:** Allows flexible grouping logic by accepting a user-defined function to extract the key from each element.
--   **Iterator and Container Support:** Provides overloads for both iterator ranges and whole containers.
--   **Type Deduction:** Uses modern C++ features for automatic type deduction of keys and values.
--   **Move Semantics:** Utilizes `std::move` for potentially better performance when constructing the result.
+-   **Header-only**: Include `group_by_consecutive.h`.
+-   **Namespace**: All components are within the `cpp_collections` namespace.
+-   **Iterator-based**: Works with input iterators satisfying ForwardIterator requirements.
+-   **C++20 Standard**: Leverages C++20 features like `std::invoke_result_t`.
+-   **Two Grouping Strategies**:
+    -   **Key Extraction**: Supply a function that extracts a key from each element. Consecutive elements yielding the same key are grouped.
+    -   **Predicate-based**: Supply a binary predicate `(previous_element, current_element)` which returns `true` if `current_element` should be grouped with `previous_element`.
+-   **Structured Group Representation**: Returns a `std::vector` of `cpp_collections::Group` objects.
 
-## Functions
+## `cpp_collections::Group<KeyType, ValueType>` Struct
 
-### Iterator-Based Overload
-```cpp
-template<typename Iterator, typename KeyFunc>
-auto group_by_consecutive(Iterator begin, Iterator end, KeyFunc key_func)
-    -> std::vector<std::pair<
-           typename std::decay_t<decltype(key_func(*begin))>, // KeyType
-           std::vector<typename std::iterator_traits<Iterator>::value_type> // GroupType
-       >>;
-```
--   `begin`, `end`: Iterators defining the input sequence.
--   `key_func`: A callable (lambda, function pointer, functor) that accepts an element from the sequence and returns a key. Elements are grouped as long as this key remains the same for consecutive elements.
--   **Returns**: A `std::vector` of `std::pair`. Each pair contains:
-    -   `first`: The common key for the group.
-    -   `second`: A `std::vector` containing all original elements that formed that consecutive group.
-
-### Container-Based Overload (Wrapper)
-```cpp
-template<typename Container, typename KeyFunc>
-auto group_by_consecutive(const Container& container, KeyFunc key_func)
-    -> decltype(group_by_consecutive(container.begin(), container.end(), key_func));
-```
--   `container`: A container (e.g., `std::vector`, `std::list`) passed by const reference.
--   `key_func`: Same as in the iterator-based version.
--   **Returns**: Same as the iterator-based version.
-
-## Usage Examples
-
-(Based on `examples/group_by_consecutive_example.cpp`)
-
-### Basic Usage with `std::pair`
+The result of the grouping operations is a vector of `Group` objects. This struct is defined as:
 
 ```cpp
-#include "group_by_consecutive.h"
-#include <vector>
-#include <string>
-#include <iostream>
-#include <utility> // For std::pair
+namespace cpp_collections {
+    template <typename Key, typename Value>
+    struct Group {
+        Key key;
+        std::vector<Value> items;
 
-int main() {
-    std::vector<std::pair<char, int>> data = {
-        {'a', 1}, {'a', 2}, {'b', 3}, {'b', 4}, {'a', 5}
+        // Default constructor
+        Group() = default;
+
+        // Constructor
+        Group(Key k, std::vector<Value> i);
+
+        // Equality operator for easy testing
+        bool operator==(const Group<Key, Value>& other) const;
     };
-
-    // Group by the first element of the pair (the char)
-    auto key_function = [](const std::pair<char, int>& p) {
-        return p.first;
-    };
-
-    auto groups = utils::group_by_consecutive(data, key_function);
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << group_pair.first << ", Values: [ ";
-        for (const auto& item : group_pair.second) {
-            std::cout << "{'" << item.first << "', " << item.second << "} ";
-        }
-        std::cout << "]" << std::endl;
-    }
-    // Expected Output:
-    // Key: a, Values: [ {'a', 1} {'a', 2} ]
-    // Key: b, Values: [ {'b', 3} {'b', 4} ]
-    // Key: a, Values: [ {'a', 5} ]
 }
 ```
+-   `key`: For the key-extraction version, this is the common key for the group. For the predicate version, this is a copy of the first element of the group.
+-   `items`: A `std::vector<ValueType>` containing copies of all elements belonging to that consecutive group.
 
-### Grouping Integers by Their Value
+## API Details
+
+### 1. `group_by_consecutive` (Key Function Version)
 
 ```cpp
-#include "group_by_consecutive.h"
-#include <vector>
-#include <iostream>
-
-int main() {
-    std::vector<int> numbers = {1, 1, 1, 2, 2, 3, 1, 1, 4, 4, 4, 4};
-
-    // Group by the number itself
-    auto groups = utils::group_by_consecutive(numbers.begin(), numbers.end(), [](int val) {
-        return val;
-    });
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << group_pair.first << ", Values: [ ";
-        for (int item : group_pair.second) {
-            std::cout << item << " ";
-        }
-        std::cout << "]" << std::endl;
-    }
-    // Expected Output:
-    // Key: 1, Values: [ 1 1 1 ]
-    // Key: 2, Values: [ 2 2 ]
-    // Key: 3, Values: [ 3 ]
-    // Key: 1, Values: [ 1 1 ]
-    // Key: 4, Values: [ 4 4 4 4 ]
-}
+template <typename InputIt, typename GetKey>
+auto group_by_consecutive(InputIt first, InputIt last, GetKey getKey)
+    -> std::vector<Group<
+           std::invoke_result_t<GetKey, typename std::iterator_traits<InputIt>::value_type>,
+           typename std::iterator_traits<InputIt>::value_type>>;
 ```
+-   **Template Parameters**:
+    -   `InputIt`: An input iterator type (must be at least a ForwardIterator).
+    -   `GetKey`: A callable type for the key extraction function.
+-   **Parameters**:
+    -   `first`, `last`: Iterators defining the input range `[first, last)`.
+    -   `getKey`: A unary function object (lambda, functor, etc.) that takes an element from the input range (of `std::iterator_traits<InputIt>::value_type`) and returns its key. The key type must be comparable using `operator==`.
+-   **Returns**: A `std::vector<cpp_collections::Group<KeyType, ValueType>>`.
+    -   `KeyType` is deduced from the return type of `getKey`.
+    -   `ValueType` is deduced from the input iterator.
 
-### Grouping Custom Structs
+### 2. `group_by_consecutive_pred` (Predicate Version)
 
 ```cpp
-#include "group_by_consecutive.h"
+template <typename InputIt, typename AreInSameGroup>
+auto group_by_consecutive_pred(InputIt first, InputIt last, AreInSameGroup are_in_same_group)
+    -> std::vector<Group<
+           typename std::iterator_traits<InputIt>::value_type,
+           typename std::iterator_traits<InputIt>::value_type>>;
+```
+-   **Template Parameters**:
+    -   `InputIt`: An input iterator type (must be at least a ForwardIterator).
+    -   `AreInSameGroup`: A callable type for the binary predicate.
+-   **Parameters**:
+    -   `first`, `last`: Iterators defining the input range `[first, last)`.
+    -   `are_in_same_group`: A binary predicate that accepts two arguments: `(previous_element, current_element)` from the range. It must return `true` if `current_element` belongs to the same group as `previous_element`, and `false` otherwise.
+-   **Returns**: A `std::vector<cpp_collections::Group<ValueType, ValueType>>`.
+    -   The `key` for each group in this version is a copy of the first element of that group.
+    -   `ValueType` is deduced from the input iterator.
+
+## Usage Example
+
+```cpp
+#include "group_by_consecutive.h" // Assumed to be in include path
+#include <iostream>
 #include <vector>
 #include <string>
-#include <iostream>
 #include <iomanip> // For std::quoted
+#include <cmath>   // For std::abs
+#include <type_traits> // For std::is_same_v (used in example's print helper)
 
-struct Item {
-    int id;
-    std::string category;
-};
+// Example helper to print groups (from group_by_consecutive_example.cpp)
+template <typename Key, typename Value>
+void print_demo_groups(const std::string& title,
+                       const std::vector<cpp_collections::Group<Key, Value>>& groups) {
+    std::cout << title << ":" << std::endl;
+    if (groups.empty()) {
+        std::cout << "  (empty)" << std::endl;
+        return;
+    }
+    for (const auto& group : groups) {
+        std::cout << "  Key: ";
+        if constexpr (std::is_same_v<Key, std::string>) {
+            std::cout << std::quoted(group.key);
+        } else if constexpr (std::is_same_v<Key, char>) {
+            std::cout << "'" << group.key << "'";
+        } else {
+            std::cout << group.key; // Assumes Key has operator<<
+        }
+        std::cout << ", Items: [";
+        bool first_item = true;
+        for (const auto& item : group.items) {
+            if (!first_item) std::cout << ", ";
+            if constexpr (std::is_same_v<Value, std::string>) {
+                std::cout << std::quoted(item);
+            } else {
+                std::cout << item; // Assumes Value has operator<<
+            }
+            first_item = false;
+        }
+        std::cout << "]" << std::endl;
+    }
+    std::cout << std::endl;
+}
 
 int main() {
-    std::vector<Item> items = {
-        {1, "fruit"}, {2, "fruit"}, {3, "vegetable"},
-        {4, "fruit"}, {5, "fruit"}, {6, "dairy"}
-    };
+    // Example 1: Grouping integers by their value (Key Function)
+    std::vector<int> numbers = {1, 1, 1, 2, 2, 1, 3, 3, 2};
+    auto int_groups_key = cpp_collections::group_by_consecutive(
+        numbers.begin(), numbers.end(),
+        [](int x) { return x; } // Key is the number itself
+    );
+    print_demo_groups("Integers grouped by value (key function)", int_groups_key);
+    // Output:
+    // Integers grouped by value (key function):
+    //   Key: 1, Items: [1, 1, 1]
+    //   Key: 2, Items: [2, 2]
+    //   Key: 1, Items: [1]
+    //   Key: 3, Items: [3, 3]
+    //   Key: 2, Items: [2]
 
-    auto get_item_category = [](const Item& item) -> const std::string& {
-        return item.category;
-    };
+    // Example 2: Grouping strings by their first character (Key Function)
+    std::vector<std::string> words = {"apple", "apricot", "banana", "blueberry", "cherry"};
+    auto string_groups_key = cpp_collections::group_by_consecutive(
+        words.begin(), words.end(),
+        [](const std::string& s) { return s.empty() ? ' ' : s[0]; }
+    );
+    print_demo_groups("Strings grouped by first char (key function)", string_groups_key);
+    // Output:
+    // Strings grouped by first char (key function):
+    //   Key: 'a', Items: ["apple", "apricot"]
+    //   Key: 'b', Items: ["banana", "blueberry"]
+    //   Key: 'c', Items: ["cherry"]
 
-    auto grouped_items = utils::group_by_consecutive(items, get_item_category);
+    // Example 3: Grouping integers if their difference is <= 1 (Predicate)
+    std::vector<int> sequence = {1, 2, 3, 5, 6, 8, 9, 10, 12};
+    auto int_groups_pred = cpp_collections::group_by_consecutive_pred(
+        sequence.begin(), sequence.end(),
+        [](int prev, int curr) { return std::abs(curr - prev) <= 1; }
+    );
+    print_demo_groups("Integers grouped if diff <= 1 (predicate)", int_groups_pred);
+    // Output:
+    // Integers grouped if diff <= 1 (predicate):
+    //   Key: 1, Items: [1, 2, 3]  (Key is the first item of the group)
+    //   Key: 5, Items: [5, 6]
+    //   Key: 8, Items: [8, 9, 10]
+    //   Key: 12, Items: [12]
 
-    for (const auto& group : grouped_items) {
-        std::cout << "Category: " << std::quoted(group.first) << std::endl;
-        for (const auto& item : group.second) {
-            std::cout << "  ID: " << item.id << ", Cat: " << std::quoted(item.category) << std::endl;
-        }
-    }
-    // Expected Output:
-    // Category: "fruit"
-    //   ID: 1, Cat: "fruit"
-    //   ID: 2, Cat: "fruit"
-    // Category: "vegetable"
-    //   ID: 3, Cat: "vegetable"
-    // Category: "fruit"
-    //   ID: 4, Cat: "fruit"
-    //   ID: 5, Cat: "fruit"
-    // Category: "dairy"
-    //   ID: 6, Cat: "dairy"
+    return 0;
 }
 ```
+
+## When to Use
+
+-   When you need to process or analyze consecutive runs of identical items (or items deemed equivalent by a predicate) within a sequence.
+-   If the original order of elements outside these consecutive groups must be preserved, making a full sort-by-key (as required by `std::group_by`) undesirable.
+-   Useful for parsing data streams or logs where entries are naturally batched or chunked by some property, and you need to operate on these batches.
+
+This utility offers a convenient and direct method for such grouping tasks, abstracting away manual loop management for identifying group boundaries.
 
 ## Dependencies
 - `<vector>`
-- `<utility>` (for `std::pair`)
-- `<type_traits>` (for `std::decay_t`)
+- `<functional>`
 - `<iterator>` (for `std::iterator_traits`, `std::next`)
-
-This utility is helpful for processing sequences where handling runs of identical (by key) consecutive elements is required.
+- `<type_traits>` (for `std::invoke_result_t`)

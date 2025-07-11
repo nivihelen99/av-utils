@@ -110,6 +110,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         VectorWrapperLib     # Added for vector_wrapper_test
         InsertionOrderedMapLib # Added for test_insertion_ordered_map
         LRUDictLib           # Added for test_lru_dict
+        GroupByConsecutiveLib # Added for group_by_consecutive_test
     )
 
     # Specific configurations for certain tests

@@ -67,7 +67,7 @@ This includes:
     *   Threading: `thread_pool.h`, `worker_pool.h`.
 *   **Resource Management:** `context_mgr.h` ([ContextMgr](docs/README_context_mgr.md)), `delayed_init.h` ([DelayedInit](docs/README_delayed_init.md)), `memory_mapped_file.h`, `object_pool.h`, `observer_ptr.h`, `scoped_flag.h`, `weak_ref.h`.
 *   **Functional Programming & Pipelines:** `function_pipeline.h`, `optional_pipeline.h`, `partial.h`, `unique_function.h`.
-*   **Iterator and Algorithm Utilities:** `any_all.h` ([AnyAll](docs/README_any_all.md)), `group_by_consecutive.h`, `lazy_sorted_merger.h`, `peekable.h`, `split_view.h`, `zip_view.h`.
+*   **Iterator and Algorithm Utilities:** `any_all.h` ([AnyAll](docs/README_any_all.md)), `group_by_consecutive.h` ([GroupByConsecutive](docs/README_group_by_consecutive.md)), `lazy_sorted_merger.h`, `peekable.h`, `split_view.h`, `zip_view.h`.
 *   **JSON Utilities:** `json_fieldmask.h`, `jsonpatch.h`.
 *   **String Utilities:** `cord.h` ([Cord](docs/README_Cord.md)), `duration_parser.h`, `interning_pool.h`, `parse_utils.h`, `random_string.h`, `string_interner.h`, `string_utils.h`.
 *   **Miscellaneous Utilities:** `batcher.h` ([Batcher](docs/README_batcher.md)), `id_pool.h`, `interval_counter.h`, `optional_utilities.h`, `pretty_print.h`, `safe_numerics.h`, `signal_handler.h`, `simple_moving_average.h`, `singleton.h`, `sliding_window_minmax.h`, `sliding_window.h`, `type_safe_id.h`, `undo.h`, `varint.h`, `version.h`, `WeightedRandomList.h`, `weighted_round_robin.h`.
