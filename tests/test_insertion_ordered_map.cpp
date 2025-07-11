@@ -440,11 +440,14 @@ TEST_F(InsertionOrderedMapTest, SpecialOperations) {
     auto popped_back = map_str_int.pop_back(); // Removes 'a'
     ASSERT_TRUE(popped_back.has_value());
     EXPECT_EQ(popped_back->first, "a");
-    EXPECT_EQ(popped_back->second, 4); // Original value of 'a' was 1, but it was moved. 'd' was 4.
-                                       // This is tricky. 'a' was value 1. 'd' was 4.
-                                       // Expected order before pop_back: b, d, a
-                                       // pop_back removes 'a' (value 1)
-    EXPECT_EQ(popped_back->second, 1); // Correcting based on 'a' having value 1
+    // After the sequence of operations:
+    // Initial: (a,1), (b,2), (c,3), (d,4)
+    // to_front("c"): (c,3), (a,1), (b,2), (d,4)
+    // to_back("a"): (c,3), (b,2), (d,4), (a,1)
+    // pop_front() removes (c,3). Map is now (b,2), (d,4), (a,1)
+    // pop_back() removes the last element, which is (a,1).
+    // So, popped_back->second should be 1.
+    EXPECT_EQ(popped_back->second, 1);
     std::vector<std::string> expected4 = {"b", "d"};
     EXPECT_EQ(get_keys_in_order(map_str_int), expected4);
 
