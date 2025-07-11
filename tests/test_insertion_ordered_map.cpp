@@ -440,11 +440,14 @@ TEST_F(InsertionOrderedMapTest, SpecialOperations) {
     auto popped_back = map_str_int.pop_back(); // Removes 'a'
     ASSERT_TRUE(popped_back.has_value());
     EXPECT_EQ(popped_back->first, "a");
-    EXPECT_EQ(popped_back->second, 4); // Original value of 'a' was 1, but it was moved. 'd' was 4.
-                                       // This is tricky. 'a' was value 1. 'd' was 4.
-                                       // Expected order before pop_back: b, d, a
-                                       // pop_back removes 'a' (value 1)
-    EXPECT_EQ(popped_back->second, 1); // Correcting based on 'a' having value 1
+    // After the sequence of operations:
+    // Initial: (a,1), (b,2), (c,3), (d,4)
+    // to_front("c"): (c,3), (a,1), (b,2), (d,4)
+    // to_back("a"): (c,3), (b,2), (d,4), (a,1)
+    // pop_front() removes (c,3). Map is now (b,2), (d,4), (a,1)
+    // pop_back() removes the last element, which is (a,1).
+    // So, popped_back->second should be 1.
+    EXPECT_EQ(popped_back->second, 1);
     std::vector<std::string> expected4 = {"b", "d"};
     EXPECT_EQ(get_keys_in_order(map_str_int), expected4);
 
@@ -572,37 +575,40 @@ TEST_F(InsertionOrderedMapTest, HintedInsert) {
     map_str_int.insert(it_c, {"b", 2}); // Hinting to insert before 'c'
 
     std::vector<std::string> expected_keys = {"a", "b", "c"};
-     // Note: The current hinted insert in InsertionOrderedMap uses list's hint but
-     // overall order is determined by push_back if key is new.
-     // A true hinted insert for order needs more complex list manipulation.
-     // The test below reflects the current implementation where new elements go to back.
-    std::vector<std::string> current_impl_expected_keys = {"a", "c", "b"};
+    // The current hinted insert in InsertionOrderedMap uses the list's hint,
+    // meaning the new element is inserted before the hint iterator if the key is new.
+    std::vector<std::string> expected_keys_after_hinted_insert = {"a", "b", "c"};
 
-    EXPECT_EQ(get_keys_in_order(map_str_int), current_impl_expected_keys);
+    EXPECT_EQ(get_keys_in_order(map_str_int), expected_keys_after_hinted_insert);
 
-    // Hinted insert of existing key - should return iterator to existing, no change
-    auto it_existing = map_str_int.insert(map_str_int.begin(), {"a", 111});
+    // Hinted insert of existing key - should return iterator to existing, no change in value or order.
+    // The hint is ignored if the key already exists.
+    auto it_existing = map_str_int.insert(map_str_int.begin(), {"a", 111}); // Try to insert 'a' again
     EXPECT_EQ(it_existing->first, "a");
-    EXPECT_EQ(it_existing->second, 1); // Original value
-    EXPECT_EQ(map_str_int.at("a"), 1);
-    EXPECT_EQ(get_keys_in_order(map_str_int), current_impl_expected_keys);
+    EXPECT_EQ(it_existing->second, 1); // Original value should be preserved
+    EXPECT_EQ(map_str_int.at("a"), 1); // Value in map is unchanged
+    EXPECT_EQ(get_keys_in_order(map_str_int), expected_keys_after_hinted_insert); // Order remains a, b, c
 }
 
 TEST_F(InsertionOrderedMapTest, HintedEmplace) {
     map_str_int.emplace("a",1);
-    map_str_int.emplace("c",3);
+    map_str_int.emplace("c",3); // map: (a,1), (c,3)
 
     auto it_c = map_str_int.find("c");
     ASSERT_NE(it_c, map_str_int.end());
-    map_str_int.emplace_hint(it_c, "b", 2);
+    // Emplace "b" with value 2, using iterator to "c" as hint.
+    // Element "b" should be inserted before "c".
+    map_str_int.emplace_hint(it_c, "b", 2); // map should become: (a,1), (b,2), (c,3)
 
-    std::vector<std::string> current_impl_expected_keys = {"a", "c", "b"};
-    EXPECT_EQ(get_keys_in_order(map_str_int), current_impl_expected_keys);
+    std::vector<std::string> expected_keys_after_hinted_emplace = {"a", "b", "c"};
+    EXPECT_EQ(get_keys_in_order(map_str_int), expected_keys_after_hinted_emplace);
 
-    auto it_existing = map_str_int.emplace_hint(map_str_int.begin(), "a", 111);
+    // Hinted emplace of existing key - should return iterator to existing, no change in value or order.
+    // The hint is ignored if the key already exists.
+    auto it_existing = map_str_int.emplace_hint(map_str_int.begin(), "a", 111); // Try to emplace 'a' again
     EXPECT_EQ(it_existing->first, "a");
-    EXPECT_EQ(it_existing->second, 1);
-    EXPECT_EQ(get_keys_in_order(map_str_int), current_impl_expected_keys);
+    EXPECT_EQ(it_existing->second, 1); // Original value should be preserved
+    EXPECT_EQ(get_keys_in_order(map_str_int), expected_keys_after_hinted_emplace); // Order remains a, b, c
 }
 
 // Test edge case of erasing the last element by iterator
