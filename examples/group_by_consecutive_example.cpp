@@ -1,150 +1,185 @@
-#include "group_by_consecutive.h" // Assuming it's in the include path
+#include "group_by_consecutive.h"
+#include <iostream>
 #include <vector>
 #include <string>
-#include <iostream>
 #include <iomanip> // For std::quoted
+#include <cmath>   // For std::abs
+#include <type_traits> // For std::is_same_v
 
-// Example 1: Basic usage with pairs, similar to the requirement spec
-void example_basic() {
-    std::cout << "--- Example 1: Basic Usage ---" << '\n';
-    std::vector<std::pair<char, int>> data = {
-        {'a', 1}, {'a', 2}, {'b', 3}, {'b', 4}, {'a', 5}
-    };
-
-    auto groups = utils::group_by_consecutive(data, [](const auto& p) {
-        return p.first;
-    });
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << group_pair.first << ", Values: [ ";
-        for (const auto& item : group_pair.second) {
-            std::cout << "{'" << item.first << "', " << item.second << "} ";
-        }
-        std::cout << "]" << '\n';
-    }
-    std::cout << '\n';
-}
-
-// Example 2: Grouping integers by their value
-void example_integers() {
-    std::cout << "--- Example 2: Grouping Integers ---" << '\n';
-    std::vector<int> numbers = {1, 1, 1, 2, 2, 3, 1, 1, 4, 4, 4, 4};
-
-    auto groups = utils::group_by_consecutive(numbers.begin(), numbers.end(), [](int val) {
-        return val; // Key is the number itself
-    });
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << group_pair.first << ", Values: [ ";
-        for (int item : group_pair.second) {
-            std::cout << item << " ";
-        }
-        std::cout << "]" << '\n';
-    }
-    std::cout << '\n';
-}
-
-// Example 3: Grouping strings by their first character
-void example_strings_first_char() {
-    std::cout << "--- Example 3: Grouping Strings by First Character ---" << '\n';
-    std::vector<std::string> words = {"apple", "apricot", "banana", "blueberry", "cherry", "fig", "grape"};
-
-    auto groups = utils::group_by_consecutive(words, [](const std::string& s) {
-        return s.empty() ? ' ' : s[0]; // Key is the first character
-    });
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: '" << group_pair.first << "', Values: [ ";
-        for (const auto& item : group_pair.second) {
-            std::cout << std::quoted(item) << " ";
-        }
-        std::cout << "]" << '\n';
-    }
-    std::cout << '\n';
-}
-
-// Example 4: Empty input
-void example_empty() {
-    std::cout << "--- Example 4: Empty Input ---" << '\n';
-    std::vector<std::pair<char, int>> data = {};
-
-    auto groups = utils::group_by_consecutive(data, [](const auto& p) {
-        return p.first;
-    });
-
+// Helper function to print groups
+template <typename Key, typename Value>
+void print_groups(const std::string& title,
+                  const std::vector<cpp_collections::Group<Key, Value>>& groups) {
+    std::cout << title << ":" << std::endl;
     if (groups.empty()) {
-        std::cout << "Resulting groups vector is empty, as expected." << '\n';
-    } else {
-        std::cout << "Error: Expected empty groups vector for empty input." << '\n';
+        std::cout << "  (empty)" << std::endl;
+        return;
     }
-    std::cout << '\n';
-}
-
-// Example 5: All items with the same key
-void example_same_key() {
-    std::cout << "--- Example 5: All Items Same Key ---" << '\n';
-    std::vector<std::pair<char, int>> data = {
-        {'x', 10}, {'x', 20}, {'x', 30}
-    };
-
-    auto groups = utils::group_by_consecutive(data, [](const auto& p) {
-        return p.first;
-    });
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << group_pair.first << ", Values: [ ";
-        for (const auto& item : group_pair.second) {
-            std::cout << "{'" << item.first << "', " << item.second << "} ";
+    for (const auto& group : groups) {
+        std::cout << "  Key: ";
+        if constexpr (std::is_same_v<Key, std::string>) {
+            std::cout << std::quoted(group.key);
+        } else if constexpr (std::is_same_v<Key, char>) {
+            std::cout << "'" << group.key << "'";
+        } else {
+            std::cout << group.key;
         }
-        std::cout << "]" << '\n';
+        std::cout << ", Items: [";
+        bool first_item = true;
+        for (const auto& item : group.items) {
+            if (!first_item) {
+                std::cout << ", ";
+            }
+            if constexpr (std::is_same_v<Value, std::string>) {
+                std::cout << std::quoted(item);
+            } else {
+                std::cout << item; // Assumes Value has an operator<<
+            }
+            first_item = false;
+        }
+        std::cout << "]" << std::endl;
     }
-    std::cout << '\n';
+    std::cout << std::endl;
 }
 
-// Example 6: Custom struct and key function
-struct MyStruct {
+// Example struct for custom objects
+struct MyObject {
     int id;
     std::string category;
     double value;
 
-    // For printing
-    friend std::ostream& operator<<(std::ostream& os, const MyStruct& s) {
-        os << "{id:" << s.id << ", cat:" << std::quoted(s.category) << ", val:" << s.value << "}";
+    friend std::ostream& operator<<(std::ostream& os, const MyObject& obj) {
+        os << "{id:" << obj.id << ", cat:" << std::quoted(obj.category) << ", val:" << obj.value << "}";
         return os;
+    }
+
+    bool operator==(const MyObject& other) const {
+        return id == other.id && category == other.category && value == other.value;
     }
 };
 
-auto get_category(const MyStruct& s) -> const std::string& {
-    return s.category;
-}
-
-void example_custom_struct() {
-    std::cout << "--- Example 6: Custom Struct and Key Function ---" << '\n';
-    std::vector<MyStruct> items = {
-        {1, "A", 10.1}, {2, "A", 12.5}, {3, "B", 20.0},
-        {4, "A", 15.3}, {5, "A", 18.7}, {6, "B", 22.1}
-    };
-
-    auto groups = utils::group_by_consecutive(items.begin(), items.end(), get_category);
-
-    for (const auto& group_pair : groups) {
-        std::cout << "Key: " << std::quoted(group_pair.first) << ", Values: [ ";
-        for (const auto& item : group_pair.second) {
-            std::cout << item << " ";
-        }
-        std::cout << "]" << '\n';
+// Key extractor for MyObject category
+struct MyObjectCategoryExtractor {
+    const std::string& operator()(const MyObject& obj) const {
+        return obj.category;
     }
-    std::cout << '\n';
-}
+};
 
+// Predicate to group MyObjects if their values are "close enough"
+struct MyObjectValuePredicate {
+    bool operator()(const MyObject& obj1, const MyObject& obj2) const {
+        // Group if obj2's value is within 0.5 of obj1's value
+        return std::abs(obj1.value - obj2.value) < 0.5;
+    }
+};
 
 int main() {
-    example_basic();
-    example_integers();
-    example_strings_first_char();
-    example_empty();
-    example_same_key();
-    example_custom_struct();
+    // --- Example 1: Simple integers, grouping by value itself (key function) ---
+    std::vector<int> numbers1 = {1, 1, 1, 2, 2, 1, 1, 3, 3, 3, 3, 2};
+    auto groups1 = cpp_collections::group_by_consecutive(
+        numbers1.begin(), numbers1.end(),
+        [](int x){ return x; }
+    );
+    print_groups("Integers grouped by value (key function)", groups1);
+
+    // --- Example 2: Empty range (key function) ---
+    std::vector<int> numbers_empty = {};
+    auto groups_empty = cpp_collections::group_by_consecutive(
+        numbers_empty.begin(), numbers_empty.end(),
+        [](int x){ return x; }
+    );
+    print_groups("Empty range (key function)", groups_empty);
+
+    // --- Example 3: All unique elements (key function) ---
+    std::vector<int> numbers_unique = {1, 2, 3, 4, 5};
+    auto groups_unique = cpp_collections::group_by_consecutive(
+        numbers_unique.begin(), numbers_unique.end(),
+        [](int x){ return x; }
+    );
+    print_groups("All unique integers (key function)", groups_unique);
+
+    // --- Example 4: All same elements (key function) ---
+    std::vector<int> numbers_same = {7, 7, 7, 7};
+    auto groups_same = cpp_collections::group_by_consecutive(
+        numbers_same.begin(), numbers_same.end(),
+        [](int x){ return x; }
+    );
+    print_groups("All same integers (key function)", groups_same);
+
+    // --- Example 5: Strings, grouping by first character (key function) ---
+    std::vector<std::string> words = {"apple", "apricot", "banana", "blueberry", "cherry", "date", "dewberry"};
+    auto groups_words = cpp_collections::group_by_consecutive(
+        words.begin(), words.end(),
+        [](const std::string& s){ return s.empty() ? ' ' : s[0]; }
+    );
+    print_groups("Strings grouped by first character (key function)", groups_words);
+
+    // --- Example 6: Custom objects (MyObject), grouping by category (key function) ---
+    std::vector<MyObject> objects = {
+        {1, "A", 10.1}, {2, "A", 12.3}, {3, "B", 20.5},
+        {4, "B", 22.1}, {5, "A", 30.0}, {6, "C", 40.7}
+    };
+    auto groups_objects_cat = cpp_collections::group_by_consecutive(
+        objects.begin(), objects.end(),
+        MyObjectCategoryExtractor()
+    );
+    print_groups("MyObjects grouped by category (key function)", groups_objects_cat);
+
+    // --- Example 7: Using the predicate version with integers (group if difference is <= 1) ---
+    std::vector<int> numbers2_pred = {1, 2, 3, 5, 6, 8, 9, 10, 12};
+    auto groups2_pred = cpp_collections::group_by_consecutive_pred(
+        numbers2_pred.begin(), numbers2_pred.end(),
+        [](int prev, int curr){ return std::abs(curr - prev) <= 1; }
+    );
+    print_groups("Integers grouped by predicate (diff <= 1)", groups2_pred);
+
+    // --- Example 8: Custom objects (MyObject), grouping by predicate (value proximity) ---
+    // Note: For predicate, the key is the first element of the group.
+    // The predicate (obj1, obj2) should check if obj2 belongs with obj1 (which started the current group or was the previous element).
+    std::vector<MyObject> objects_val_pred = {
+        {1, "V", 10.1}, {2, "V", 10.3}, // Group with {1, "V", 10.1} (key) because 10.3 is close to 10.1
+        {3, "V", 10.8},                // New group with {3, "V", 10.8} (key) because 10.8 not close to 10.3
+        {4, "W", 20.0}, {5, "W", 20.4},// Group with {4, "W", 20.0} (key)
+        {6, "X", 20.7},                // New group {6, "X", 20.7} (key), 20.7 not close to 20.4
+        {7, "Y", 30.0}                 // New group {7, "Y", 30.0} (key)
+    };
+    auto groups_objects_val_pred = cpp_collections::group_by_consecutive_pred(
+        objects_val_pred.begin(), objects_val_pred.end(),
+        MyObjectValuePredicate() // Are obj2 and obj1 in same group? (based on their values)
+    );
+    print_groups("MyObjects grouped by value proximity (predicate)", groups_objects_val_pred);
+
+    // --- Example 9: Strings, predicate: group if same length ---
+    std::vector<std::string> words_len_pred = {"a", "b", "cat", "dog", "Sun", "moon", "stars", "x", "y"};
+    auto groups_words_len_pred = cpp_collections::group_by_consecutive_pred(
+        words_len_pred.begin(), words_len_pred.end(),
+        [](const std::string& s1, const std::string& s2){ return s1.length() == s2.length(); }
+    );
+    print_groups("Strings grouped by same length (predicate)", groups_words_len_pred);
+
+    // --- Example 10: Predicate version with empty list ---
+    std::vector<MyObject> objects_empty_pred = {};
+    auto groups_empty_pred = cpp_collections::group_by_consecutive_pred(
+        objects_empty_pred.begin(), objects_empty_pred.end(),
+        MyObjectValuePredicate()
+    );
+    print_groups("Empty range (predicate)", groups_empty_pred);
+
+    // --- Example 11: Predicate version, all unique (based on predicate) ---
+    std::vector<int> numbers_unique_pred_data = {1, 3, 5, 7, 9}; // all differ by more than 1
+    auto groups_unique_pred = cpp_collections::group_by_consecutive_pred(
+        numbers_unique_pred_data.begin(), numbers_unique_pred_data.end(),
+         [](int prev, int curr){ return std::abs(curr - prev) <= 1; }
+    );
+    print_groups("All unique (by predicate diff > 1)", groups_unique_pred);
+
+    // --- Example 12: Predicate version, all same (based on predicate) ---
+    std::vector<int> numbers_same_pred_data = {2, 2, 2, 2, 2}; // all differ by 0
+     auto groups_same_pred = cpp_collections::group_by_consecutive_pred(
+        numbers_same_pred_data.begin(), numbers_same_pred_data.end(),
+         [](int prev, int curr){ return std::abs(curr - prev) <= 1; }
+    );
+    print_groups("All same (by predicate diff <=1)", groups_same_pred);
 
     return 0;
 }
