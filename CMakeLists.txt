@@ -297,6 +297,10 @@ target_include_directories(WeightedReservoirSamplerLib INTERFACE ${CMAKE_CURRENT
 add_library(VectorWrapperLib INTERFACE)
 target_include_directories(VectorWrapperLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define InsertionOrderedMapLib as an interface library (header-only)
+add_library(InsertionOrderedMapLib INTERFACE)
+target_include_directories(InsertionOrderedMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -396,6 +400,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         VectorBiMapLib       # Added for vector_bimap_example
         WeightedReservoirSamplerLib # Added for weighted_reservoir_sampler_example
         VectorWrapperLib     # Added for vector_wrapper_example
+        InsertionOrderedMapLib # Added for insertion_ordered_map_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

@@ -108,6 +108,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         VectorBiMapLib       # Added for test_vector_bimap
         WeightedReservoirSamplerLib # Added for test_weighted_reservoir_sampler
         VectorWrapperLib     # Added for vector_wrapper_test
+        InsertionOrderedMapLib # Added for test_insertion_ordered_map
     )
 
     # Specific configurations for certain tests
