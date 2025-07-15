@@ -50,6 +50,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         WithResourceLib # Added for with_resource_test
         CppLibRateLimiter
         TrieLib # Added for trie_test
+        TrieMapLib # Added for trie_map_test
         GraphLib # Added for graph_test
         TreapLib # Added for treap_test
         CountMinSketchLib # Added for count_min_sketch_test

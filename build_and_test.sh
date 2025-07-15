@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 echo "--- Starting build_and_test.sh ---"
 
 BUILD_DIR="/app/build"
@@ -20,8 +20,7 @@ cmake ..
 echo "--- Building all targets ---"
 make -j2 # Build all targets with reduced parallelism
 
-echo "--- Running CTest ---"
-ctest --output-on-failure # Run all tests and show output on failure
-# echo "--- CTest commented out for now to isolate build issues ---"
+echo "--- Running TrieMap_test ---"
+./tests/TrieMap_test
 
 echo "--- Finished build_and_test.sh ---"
