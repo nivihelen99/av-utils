@@ -94,6 +94,10 @@ target_include_directories(CppLibRateLimiter INTERFACE ${CMAKE_CURRENT_SOURCE_DI
 add_library(TrieLib INTERFACE)
 target_include_directories(TrieLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define TrieMapLib as an interface library (header-only)
+add_library(TrieMapLib INTERFACE)
+target_include_directories(TrieMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define GraphLib as an interface library (header-only)
 add_library(GraphLib INTERFACE)
 target_include_directories(GraphLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -351,6 +355,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         WithResourceLib # Added for with_resource_example
         CppLibRateLimiter
         TrieLib # Added for trie_example
+        TrieMapLib # Added for trie_map_example
         GraphLib # Added for graph_example
         TreapLib # Added for treap_example
         CountMinSketchLib # Added for count_min_sketch_example
