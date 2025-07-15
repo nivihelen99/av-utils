@@ -113,6 +113,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         LRUDictLib           # Added for test_lru_dict
         GroupByConsecutiveLib # Added for group_by_consecutive_test
         BitQueueLib          # Added for bit_queue_test
+        DonutLib
     )
 
     # Specific configurations for certain tests

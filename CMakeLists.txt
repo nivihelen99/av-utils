@@ -317,6 +317,10 @@ target_include_directories(GroupByConsecutiveLib INTERFACE ${CMAKE_CURRENT_SOURC
 add_library(BitQueueLib INTERFACE)
 target_include_directories(BitQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define DonutLib as an interface library (header-only)
+add_library(DonutLib INTERFACE)
+target_include_directories(DonutLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -421,6 +425,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         LRUDictLib           # Added for lru_dict_example
         GroupByConsecutiveLib # Added for group_by_consecutive_example
         BitQueueLib          # Added for bit_queue_example
+        DonutLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
