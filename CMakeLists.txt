@@ -313,6 +313,10 @@ target_include_directories(LRUDictLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/incl
 add_library(GroupByConsecutiveLib INTERFACE)
 target_include_directories(GroupByConsecutiveLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define BitQueueLib as an interface library (header-only)
+add_library(BitQueueLib INTERFACE)
+target_include_directories(BitQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -416,6 +420,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         InsertionOrderedMapLib # Added for insertion_ordered_map_example
         LRUDictLib           # Added for lru_dict_example
         GroupByConsecutiveLib # Added for group_by_consecutive_example
+        BitQueueLib          # Added for bit_queue_example
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
