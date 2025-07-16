@@ -321,6 +321,10 @@ target_include_directories(BitQueueLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/inc
 add_library(DonutLib INTERFACE)
 target_include_directories(DonutLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define ValueOrErrorLib as an interface library (header-only)
+add_library(ValueOrErrorLib INTERFACE)
+target_include_directories(ValueOrErrorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -426,6 +430,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         GroupByConsecutiveLib # Added for group_by_consecutive_example
         BitQueueLib          # Added for bit_queue_example
         DonutLib
+        ValueOrErrorLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

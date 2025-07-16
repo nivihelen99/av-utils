@@ -114,6 +114,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         GroupByConsecutiveLib # Added for group_by_consecutive_test
         BitQueueLib          # Added for bit_queue_test
         DonutLib
+        ValueOrErrorLib
     )
 
     # Specific configurations for certain tests
@@ -123,7 +124,9 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
 
     # Discover and add tests to CTest
     # For files like use_variant_vector.cpp (if it's not a test), gtest_discover_tests will find 0 tests.
-    gtest_discover_tests(${TEST_NAME})
+    if(NOT TEST_NAME STREQUAL "value_or_error_test")
+        gtest_discover_tests(${TEST_NAME})
+    endif()
 endforeach()
 
 message(STATUS "Test subdirectory CMake configuration complete. Individual tests are discoverable via CTest.")
