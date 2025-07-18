@@ -115,6 +115,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         BitQueueLib          # Added for bit_queue_test
         DonutLib
         ValueOrErrorLib
+        BitfieldLib
     )
 
     # Specific configurations for certain tests
