@@ -116,6 +116,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         DonutLib
         ValueOrErrorLib
         BitfieldLib
+        RopeLib
     )
 
     # Specific configurations for certain tests
