@@ -329,6 +329,10 @@ target_include_directories(ValueOrErrorLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 add_library(BitfieldLib INTERFACE)
 target_include_directories(BitfieldLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define RopeLib as an interface library (header-only)
+add_library(RopeLib INTERFACE)
+target_include_directories(RopeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -436,6 +440,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         DonutLib
         ValueOrErrorLib
         BitfieldLib
+        RopeLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")
