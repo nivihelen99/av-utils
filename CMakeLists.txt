@@ -337,6 +337,10 @@ target_include_directories(RopeLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include
 add_library(SortedVectorMapLib INTERFACE)
 target_include_directories(SortedVectorMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define HistoryLib as an interface library (header-only)
+add_library(HistoryLib INTERFACE)
+target_include_directories(HistoryLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 
 # Future steps will add examples and tests here
 
@@ -446,6 +450,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         BitfieldLib
         RopeLib
         SortedVectorMapLib
+        HistoryLib
     )
 
     if(EXECUTABLE_NAME STREQUAL "partial_example")

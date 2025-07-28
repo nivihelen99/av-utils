@@ -118,6 +118,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         BitfieldLib
         RopeLib
         SortedVectorMapLib
+        HistoryLib
     )
 
     # Specific configurations for certain tests
