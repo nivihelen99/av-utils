@@ -94,6 +94,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         OneOfLib             # Added for one_of_test
         PackedSlotMapLib     # Added for packed_slot_map_test
         ChronoRingLib        # Added for chrono_ring_test
+        CircularBufferLib    # Added for circular_buffer_test
         TaggedPtrLib         # Added for tagged_ptr_test
         PredicateCacheLib    # Added for predicate_cache_test
         ShadowCopyLib        # Added for shadow_copy_test
