@@ -111,6 +111,7 @@ foreach(TEST_FILE ${INDIVIDUAL_TEST_FILES})
         WeightedReservoirSamplerLib # Added for test_weighted_reservoir_sampler
         VectorWrapperLib     # Added for vector_wrapper_test
         InsertionOrderedMapLib # Added for test_insertion_ordered_map
+        InlineFunctionLib    # Added for inline_function_test
         LRUDictLib           # Added for test_lru_dict
         GroupByConsecutiveLib # Added for group_by_consecutive_test
         BitQueueLib          # Added for bit_queue_test

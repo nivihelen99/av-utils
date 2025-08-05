@@ -309,6 +309,10 @@ target_include_directories(VectorWrapperLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR
 add_library(InsertionOrderedMapLib INTERFACE)
 target_include_directories(InsertionOrderedMapLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Define InlineFunctionLib as an interface library (header-only)
+add_library(InlineFunctionLib INTERFACE)
+target_include_directories(InlineFunctionLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 # Define LRUDictLib as an interface library (header-only)
 add_library(LRUDictLib INTERFACE)
 target_include_directories(LRUDictLib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -447,6 +451,7 @@ foreach(EXAMPLE_FILE ${EXAMPLE_FILES})
         WeightedReservoirSamplerLib # Added for weighted_reservoir_sampler_example
         VectorWrapperLib     # Added for vector_wrapper_example
         InsertionOrderedMapLib # Added for insertion_ordered_map_example
+        InlineFunctionLib    # Added for inline_function_example
         LRUDictLib           # Added for lru_dict_example
         GroupByConsecutiveLib # Added for group_by_consecutive_example
         BitQueueLib          # Added for bit_queue_example
